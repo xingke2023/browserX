@@ -78,12 +78,23 @@ const MAKING_PROMPT = (m) => `
 - 写好或改好后请用户点「试运行」测试（试运行直接调用草稿，不经过你）；结果不对就根据用户反馈继续改草稿。
 - 用户点「完成」时程序会检查草稿能否加载、参数能否注册、有没有成功试运行过，通过后才放进工具箱，并且当前对话里马上能用。不要自己移动或复制草稿文件。
 - **制作记录 ${m.notes}**（Markdown，跟草稿一起放进工具箱）：${m.editing ? '先读一下，里面是以前定下的用户意图和使用步骤；' : ''}过程中有结论就随时更新，不用等到最后。重点是两件事：
-  1. **用户意图**：用户真正想解决什么问题、要什么结果和格式、有哪些特别要求或不要做的事。用户说得含糊时先问清楚再写，用自己的话复述，不是照抄原话；${m.editing ? '这次修改的诉求也补进去，跟原来的意图冲突时问用户以哪个为准；' : ''}
+  1. **用户意图**：用户**最终**想解决什么问题、要什么结果和格式、有哪些特别要求或不要做的事。文末「过程记录」是程序自动记下的用户原话、问答选择、试运行结果（每次${m.editing ? '修改' : '制作'}都会接着往下记）——把整个过程读一遍再归纳：用户中途改主意的以最新说法为准，前后矛盾或含糊的先问清楚；用自己的话写成最终版本（覆盖旧的写法，不是一条条往下堆）。工具要按这个最终意图来做；
   2. **使用步骤**：用户怎么用这个工具——用之前要做什么（比如先在右侧浏览器登录某网站）、每个参数填什么（举例）、运行后会发生什么、结果怎么看、常见失败怎么处理。写给用户看，不写代码细节。
-  另外在「关键点」记下以后改这个工具最需要知道的：入口地址、用到的接口、登录态从哪来、为什么这么做、踩过的坑；每次${m.editing ? '修改' : '制作'}在文末「变更记录」下加一条（日期 + 改了什么 + 原因）。不要写密码、token 这类敏感值。`;
+  另外在「关键点」记下以后改这个工具最需要知道的：入口地址、用到的接口、登录态从哪来、为什么这么做、踩过的坑；每次${m.editing ? '修改' : '制作'}在「变更记录」下加一条（日期 + 改了什么 + 原因）。「过程记录」由程序维护，不要改它。不要写密码、token 这类敏感值。`;
 
 // 工具的制作记录：xxx.js 旁边的 xxx.notes.md
 const notesFile = (jsFile) => jsFile.replace(/\.js$/, '.notes.md');
+
+// 在 Markdown 的某个「## 标题」小节末尾插一行；没有这个小节就加在文末
+function addUnder(body, heading, line) {
+  const h = `\n## ${heading}\n`;
+  const i = body.indexOf(h);
+  if (i < 0) return `${body.replace(/\s*$/, '\n')}${h}${line}\n`;
+  const next = body.indexOf('\n## ', i + h.length);
+  const end = next < 0 ? body.length : next;
+  return `${body.slice(0, end).replace(/\s*$/, '\n')}${line}\n${body.slice(end).replace(/^\n*/, next < 0 ? '' : '\n')}`;
+}
+const stampNow = () => new Date().toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 
 // 导出前查代码里有没有写死的密码 / token / 内网地址，免得把自己的账号一起发出去
 function scanSecrets(code) {
@@ -405,6 +416,7 @@ class Agent {
       return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny',
         permissionDecisionReason: '用户跳过了这些问题，没有作答。按你的判断继续，或者直接在对话里用文字问用户。' } };
     }
+    for (const [q, a] of Object.entries(res.answers || {})) this.logMaking(`问：${q} → 答：${a}`);
     return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow',
       updatedInput: { ...ti, answers: res.answers, ...(res.annotations && Object.keys(res.annotations).length ? { annotations: res.annotations } : {}) } } };
   }
@@ -821,9 +833,10 @@ class Agent {
     // 制作记录跟草稿同名（<name>.notes.md）：修改时带上以前的记录，完成时一起放进工具箱，放弃时一起删掉
     const notes = notesFile(draft);
     if (source && fs.existsSync(notesFile(source))) fs.copyFileSync(notesFile(source), notes);
-    else if (!fs.existsSync(notes)) fs.writeFileSync(notes, `# ${title || name}（${name}）制作记录\n\n## 用户意图\n\n${source ? desc || '（以前没有记录）' : goal}\n\n## 使用步骤\n\n## 关键点\n\n## 变更记录\n`);
+    else if (!fs.existsSync(notes)) fs.writeFileSync(notes, `# ${title || name}（${name}）制作记录\n\n## 用户意图\n\n${source ? desc || '（以前没有记录）' : goal}\n\n## 使用步骤\n\n## 关键点\n\n## 变更记录\n\n## 过程记录\n`);
     title = String(title || '').trim().slice(0, 40);
     this.making = { name, title, goal, draft, notes, source, editing: !!source, tested: false };
+    this.logMaking(`开始${source ? '修改' : '制作'}：${source ? (goal.startsWith('修改现有工具（') ? '（还没说要改什么）' : goal) : goal}`);
     if (keepChat) {
       this.emitMaking();
       return `${MAKING_PROMPT(this.making)}${resumed ? `\n草稿里有上次没做完的版本，先读一下再接着做。` : ''}`;
@@ -900,9 +913,31 @@ class Agent {
     return this.describeTool(this.draftDef(), this.making.draft);
   }
 
+  // 制作 / 修改期间把过程记进制作记录的「过程记录」：用户原话、问答选择、试运行结果。程序来记，不靠模型自觉
+  logMaking(text) {
+    const m = this.making;
+    if (!m?.notes) return;
+    try {
+      const body = fs.existsSync(m.notes) ? fs.readFileSync(m.notes, 'utf8') : '';
+      const t = String(text).trim();
+      const line = `- ${stampNow()} ${(t.length > 800 ? `${t.slice(0, 800)}…` : t).replace(/\n+/g, '\n  ')}`;
+      fs.writeFileSync(m.notes, addUnder(body, '过程记录', line));
+    } catch { /* 记录写不了不影响制作 */ }
+  }
+
+  // 界面上用户发的消息（区别于程序内部发给模型的说明）
+  userSend(text) {
+    if (text?.trim()) this.logMaking(`用户：${text}`);
+    return this.send(text);
+  }
+
   async runDraft(args) {
-    const r = await this.runDef(this.draftDef(), args);
+    let r;
+    try { r = await this.runDef(this.draftDef(), args); }
+    catch (e) { this.logMaking(`试运行失败：参数 ${JSON.stringify(args)}；错误：${e.message}`); throw e; }
     if (this.making) { this.making.tested = true; this.emitMaking(); }
+    const out = typeof r === 'string' ? r : JSON.stringify(r);
+    this.logMaking(`试运行成功：参数 ${JSON.stringify(args)}；结果：${out.length > 300 ? `${out.slice(0, 300)}…` : out}`);
     return r;
   }
 
@@ -925,9 +960,11 @@ class Agent {
     fs.unlinkSync(m.draft);
     // 不管模型有没有写记录，至少留一行：什么时候、制作还是修改、有没有试运行过
     try {
-      const stamp = new Date().toLocaleString('zh-CN', { hour12: false });
-      const body = fs.existsSync(m.notes) ? fs.readFileSync(m.notes, 'utf8').replace(/\s*$/, '\n') : `# ${def.title || m.name}（${m.name}）制作记录\n\n## 变更记录\n`;
-      fs.writeFileSync(notesFile(target), `${body}- ${stamp} ${m.editing ? '修改' : '制作'}完成${m.tested ? '（已试运行）' : '（未试运行）'}\n`);
+      const done = `${m.editing ? '修改' : '制作'}完成${m.tested ? '（已试运行）' : '（未试运行）'}`;
+      let body = fs.existsSync(m.notes) ? fs.readFileSync(m.notes, 'utf8') : `# ${def.title || m.name}（${m.name}）制作记录\n`;
+      body = addUnder(body, '变更记录', `- ${new Date().toLocaleString('zh-CN', { hour12: false })} ${done}`);
+      body = addUnder(body, '过程记录', `- ${stampNow()} ${done}`);
+      fs.writeFileSync(notesFile(target), body);
       fs.rmSync(m.notes, { force: true });
     } catch { /* 记录写不了不影响工具本身 */ }
     this.making = null;

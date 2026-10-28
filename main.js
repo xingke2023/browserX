@@ -255,7 +255,7 @@ handle('cwd:pick', async () => {
   return cfg.cwd;
 });
 
-handle('agent:send', (text) => agent.send(text));
+handle('agent:send', (text) => agent.userSend(text)); // 用户发的消息：制作工具期间会记进制作记录
 handle('agent:stop', () => agent.stop());
 handle('agent:reset', () => agent.reset());
 handle('agent:permit', (id, decision) => agent.permit(id, decision));
