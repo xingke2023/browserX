@@ -2,6 +2,7 @@
 // 精简自 ../app/lib/wechat.js：两个 Electron 项目独立打包，这里保留一份自己的副本而不跨目录 require。
 const fs = require('fs');
 const { clipboard } = require('electron');
+let clipLock = Promise.resolve(); // 所有标签共用（见 pasteHtml）
 
 const HOME = 'https://mp.weixin.qq.com/';
 const EDITOR_URL = (token) =>
@@ -128,10 +129,14 @@ class WeChat {
 
   async pasteHtml(html) {
     await this.toBodyEnd();
-    // 注意：会覆盖系统剪贴板
-    clipboard.write({ html, text: html.replace(/<[^>]+>/g, '') });
-    this.wc.paste();
-    await sleep(600);
+    // 注意：会覆盖系统剪贴板。剪贴板全局只有一个，几个标签同时贴会互相覆盖，所以「写剪贴板 + 粘贴」排队做
+    const run = clipLock.then(async () => {
+      clipboard.write({ html, text: html.replace(/<[^>]+>/g, '') });
+      this.wc.paste();
+      await sleep(600);
+    });
+    clipLock = run.catch(() => {});
+    await run;
     await this.dismissStructureCheck(1500);
   }
 

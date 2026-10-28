@@ -6,6 +6,7 @@ const { z } = require('zod');
 const { WeChat } = require('./wechat');
 const { THEMES, textToArticle, renderBlocks } = require('./article');
 const { Recorder } = require('./recorder');
+const Module = require('module');
 
 const MAX_EDGE = 1280;      // 截图长边上限（超过后模型端会再缩放，坐标就对不上了）
 const MAX_PIXELS = 1150000;
@@ -725,9 +726,20 @@ class Agent {
   // 重新 start() 才会用新版本注册进 mcp server，但工具箱面板走 listCustomTools/runCustomTool 是即时的）。
   // 加载并校验一个工具文件（清 require 缓存，改完立刻生效）；不合格就 throw
   loadToolFile(file) {
-    const resolved = require.resolve(file);
-    delete require.cache[resolved];
-    const mod = require(resolved);
+    let mod;
+    if (file.endsWith('.bxt')) {
+      // 工具市场的加密工具（见 toolcrypt.js）：在内存里解密、编译，明文不落盘
+      const code = this.ctx.vault.decrypt(path.basename(file, '.bxt'), fs.readFileSync(file));
+      const m = new Module(file, module);
+      m.filename = file;
+      m.paths = Module._nodeModulePaths(path.dirname(file));
+      m._compile(code, file);
+      mod = m.exports;
+    } else {
+      const resolved = require.resolve(file);
+      delete require.cache[resolved];
+      mod = require(resolved);
+    }
     const def = typeof mod === 'function' ? mod(z) : mod;
     if (!def || typeof def.name !== 'string' || !TOOL_NAME.test(def.name)) throw new Error('缺少合法的 name（字母/数字/下划线，不能以数字开头）');
     if (BUILTIN_TOOLS.has(def.name)) throw new Error(`工具名 "${def.name}" 与内置工具重名`);
@@ -740,7 +752,7 @@ class Agent {
     const dir = this.ctx.getToolsDir?.();
     if (!dir) return [];
     let files = [];
-    try { files = fs.readdirSync(dir).filter((f) => f.endsWith('.js')); } catch { return []; }
+    try { files = fs.readdirSync(dir).filter((f) => f.endsWith('.js') || (f.endsWith('.bxt') && this.ctx.vault)); } catch { return []; }
 
     const entries = [];
     for (const f of files) {
@@ -763,6 +775,7 @@ class Agent {
         await this.ctx.show();
         return await fn(a);
       } catch (e) {
+        if (file.endsWith('.bxt')) return { content: [{ type: 'text', text: `失败：${e.message}\n（这是从工具市场安装的加密工具，不能查看或修改源码。可以先用 mcp__browser__* 手动把这次任务做完，并告诉用户：工具有问题请联系作者，或在工具市场里更新到新版本）` }], isError: true };
         return { content: [{ type: 'text', text: `失败：${e.message}\n（这是自定义工具，源码在 ${file}；如果是工具本身的逻辑/选择器问题，可以先用 mcp__browser__* 手动把这次任务做完，诊断清楚真实原因后直接编辑这个文件修好，别凭这一次的情况瞎猜着改）` }], isError: true };
       }
     };
@@ -797,8 +810,13 @@ class Agent {
     };
   }
 
+  // 工具箱列表：最新的排第 1（按文件修改时间，买 / 装 / 更新 / 改完的工具都算新）
   listCustomTools() {
-    return this.readCustomToolDefs().map(({ file, def }) => this.describeTool(def, file));
+    const mtime = (f) => { try { return fs.statSync(f).mtimeMs; } catch { return 0; } };
+    return this.readCustomToolDefs()
+      .map((e) => ({ ...e, t: mtime(e.file) }))
+      .sort((a, b) => b.t - a.t)
+      .map(({ file, def }) => this.describeTool(def, file));
   }
 
   // 工具箱面板「直接运行」：不经过模型，直接调 run(args, ctx)——ctx 跟对话里被模型调用时完全一样，
@@ -811,6 +829,13 @@ class Agent {
     const url = String(await entry.def.form(this.toolCtx));
     if (!/^http:\/\/127\.0\.0\.1:\d+\//.test(url)) throw new Error(`填表页面只能是本机地址（http://127.0.0.1:端口/），收到 ${url}`);
     return url;
+  }
+
+  // 删除工具用：工具文件 + 制作记录 + 过程记录（存在的才算），由 main.js 移到废纸篓
+  toolFiles(name) {
+    const entry = this.readCustomToolDefs().find((e) => e.def.name === name);
+    if (!entry) throw new Error(`没有名为 "${name}" 的工具`);
+    return [...new Set([entry.file, notesFile(entry.file), processFile(entry.file)])].filter((f) => fs.existsSync(f));
   }
 
   async runCustomTool(name, args) {
@@ -900,11 +925,15 @@ class Agent {
   // 系统提示里也没有 MAKING_PROMPT（会话开始时还不在制作模式），所以把规则作为返回值交给调用方转告模型
   async startMaking({ name, title, goal, edit, keepChat = false } = {}) {
     if (this.making) throw new Error(`正在制作工具 ${this.making.name}，先点「完成」或「放弃」`);
+    const other = this.ctx.otherMaking?.(); // 草稿、工具目录是共用的，同一时间只允许一个标签在制作
+    if (other) throw new Error(`另一个标签正在制作工具 ${other}，先在那边点「完成」或「放弃」`);
     goal = String(goal || '').trim();
     let source = null, desc = '';
     if (edit) {
+      if (this.ctx.isMarketTool?.(edit)) throw new Error(`${edit} 是从工具市场安装的别人的工具，不能修改；有问题请联系作者，或在工具市场里更新到新版本`);
       const entry = this.readCustomToolDefs().find((e) => e.def.name === edit);
       if (!entry) throw new Error(`没有名为 "${edit}" 的工具`);
+      if (entry.file.endsWith('.bxt')) throw new Error(`${edit} 是工具市场的加密工具，不能修改`);
       source = entry.file;
       desc = entry.def.description || '';
       name = edit;
@@ -912,10 +941,17 @@ class Agent {
       goal = goal || `修改现有工具（${entry.def.description || '无描述'}），具体改什么问用户`;
     } else {
       name = String(name || '').trim();
+      // 没给英文名就自动分配：12 位小写字母+数字，首位是字母（工具名不能以数字开头），避开已有的工具
+      if (!name) {
+        const taken = new Set(this.readCustomToolDefs().map((e) => e.def.name));
+        const pick = (chars) => chars[require('crypto').randomInt(chars.length)];
+        const abc = 'abcdefghijklmnopqrstuvwxyz', alnum = abc + '0123456789';
+        do name = pick(abc) + Array.from({ length: 11 }, () => pick(alnum)).join(''); while (taken.has(name) || BUILTIN_TOOLS.has(name));
+      }
       if (!TOOL_NAME.test(name)) throw new Error('工具名只能用字母、数字、下划线，不能以数字开头，例如 aes_policy');
       if (BUILTIN_TOOLS.has(name)) throw new Error(`"${name}" 是内置工具的名字，换一个`);
       if (this.readCustomToolDefs().some((e) => e.def.name === name)) throw new Error(`工具箱里已经有 ${name}，要改它请点那个工具的「编辑」`);
-      if (!goal) throw new Error('请写一下这个工具要做什么');
+      goal = goal || '还没写具体要做什么，先问用户';
     }
     const draft = path.join(this.draftsDir(), `${name}.js`);
     const resumed = !source && fs.existsSync(draft); // 同名草稿是上次没做完的，留着接着改
@@ -1105,6 +1141,7 @@ class Agent {
     this.making = null;
     this.emitMaking();
     const live = await this.reloadCustomTools();
+    this.ctx.toolsChanged?.();
     const label = def.title ? `${def.title}（${m.name}）` : m.name;
     this.ctx.emit({ type: 'tool_done', name: m.name, text: `— 工具 ${label} ${m.editing ? '修改' : '制作'}完成，已放进工具箱${live ? '，当前对话里可以直接用' : ''} —` });
     return { done: true, name: m.name };
@@ -1126,8 +1163,10 @@ class Agent {
   // importPreview 只做静态分析（不 require，否则文件顶层代码在用户确认前就执行了），importConfirm 才写入并加载校验，失败就撤销。
 
   exportInfo(name) {
+    if (this.ctx.isMarketTool?.(name)) throw new Error(`${name} 是从工具市场安装的别人的工具，不能导出或发布`);
     const entry = this.readCustomToolDefs().find((e) => e.def.name === name);
     if (!entry) throw new Error(`没有名为 "${name}" 的工具`);
+    if (entry.file.endsWith('.bxt')) throw new Error(`${name} 是工具市场的加密工具，不能导出或发布`);
     const code = fs.readFileSync(entry.file, 'utf8');
     return { name, file: entry.file, code, secrets: scanSecrets(code) };
   }
@@ -1147,18 +1186,19 @@ class Agent {
     return { name, title, description, from: file, size: st.size, code, risks: scanRisks(code), exists: !!clash || fs.existsSync(target) };
   }
 
-  async importConfirm({ overwrite = false } = {}) {
+  // encrypt：工具市场里别人的工具，加密存成 <name>.bxt（见 toolcrypt.js）
+  async importConfirm({ overwrite = false, encrypt = false } = {}) {
     const imp = this.pendingImport;
     if (!imp) throw new Error('没有待导入的工具，请重新选择文件');
     const dir = this.ctx.getToolsDir();
-    const target = path.join(dir, `${imp.name}.js`);
+    const target = path.join(dir, `${imp.name}${encrypt ? '.bxt' : '.js'}`);
     const clash = this.readCustomToolDefs().find((e) => e.def.name === imp.name);
     if ((clash || fs.existsSync(target)) && !overwrite) throw new Error(`工具箱里已经有 ${imp.name}，要覆盖请勾选「覆盖」`);
     const backups = [target, clash?.file].filter((f, i, a) => f && fs.existsSync(f) && a.indexOf(f) === i).map((f) => [f, fs.readFileSync(f)]);
     let def;
     try {
       if (clash && clash.file !== target) fs.unlinkSync(clash.file);
-      fs.writeFileSync(target, imp.code);
+      fs.writeFileSync(target, encrypt ? this.ctx.vault.encrypt(imp.name, imp.code) : imp.code);
       def = this.loadToolFile(target);
       if (def.name !== imp.name) throw new Error(`加载后的工具名是 "${def.name}"，跟文件里写的 "${imp.name}" 不一致`);
       this.checkParams(def);
@@ -1170,7 +1210,8 @@ class Agent {
     }
     this.pendingImport = null;
     const live = await this.reloadCustomTools();
-    this.ctx.emit({ type: 'note', text: `— 已导入工具 ${def.title ? `${def.title}（${imp.name}）` : imp.name}${overwrite ? '（覆盖了原来的版本）' : ''}${live ? '，当前对话里可以直接用' : ''} —` });
+    this.ctx.toolsChanged?.();
+    this.ctx.emit({ type: 'note', text: `— 已${encrypt ? '安装' : '导入'}工具 ${def.title ? `${def.title}（${imp.name}）` : imp.name}${overwrite ? '（覆盖了原来的版本）' : ''}${live ? '，当前对话里可以直接用' : ''} —` });
     return { name: imp.name };
   }
 

@@ -344,6 +344,8 @@ body.running #status::before{content:'';display:inline-block;width:6px;height:6p
 .tbitem .tbid{margin-left:8px;font-size:12px;font-weight:400;color:var(--muted);font-family:Menlo,ui-monospace,monospace}
 .tbitem .tbacts{flex:none;display:flex;gap:4px}
 .tbitem .tbedit{height:26px;padding:0 10px;font-size:12px;border:1px solid var(--line-strong);background:var(--card)}
+.tbitem .tbdel:hover:not(:disabled){color:var(--err);border-color:var(--err)} /* 删除：悬停变红 */
+.tbitem .tbmk{align-self:center;padding:1px 8px;border-radius:999px;font-size:11px;color:var(--link);background:color-mix(in srgb,var(--link) 12%,transparent)} /* 从市场装的别人的工具 */
 .tbitem .tbedit:hover:not(:disabled){border-color:var(--link);color:var(--link);background:var(--card)}
 .tbitem .tbfav.on{color:#e6a700;border-color:#e6a700}
 .tbitem .tbdesc{font-size:12.5px;line-height:1.6;color:var(--muted);overflow-wrap:anywhere}
@@ -450,7 +452,16 @@ body.browser-collapsed #browser,body.browser-collapsed #splitter{display:none}
 .mkprice.paid{color:var(--accent)}
 .mkmeta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted)}
 .mkmeta .mklocal{color:var(--link)}
+.mkmeta .mkver{color:var(--text);font-weight:500}
 .mkact{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
 .mkact button{height:28px;padding:0 12px;font-size:13px}
 .mkitem .tberr{color:var(--err);font-size:12px}
+.mkact .mkwait{align-self:center;font-size:13px;color:var(--warn)}
 .tbpub .tbform{display:flex;flex-direction:column;gap:10px}
+
+/* 工具箱顶部的成功提示（安装成功等），橙色，几秒后淡出；对应的工具卡片闪一下 */
+.tbtip{flex:none;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:500;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);transition:opacity .5s}
+.tbtip.out{opacity:0}
+.tbitem.tbflash{animation:tbflash 1.6s ease-out 2}
+@keyframes tbflash{0%{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}100%{border-color:var(--line);box-shadow:none}}
+@media (prefers-reduced-motion:reduce){.tbitem.tbflash{animation:none;border-color:var(--accent)}.tbtip{transition:none}}
