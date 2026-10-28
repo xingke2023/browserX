@@ -944,6 +944,19 @@ $('splitter').addEventListener('pointerdown', (e) => {
   addEventListener('pointerup', up);
 });
 
+// 收起 / 展开左侧栏（记住上次的状态）
+const SIDE_HIDDEN_KEY = 'sideCollapsed';
+function setSideCollapsed(on) {
+  document.body.classList.toggle('side-collapsed', on);
+  const label = on ? '展开左侧栏' : '收起左侧栏';
+  $('sideToggle').title = label; $('sideToggle').setAttribute('aria-label', label);
+  try { localStorage.setItem(SIDE_HIDDEN_KEY, on ? '1' : ''); } catch {}
+  reportBounds();
+  if (!on) focusInput();
+}
+$('sideToggle').addEventListener('click', () => setSideCollapsed(!document.body.classList.contains('side-collapsed')));
+try { if (localStorage.getItem(SIDE_HIDDEN_KEY)) setSideCollapsed(true); } catch {}
+
 call('cfg:get').then((c) => { cfg = c; renderCfg(); });
 call('nav:state').then(renderNav).catch(() => {});
 focusInput();

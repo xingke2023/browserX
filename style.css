@@ -269,3 +269,6 @@ body.running #status::before{content:'';display:inline-block;width:6px;height:6p
 .tbform .row{display:flex;justify-content:flex-end;gap:8px}
 .tbform .row button{height:34px;min-width:88px;padding:0 16px}
 .pager{display:flex;align-items:center;justify-content:center;gap:4px;padding-top:2px;flex-wrap:wrap}
+/* 收起左侧栏：只留右侧浏览器，切换按钮在浏览器工具栏最左边 */
+body.side-collapsed main{grid-template-columns:minmax(0,1fr)} /* 左栏和分隔条 display:none 后不占网格，只剩一列 */
+body.side-collapsed #side,body.side-collapsed #splitter{display:none}
