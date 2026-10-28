@@ -995,12 +995,19 @@ call('rec:status').then(renderRec).catch(() => {});
 // 浏览器视图（主进程的 WebContentsView）覆盖在 #stage 上
 let dragging = false;
 function reportBounds() {
-  if (dragging) return api.call('bounds', { x: 0, y: 0, width: 0, height: 0 }); // 拖动时原生视图会吞掉鼠标事件，先隐藏
+  // 拖动时原生视图会吞掉鼠标事件；设置是盖住整个窗口的浮窗，原生视图会挡在它上面——这两种时候都先把浏览器视图藏起来
+  if (dragging || !$('settings').hidden) return api.call('bounds', { x: 0, y: 0, width: 0, height: 0 });
   const r = $('stage').getBoundingClientRect();
   api.call('bounds', { x: r.x, y: r.y, width: r.width, height: r.height });
 }
 new ResizeObserver(reportBounds).observe($('stage'));
 window.addEventListener('resize', reportBounds);
+// 设置浮窗：打开 / 关闭时更新浏览器视图；点浮窗外面的遮罩或按 Esc 关闭（同「取消」，不保存）
+new MutationObserver(reportBounds).observe($('settings'), { attributes: true, attributeFilter: ['hidden'] });
+$('settings').addEventListener('click', (e) => { if (e.target === $('settings')) $('settings').hidden = true; });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('settings').hidden) { e.stopPropagation(); $('settings').hidden = true; }
+}, true);
 
 // 拖动分隔条调整左侧宽度
 const SIDE_KEY = 'sideWidth';
