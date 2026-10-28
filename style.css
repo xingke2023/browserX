@@ -190,8 +190,8 @@ body.bypass #settings #mode{border-color:var(--warn);color:var(--warn);backgroun
 .qprev[hidden]{display:none}
 .qcard.done .pr{color:var(--text)}
 
-.note{font-size:13px;line-height:1.5;color:var(--link);text-align:center}
-.note.err{color:var(--err);text-align:left;font-size:13px}
+.note{font-size:15px;line-height:1.55;color:var(--link);text-align:left}
+.note.err{color:var(--err)}
 
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:100}
 .modal-box{background:var(--card);border:1px solid var(--line-strong);border-radius:12px;padding:16px;width:min(360px,86vw);display:flex;flex-direction:column;gap:10px;box-shadow:0 8px 30px rgba(0,0,0,.25)}
