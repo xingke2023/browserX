@@ -261,7 +261,7 @@ api.on('agent', (ev) => {
     case 'done':
       setRunning(false);
       if (ev.error) add('note err', `✗ ${esc(ev.error)}`);
-      else add('note', '✓ 还有什么需要可以继续告诉我');
+      else add('note', '✓ 指令完成，还有什么需要可以继续告诉我');
       break;
     case 'error': add('note err', `✗ ${esc(ev.text)}`); break;
     case 'reset':
