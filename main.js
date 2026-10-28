@@ -148,8 +148,6 @@ function buildMenu() {
         { type: 'separator' },
         { label: '设置…', accelerator: 'CmdOrCtrl+,', click: () => win?.webContents.executeJavaScript("$('settings').hidden && $('btnSettings').click()").catch(() => {}) },
         { type: 'separator' },
-        { role: 'services', label: '服务' },
-        { type: 'separator' },
         { role: 'hide', label: '隐藏 BrowserX' },
         { role: 'hideOthers', label: '隐藏其他' },
         { role: 'unhide', label: '全部显示' },
