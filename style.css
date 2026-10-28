@@ -90,6 +90,10 @@ body.bypass #settings #mode{border-color:var(--warn);color:var(--warn);backgroun
 /* 历史 / 工具箱 / 设置打开时也藏起底部输入框（关掉面板就回来） */
 #side:has(#history:not([hidden])) .composer,#side:has(#toolbox:not([hidden])) .composer,#side:has(#settings:not([hidden])) .composer{display:none}
 #history:not([hidden]){flex:1;min-height:0;max-height:none;border-bottom:none}
+/* 跟工具箱一样：列表固定在面板高度里自己滚动，分页栏贴在底部 */
+#history:not([hidden]){overflow:hidden}
+#h_list{flex:1;min-height:0;overflow-y:auto}
+#h_list>.pager{position:sticky;bottom:0;margin-top:auto;padding:8px 0 4px;background:var(--card);border-top:1px solid var(--line)}
 .hlist{display:flex;flex-direction:column;gap:4px;min-height:0;overflow-y:auto}
 .hitem{display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;cursor:pointer;min-width:0}
 .hitem[hidden]{display:none}
