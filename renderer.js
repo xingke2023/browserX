@@ -684,6 +684,7 @@ function renderMaking(m) {
   document.body.classList.toggle('making', !!m);
   if (!m) return;
   $('mk_verb').textContent = m.editing ? '修改' : '制作';
+  $('mk_done').textContent = m.editing ? '完成修改' : '完成制作';
   $('mk_name').textContent = m.title ? `${m.title}（${m.name}）` : m.name;
   $('mk_tested').textContent = m.tested ? '已试运行 ✓' : '';
 }
