@@ -6,7 +6,7 @@
 
 ## 下载安装
 
-到 [Releases](https://github.com/xingke2023/browserx/releases) 下载最新的 `BrowserX-<版本>-arm64.dmg`：
+到 [Releases](https://github.com/xingke2023/browserX/releases) 下载最新的 `BrowserX-<版本>-arm64.dmg`：
 
 1. 双击打开 dmg，把 BrowserX 拖进「应用程序」。
 2. 第一次打开时系统会提示「无法验证开发者」（应用没有用开发者证书签名和公证）：打开「系统设置 → 隐私与安全性」，在下方点「仍要打开」。
