@@ -74,7 +74,7 @@ const MAKING_PROMPT = (m) => `
 - 工具名：${m.name}${m.title ? `（中文名 title: '${m.title}'）` : '（请再起一个简短的中文名写进 title）'}
 - 要做什么：${m.goal}
 - **代码只写到草稿文件 ${m.draft}**${m.editing ? '（已复制了现有版本）' : ''}，文件里的 name 必须是 '${m.name}'。不要直接写进工具箱目录：草稿不会出现在工具箱里，也不会被正式加载。写法同上面「工具箱」一节。
-- **横幅出现时程序已经自动开始录制右侧浏览器的网络请求**（你的操作、用户的手工操作、试运行都会录进去），一直录到「完成」/「放弃」。需要看接口时直接调 rec_stop 拿到清单和录制文件，看完马上 rec_start 接着录；也可以请用户在右侧浏览器手工操作一遍再点横幅上的「停止录制」（结果会自动发给你）。
+- **需要用户手工操作一遍来录接口时**：你自己先调 rec_start 把录制打开（不要让用户去点「录制」），然后在同一条回复里明确告诉用户在右侧浏览器做哪几步（打开哪个页面、点什么、填什么），做完点横幅上的「停止录制」——录制结果会自动发给你。你自己在浏览器里操作时如果也想录接口，同样 rec_start / rec_stop。「完成」/「放弃」时还没停的录制程序会自动停掉。
 - 写好或改好后请用户点「试运行」测试（试运行直接调用草稿，不经过你）；结果不对就根据用户反馈继续改草稿。
 - 用户点「完成」时程序会检查草稿能否加载、参数能否注册、有没有成功试运行过，通过后才放进工具箱，并且当前对话里马上能用。不要自己移动或复制草稿文件。
 - **过程记录 ${m.process}**：程序自动记下的整个过程——从这条横幅出现到用户点「完成」，用户的原话、你的回复、你做的每一步操作和结果、问答选择、录制、试运行结果（每次${m.editing ? '修改' : '制作'}都接着往下记）。只读，不要改它。
@@ -82,7 +82,7 @@ const MAKING_PROMPT = (m) => `
   - 去掉试探和失败的尝试，合并重复步骤；能直接调接口的就不点页面；
   - 每次会变的东西（保单号、日期、文字等）做成参数，固定不变的写死在工具里；
   - 过程中手工判断过的情况（弹窗、未登录、没有数据）写成工具里的判断，不要假设一路顺利。
-  写完草稿前、以及用户说要「完成」之前，把过程记录从头读一遍，确认用户最终要的每一点工具都做到了。
+  用户第一次点「完成」时程序不会马上放进工具箱，而是先请你做这一步精简（会收到一条消息），精简完请用户试运行，再点一次「完成」才放进去。
 - **制作记录 ${m.notes}**（Markdown，跟草稿一起放进工具箱，由你维护）：${m.editing ? '先读一下；' : ''}过程中有结论就随时更新。
   1. **用户意图**：读完过程记录再归纳用户**最终**要什么——中途改主意的以最新说法为准，前后矛盾或含糊的先问清楚；用自己的话写成最终版本（覆盖旧写法，不是往下堆）。工具按这个最终意图来做；
   2. **使用步骤**：写给用户看——用之前要做什么（比如先在右侧浏览器登录某网站）、每个参数填什么（举例）、运行后会发生什么、结果怎么看、常见失败怎么处理；
@@ -91,6 +91,7 @@ const MAKING_PROMPT = (m) => `
   不要写密码、token 这类敏感值。`;
 
 // 工具的制作记录：xxx.js 旁边的 xxx.notes.md
+const fileHash = (f) => { try { return require('crypto').createHash('md5').update(fs.readFileSync(f)).digest('hex'); } catch { return ''; } };
 const notesFile = (jsFile) => jsFile.replace(/\.js$/, '.notes.md');
 // 过程记录单独一个文件（xxx.process.md），只由程序追加，模型改制作记录时不会把它覆盖掉
 const processFile = (jsFile) => jsFile.replace(/\.js$/, '.process.md');
@@ -827,7 +828,7 @@ class Agent {
 
   makingState() {
     const m = this.making;
-    return m ? { name: m.name, title: m.title, goal: m.goal, editing: m.editing, tested: m.tested, draft: m.draft, notes: m.notes, process: m.process } : null;
+    return m ? { name: m.name, title: m.title, goal: m.goal, editing: m.editing, tested: m.tested, draft: m.draft, notes: m.notes, process: m.process, streamlining: !!m.streamlining, streamlined: !!m.streamlinedHash } : null;
   }
 
   emitMaking() {
@@ -868,11 +869,6 @@ class Agent {
     title = String(title || '').trim().slice(0, 40);
     this.making = { name, title, goal, draft, notes, process: proc, source, editing: !!source, tested: false };
     this.logMaking(`开始${source ? '修改' : '制作'}：${source ? (goal.startsWith('修改现有工具（') ? '（还没说要改什么）' : goal) : goal}`);
-    // 横幅一出现就自动录制右侧浏览器的网络请求，直到「完成」/「放弃」；已经在录（比如用户先点了录制）就沿用
-    if (!this.rec.active) {
-      try { await this.rec.start({ label: `${source ? '修改' : '制作'}工具 ${name}` }); this.making.autoRec = true; }
-      catch (e) { this.ctx.emit({ type: 'note', text: `自动录制没有开始：${e.message}` }); }
-    }
     if (keepChat) {
       this.emitMaking();
       return `${MAKING_PROMPT(this.making)}${resumed ? `\n草稿里有上次没做完的版本，先读一下再接着做。` : ''}`;
@@ -989,6 +985,22 @@ class Agent {
   async finishMaking({ force = false, overwrite = false } = {}) {
     const m = this.making;
     if (!m) throw new Error('当前没有在制作工具');
+    // 点「完成」时先让助手对照整个过程记录，把草稿精简成最终工具；精简后草稿没再变过，第二次点才真正放进工具箱
+    if (m.streamlining) throw new Error('助手正在把整个过程精简成最终工具，等它回复完再点');
+    if (!m.streamlinedHash || m.streamlinedHash !== fileHash(m.draft)) {
+      if (this.running) throw new Error('助手还在回复，等它说完再点「完成」');
+      const verb = m.editing ? '修改' : '制作';
+      m.streamlining = true;
+      m.hashBefore = fileHash(m.draft);
+      this.emitMaking();
+      this.logMaking(`用户点了「完成${verb}」：请助手把整个过程精简成最终工具`);
+      await this.send(`我点了「完成${verb}」。放进工具箱之前，请把整个过程精简成最终的工具：
+1. 从头读一遍过程记录 ${m.process}（需要的话再看录制文件），确认用户最终要的是什么；
+2. 按最终意图改草稿 ${m.draft}：只留最终走通的那条路，去掉试探、失败和重复的步骤；能直接调接口就不点页面；每次会变的做成参数，固定的写死；过程中手工处理过的情况（弹窗、未登录、没数据）写成判断；
+3. 更新制作记录 ${m.notes}：用户意图、使用步骤、关键点、变更记录；
+4. 最后用几句话告诉我：精简后的工具做什么、参数有哪些、跟过程里的做法相比去掉了什么。然后请我点「试运行」验证，再点「完成${verb}」。`);
+      return { streamline: true };
+    }
     let def;
     try { def = this.draftDef(); } catch (e) { throw new Error(`草稿还不能用：${e.message}`); }
     if (def.name !== m.name) throw new Error(`草稿里的 name 是 "${def.name}"，跟要做的工具名 "${m.name}" 不一致，请让助手改成一致`);
@@ -1186,6 +1198,15 @@ class Agent {
           }
         } else if (m.type === 'result') {
           this.running = false;
+          const mk = this.making;
+          if (mk?.streamlining) {
+            mk.streamlining = false;
+            if (!m.is_error) {
+              mk.streamlinedHash = fileHash(mk.draft);
+              if (mk.streamlinedHash !== mk.hashBefore) mk.tested = false; // 精简改了草稿，要重新试运行
+            }
+            this.emitMaking();
+          }
           this.ctx.emit({ type: 'done', error: m.is_error ? (m.result || m.subtype) : null, cost: m.total_cost_usd });
           // 打标签+清理放在第一轮回复结束后：会话文件这时才稳定落盘，早了会因为原生进程还在写而失败
           if (!this.tagged) this.tagAndPrune().then(() => { this.tagged = true; }).catch(() => {});

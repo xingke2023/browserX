@@ -698,7 +698,9 @@ function renderMaking(m) {
   document.body.classList.toggle('making', !!m);
   if (!m) return;
   $('mk_verb').textContent = m.editing ? '修改' : '制作';
-  $('mk_done').textContent = m.editing ? '完成修改' : '完成制作';
+  $('mk_done').textContent = m.streamlining ? '精简中…' : m.editing ? '完成修改' : '完成制作';
+  $('mk_done').disabled = !!m.streamlining;
+  $('mk_done').title = m.streamlined ? '检查草稿，通过后放进工具箱' : '先让助手把整个过程精简成最终工具，精简完再点一次放进工具箱';
   $('mk_name').textContent = m.title ? `${m.title}（${m.name}）` : m.name;
   $('mk_tested').textContent = m.tested ? '已试运行 ✓' : '';
 }
@@ -730,6 +732,7 @@ $('mk_done').addEventListener('click', async () => {
     for (;;) {
       const r = await call('making:finish', opts);
       if (r.done) break;
+      if (r.streamline) return; // 先让助手把过程精简成最终工具，精简完再点一次
       if (!(await askConfirm(r.confirm))) return;
       opts[r.need] = true;
     }
