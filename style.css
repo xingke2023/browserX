@@ -1,0 +1,271 @@
+:root{
+  --bg:#f5f4ef;--panel:#fbfaf7;--card:#fff;--line:#e2dfd6;--line-strong:#cfcabd;
+  --text:#2b2a26;--muted:#77736a;--accent:#c96442;--link:#2563eb;--red:#d93025;--btn-hi:rgba(255,255,255,.9);--btn-lo:#ecebe6;--btn-shadow:rgba(40,30,10,.14);--accent-weak:#f6e9e3;--accent-text:#fff;
+  --user:#ece9e1;--code:#f1efe8;--ok:#4f8a5b;--err:#b5473a;--warn:#a86b12;--warn-weak:#fbf1de;
+  --side:440px;color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#1f1e1c;--panel:#262523;--card:#2e2d2a;--line:#3a3935;--line-strong:#4b4944;
+  --text:#ecebe6;--muted:#a19d93;--accent:#d97757;--link:#6ea8fe;--red:#ff6b6b;--btn-hi:rgba(255,255,255,.1);--btn-lo:#24231f;--btn-shadow:rgba(0,0,0,.45);--accent-weak:#3d2c25;--accent-text:#fff;
+  --user:#383631;--code:#1b1a18;--ok:#7fb48a;--err:#e07a6c;--warn:#e0a54a;--warn-weak:#3a3020;color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#1f1e1c;--panel:#262523;--card:#2e2d2a;--line:#3a3935;--line-strong:#4b4944;
+  --text:#ecebe6;--muted:#a19d93;--accent:#d97757;--link:#6ea8fe;--red:#ff6b6b;--btn-hi:rgba(255,255,255,.1);--btn-lo:#24231f;--btn-shadow:rgba(0,0,0,.45);--accent-weak:#3d2c25;--accent-text:#fff;
+  --user:#383631;--code:#1b1a18;--ok:#7fb48a;--err:#e07a6c;--warn:#e0a54a;--warn-weak:#3a3020;color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+body{margin:0;height:100vh;overflow:hidden;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+button,input,textarea,select{font:inherit;color:inherit}
+button{border:1px solid var(--line-strong);background:var(--card);border-radius:8px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+button:disabled{opacity:.4;cursor:default}
+button.primary{background:var(--link);border-color:var(--link);color:#fff} /* 主要按钮统一用蓝色（跟发送按钮、工具名一致） */
+button.primary:hover:not(:disabled){filter:brightness(1.1);color:#fff;border-color:var(--link)}
+button.ghost{background:transparent;border-color:transparent}
+button.ghost:hover:not(:disabled){background:var(--user);border-color:transparent;color:var(--text)}
+button.icon{padding:5px;width:30px;height:30px;display:grid;place-items:center}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+input,textarea,select{background:var(--card);border:1px solid var(--line-strong);border-radius:8px;padding:7px 10px;width:100%}
+.muted{color:var(--muted);font-size:12px}
+
+main{height:100vh;display:grid;grid-template-columns:var(--side) 5px minmax(0,1fr)}
+body.dragging{cursor:col-resize;user-select:none}
+
+/* ---------------------------------------------------------------- 左侧 */
+#side{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--panel)}
+.sidehead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 8px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;flex:1 0 auto} /* 不压缩标题：放不下时右边按钮换到下一行 */
+.brand{cursor:pointer}
+.brand:hover strong{color:var(--link)}
+/* 字标：Optima Bold（macOS 自带；其他系统退回系统无衬线体） */
+.brand strong{display:block;font-family:Optima,'Candara','Segoe UI',ui-sans-serif,system-ui,sans-serif;font-size:28px;line-height:1;font-weight:700;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.headtools{display:flex;flex-wrap:wrap;gap:6px;align-items:center;flex:none}
+/* 顶部三个按钮（新对话 / 历史 / 工具箱）：渐变 + 顶部高光 + 底部投影，悬停浮起、按下下沉 */
+.headtools button{padding:5px 12px;font-size:13px;font-weight:500;color:var(--text);border:1px solid var(--line-strong);border-radius:8px;
+  background:linear-gradient(to bottom,var(--card),var(--btn-lo));
+  box-shadow:inset 0 1px 0 var(--btn-hi),0 1px 1px var(--btn-shadow),0 2px 5px var(--btn-shadow);
+  transition:transform .08s,box-shadow .12s,border-color .12s,color .12s}
+.headtools button:hover:not(:disabled){color:var(--link);border-color:var(--link);background:linear-gradient(to bottom,var(--card),var(--btn-lo));
+  transform:translateY(-1px);box-shadow:inset 0 1px 0 var(--btn-hi),0 2px 2px var(--btn-shadow),0 4px 9px var(--btn-shadow)}
+.headtools button.icon{padding:0;width:32px;height:31px;display:grid;place-items:center}
+.headtools button.icon svg{width:18px;height:18px}
+.headtools button:active:not(:disabled){transform:translateY(1px);background:var(--btn-lo);
+  box-shadow:inset 0 2px 4px var(--btn-shadow),0 0 0 transparent}
+.cwdrow{display:flex;align-items:center;gap:6px;min-width:0}
+.cwdrow #cwd{flex:1;min-width:0;font:12px Menlo,monospace;background:var(--code);border:1px solid var(--line-strong);border-radius:8px;padding:0 10px;line-height:32px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cwdrow button{flex:none;padding:0 14px}
+body.bypass #settings #mode{border-color:var(--warn);color:var(--warn);background:var(--warn-weak)}
+
+/* 设置：占满左侧（遮住对话），分组卡片，每项「名称 / 说明 / 控件」三行，控件统一高度，底部固定保存栏 */
+#settings{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--panel)}
+#settings[hidden]{display:none}
+#side:has(#settings:not([hidden])) #msgs{display:none}
+#settings .sbody{flex:1;min-height:0;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:14px}
+#settings .sgroup{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px 14px;display:flex;flex-direction:column;gap:14px}
+#settings h3{margin:0;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.5px;text-transform:uppercase}
+#settings .field{display:flex;flex-direction:column;gap:4px;min-width:0}
+#settings label{font-size:13px;font-weight:600;color:var(--text)}
+#settings .hint{margin:0 0 2px;font-size:12px;line-height:1.5;color:var(--muted)}
+#settings input,#settings select,#settings .cwdrow #cwd,#settings .cwdrow button{height:34px;font-size:13px;box-sizing:border-box}
+#settings input,#settings select{padding:0 10px}
+/* 一行显示：左边名称 + 说明，右边控件 */
+#settings .field.inline{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);column-gap:12px;row-gap:2px;align-items:center}
+#settings .field.inline label{grid-column:1;grid-row:1}
+#settings .field.inline .hint{grid-column:1;grid-row:2;margin:0}
+#settings .field.inline :is(input,select){grid-column:2;grid-row:1/span 2}
+#settings .field label{overflow-wrap:anywhere}
+/* 左侧太窄时一行放不下，自动改回上下排 */
+#settings .sbody{container-type:inline-size}
+@container (max-width:360px){#settings .field.inline{display:flex;flex-direction:column;align-items:stretch}}
+#settings .sfoot{display:flex;justify-content:flex-end;gap:8px;padding:10px 14px;border-top:1px solid var(--line);background:var(--card)}
+#settings .sfoot button{min-width:72px}
+
+#history{padding:10px 14px;border-bottom:1px solid var(--line);background:var(--card);display:flex;flex-direction:column;gap:8px;max-height:72vh;overflow-y:auto}
+#history[hidden]{display:none}
+/* 历史面板打开时跟工具箱一样占满对话区、遮住对话 */
+#side:has(#history:not([hidden])) #msgs{display:none}
+/* 历史 / 工具箱 / 设置打开时也藏起底部输入框（关掉面板就回来） */
+#side:has(#history:not([hidden])) .composer,#side:has(#toolbox:not([hidden])) .composer,#side:has(#settings:not([hidden])) .composer{display:none}
+#history:not([hidden]){flex:1;min-height:0;max-height:none;border-bottom:none}
+.hlist{display:flex;flex-direction:column;gap:4px;min-height:0;overflow-y:auto}
+.hitem{display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;cursor:pointer;min-width:0}
+.hitem[hidden]{display:none}
+.hitem:hover{border-color:var(--accent)}
+.hitem.mine{border-color:var(--accent);background:var(--accent-weak)}
+.hitem .ht{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.hitem .htime{flex:none;font-size:11px;color:var(--muted)}
+.hitem button{flex:none;padding:2px 6px;font-size:11px}
+.hempty{color:var(--muted);font-size:12px;text-align:center;padding:10px}
+
+/* 工具箱：跟设置页同一套卡片风格。卡片 = 标题行（序号+名称 | 编辑 导出）+ 描述；点开后下面接参数表单 */
+#toolbox{padding:14px;background:var(--panel);display:flex;flex-direction:column;gap:10px;overflow-y:auto}
+#toolbox[hidden]{display:none}
+/* 工具箱打开时占满对话区、遮住对话（对话 DOM 不动，关掉就原样回来） */
+#side:has(#toolbox:not([hidden])) #msgs{display:none}
+#toolbox:not([hidden]){flex:1;min-height:0}
+.tbitem[hidden]{display:none}
+.tbtop[hidden]{display:none}
+.tbimp p{margin:6px 0 0;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.tbimp-warn{color:var(--warn)}
+.tbimp-risks{margin-top:8px;font-size:12px;line-height:1.7}
+.tbimp-risks .risk{color:var(--warn)}
+.tbimp-ow{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px}
+.tbimp details{margin-top:8px;font-size:12px}
+.tbimp-code{max-height:320px;overflow:auto;font:11px/1.5 Menlo,monospace;background:var(--code);padding:8px;border-radius:6px;white-space:pre}
+.tbimp .row{display:flex;gap:6px;margin-top:10px}
+
+/* 制作工具模式横幅（见 renderer.js renderMaking） */
+#makingBar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px 14px;border-bottom:1px solid color-mix(in srgb,var(--accent) 30%,var(--line));background:color-mix(in srgb,var(--accent) 11%,var(--panel));border-left:5px solid var(--accent);box-shadow:inset 0 -1px 0 color-mix(in srgb,var(--accent) 15%,transparent)}
+#makingBar[hidden]{display:none}
+#makingBar .mk_title{font-size:14px;font-weight:600;min-width:0;overflow-wrap:anywhere;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#makingBar .mk_title::before{content:'';flex:none;width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent);animation:pulse 1.2s ease-in-out infinite}
+#makingBar .mk_title b{color:var(--accent);font-size:15px}
+#makingBar #mk_tested{color:var(--ok);font-size:11.5px;font-weight:600;border:1px solid color-mix(in srgb,var(--ok) 45%,transparent);background:color-mix(in srgb,var(--ok) 12%,transparent);border-radius:10px;padding:1px 8px}
+#makingBar #mk_tested:empty{display:none}
+#makingBar .mk_btns{display:flex;gap:6px;flex-wrap:wrap}
+#makingBar button{font-size:12px;height:28px;padding:0 12px;border:1px solid var(--line-strong);background:var(--card);color:var(--text);box-shadow:0 1px 2px var(--btn-shadow)} /* 四个按钮同一样式 */
+#makingBar button:hover:not(:disabled){border-color:var(--accent);color:var(--accent);background:var(--card)}
+#makingBar #mk_cancel:hover:not(:disabled){border-color:var(--err);color:var(--err)}
+#mk_rec.on{border-color:#d33;color:#d33}
+.pager[hidden]{display:none}
+.pager button{font-size:12px;padding:3px 8px}
+.pager span{font-size:12px;margin:0 6px}
+.tbform label .req{color:var(--err)}
+.tbform .tberr{color:var(--err);font-size:12px}
+
+#msgs{flex:1;min-height:0;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px}
+#msgs:empty::before{content:'试试输入：「打开 baidu.com 搜索 BrowserX」';white-space:pre-wrap;color:var(--muted);font-size:13px;margin:auto 10px;text-align:center}
+.msg{padding:8px 12px;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%}
+.msg.user{align-self:flex-end;max-width:88%;background:var(--user)}
+.msg.ai{align-self:stretch;padding:2px 2px}
+.msg.ai code,.perm code{font:12px Menlo,monospace;background:var(--code);padding:1px 4px;border-radius:4px}
+.msg.ai pre{font:12px/1.5 Menlo,monospace;background:var(--code);padding:8px 10px;border-radius:8px;overflow-x:auto;white-space:pre;margin:6px 0}
+.msg.ai .h{display:block;margin-top:4px}
+.msg.ai u{text-decoration-color:var(--accent)}
+
+.tool details{border:1px solid var(--line);border-radius:8px;background:var(--card)}
+.tool summary{display:flex;align-items:center;gap:6px;padding:4px 10px;cursor:pointer;list-style:none;font-size:12px;min-width:0}
+.tool summary::-webkit-details-marker{display:none}
+.tool .ti{color:var(--accent);font-weight:700;flex:none}
+.tool .tn{font-weight:600;flex:none}
+.tool .ta{color:var(--muted);font-family:Menlo,monospace;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.tool .ts{flex:none;font-size:11px}
+.tool.err .ts{color:var(--err)}
+.tool:not(.ok):not(.err) .ti{animation:pulse 1.2s ease-in-out infinite}
+.tool pre{margin:0;padding:8px 10px;border-top:1px solid var(--line);font:11px/1.5 Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow-y:auto}
+.tool .tout{color:var(--muted)}
+.tool.err .tout{color:var(--err)}
+@keyframes pulse{50%{opacity:.3}}
+
+.shot img{display:block;max-width:220px;border:1px solid var(--line);border-radius:8px;cursor:zoom-in}
+.shot img.big{max-width:100%;cursor:zoom-out}
+
+.perm{border:1px solid var(--accent);background:var(--accent-weak);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.perm.warn{border-color:var(--warn);background:var(--warn-weak)}
+.perm .ph{font-size:12px;font-weight:600;color:var(--accent)}
+.perm.warn .ph{color:var(--warn)}
+.perm pre{margin:0;font:12px/1.5 Menlo,monospace;background:var(--card);padding:6px 8px;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow-y:auto}
+.perm details summary{font-size:12px;color:var(--muted);cursor:pointer}
+.perm .pb{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.perm .pb button{font-size:12px;padding:4px 10px}
+.perm .pr{font-size:12px;color:var(--muted)}
+.perm.done{opacity:.6;border-style:dashed}
+.qcard{gap:10px}
+.qq{display:flex;flex-direction:column;gap:6px}
+.qh{font-size:13px;font-weight:600;line-height:1.5}
+.qchip{display:inline-block;font-size:11px;font-weight:600;color:var(--link);border:1px solid var(--link);border-radius:10px;padding:0 7px;margin-right:6px;vertical-align:1px}
+.qmulti{font-weight:400;font-size:12px;color:var(--muted);margin-left:4px}
+.qopts{display:flex;flex-direction:column;gap:4px}
+.qopt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:6px 10px;background:var(--card);border:1px solid var(--line);border-radius:8px;white-space:normal}
+.qopt b{font-size:13px;font-weight:600}
+.qopt small{font-size:12px;color:var(--muted);line-height:1.5}
+.qopt.sel{border-color:var(--link);box-shadow:inset 3px 0 0 var(--link)}
+.qopt.sel b{color:var(--link)}
+.qother-in{font-size:13px}
+.qother-in[hidden]{display:none}
+.qprev{margin:0;font:12px/1.5 Menlo,monospace;background:var(--card);padding:6px 8px;border-radius:6px;white-space:pre-wrap;max-height:220px;overflow:auto}
+.qprev[hidden]{display:none}
+.qcard.done .pr{color:var(--text)}
+
+.note{font-size:13px;line-height:1.5;color:var(--link);text-align:center}
+.note.err{color:var(--err);text-align:left;font-size:13px}
+
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:100}
+.modal-box{background:var(--card);border:1px solid var(--line-strong);border-radius:12px;padding:16px;width:min(360px,86vw);display:flex;flex-direction:column;gap:10px;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+.modal-msg{font-size:13px;line-height:1.6;white-space:pre-wrap}
+.modal-actions{display:flex;justify-content:flex-end;gap:6px}
+
+/* 底部输入区：一个圆角卡片包住输入框和按钮，聚焦时边框略加深、阴影加大（不用彩色光晕） */
+.composer{padding:10px 14px 14px;border-top:1px solid var(--line)}
+.cbox{border:1px solid var(--line-strong);border-radius:14px;background:var(--card);box-shadow:0 1px 3px var(--btn-shadow);transition:border-color .12s,box-shadow .12s}
+.cbox:focus-within{border-color:color-mix(in srgb,var(--text) 35%,var(--line-strong));box-shadow:0 4px 14px var(--btn-shadow)}
+#input{display:block;resize:none;border:none;background:transparent;box-shadow:none;padding:12px 14px 2px;min-height:48px;max-height:240px;font-size:14px;line-height:1.55}
+#input:focus,#input:focus-visible{outline:none}
+.composer-bar{display:flex;align-items:center;gap:6px;padding:4px 8px 8px 14px}
+.composer-bar .chint{flex:1;font-size:11.5px;color:var(--muted)}
+#status{font-size:12px;color:var(--muted)}
+body.running .composer-bar .chint{display:none}
+body.running #status{flex:1}
+#btnSend{width:32px;height:32px;padding:0;border-radius:50%;display:grid;place-items:center;background:var(--link);border-color:var(--link);color:#fff;flex:none}
+#btnSend:hover:not(:disabled){filter:brightness(1.1);color:#fff}
+#btnSend svg{width:16px;height:16px;stroke-width:2}
+#btnStop{height:28px;padding:0 12px;font-size:12px;border:1px solid var(--line-strong);border-radius:14px;color:var(--err);flex:none}
+#btnStop:hover:not(:disabled){border-color:var(--err);color:var(--err);background:transparent}
+body.running #status::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle;animation:pulse 1s infinite}
+
+#splitter{cursor:col-resize;background:var(--line);transition:background .15s}
+#splitter:hover,body.dragging #splitter{background:var(--accent)}
+
+/* ---------------------------------------------------------------- 右侧浏览器 */
+#browser{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--bg)}
+.toolbar{display:flex;align-items:center;gap:4px;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--panel)}
+#urlForm{flex:1;min-width:0}
+#url{border-radius:16px;padding:5px 14px;font-size:13px;background:var(--bg)}
+#navReload.loading svg{animation:spin 1s linear infinite}
+#recBtn{display:flex;align-items:center;gap:4px;white-space:nowrap}
+#recBtn svg{width:14px;height:14px}
+#recBtn.on{border-color:#d33;color:#d33}
+#recBtn.on svg circle{fill:#d33;stroke:#d33;animation:pulse 1s infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#stage{flex:1;min-height:0;background:#fff}
+#navError{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center;background:var(--bg);color:var(--text)}
+#navError[hidden]{display:none}
+#navError h3{margin:0;font-size:16px}
+#navError p{margin:0;max-width:520px;font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+#navError .row{display:flex;gap:6px;margin-top:8px}
+
+@media (max-width:900px){main{grid-template-columns:340px 5px minmax(0,1fr)}}
+
+#tb_list{display:flex;flex-direction:column;gap:10px}
+.tbtop{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tbtop .tbsearch{flex:1 1 140px;min-width:0;height:32px;padding:0 10px;font-size:13px;box-sizing:border-box}
+.tbcards{display:flex;flex-direction:column;gap:10px}
+.tbitem mark{background:color-mix(in srgb,var(--link) 22%,transparent);color:inherit;border-radius:3px;padding:0 1px}
+.tbtop button{height:32px;padding:0 14px;font-size:13px}
+.tbback{align-self:flex-start;height:30px;padding:0 10px;font-size:13px}
+.tbitem{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;cursor:pointer;transition:border-color .12s,box-shadow .12s}
+.tbitem:hover{border-color:var(--link);box-shadow:0 2px 8px var(--btn-shadow)}
+.tbitem:has(.tbform),.tbnew,.tbimp{cursor:default}
+.tbitem:has(.tbform):hover,.tbnew:hover,.tbimp:hover{border-color:var(--line);box-shadow:none}
+.tbitem .tbhead{display:flex;align-items:center;gap:8px;min-width:0}
+.tbitem .tbname{flex:1;min-width:0;font-size:16px;font-weight:600;color:var(--link);overflow-wrap:anywhere}
+.tbitem .tbid{margin-left:8px;font-size:12px;font-weight:400;color:var(--muted);font-family:Menlo,ui-monospace,monospace}
+.tbitem .tbacts{flex:none;display:flex;gap:4px}
+.tbitem .tbedit{height:26px;padding:0 10px;font-size:12px;border:1px solid var(--line-strong);background:var(--card)}
+.tbitem .tbedit:hover:not(:disabled){border-color:var(--link);color:var(--link);background:var(--card)}
+.tbitem .tbdesc{font-size:12.5px;line-height:1.6;color:var(--muted);overflow-wrap:anywhere}
+.tbform{display:flex;flex-direction:column;gap:12px;margin-top:6px;padding-top:12px;border-top:1px solid var(--line)}
+.tbnew .tbform{margin-top:0;padding-top:0;border-top:none}
+.tbf{display:flex;flex-direction:column;gap:4px;min-width:0}
+.tbf label{font-size:13px;font-weight:600;color:var(--text)}
+.tbform .hint{margin:0 0 2px;font-size:12px;line-height:1.5;color:var(--muted)}
+.tbf :is(input,select){height:34px;padding:0 10px;font-size:13px;box-sizing:border-box}
+.tbf textarea{min-height:72px;font-size:13px;resize:vertical}
+.tbf label.tbcheck{display:flex;align-items:center;gap:8px;cursor:pointer}
+.tbf label.tbcheck input{width:16px;height:16px;margin:0;flex:none}
+.tbform .row{display:flex;justify-content:flex-end;gap:8px}
+.tbform .row button{height:34px;min-width:88px;padding:0 16px}
+.pager{display:flex;align-items:center;justify-content:center;gap:4px;padding-top:2px;flex-wrap:wrap}

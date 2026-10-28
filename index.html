@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+<title>BrowserX</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <section id="side">
+    <header class="sidehead">
+      <div class="brand" id="brand" role="link" tabindex="0" title="打开门户网站 www.xingke888.com"><strong>BrowserX</strong></div>
+      <div class="headtools">
+        <button id="btnNew" class="ghost" title="开始新对话">新对话</button>
+        <button id="btnHistory" class="ghost" title="查看 / 继续历史对话">历史</button>
+        <button id="btnToolbox" class="ghost" title="查看 / 直接运行自定义工具（不经过对话）">工具箱</button>
+        <button id="btnSettings" class="ghost icon" title="设置：工作目录、模型、权限模式、API Key、主页"><svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-width="1.9" d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3" stroke-width="1.9"/></svg></button>
+      </div>
+    </header>
+
+
+    <div id="makingBar" hidden>
+      <div class="mk_title"><span>🔧 正在<span id="mk_verb">制作</span>工具：<b id="mk_name"></b></span><span id="mk_tested"></span></div>
+      <div class="mk_btns">
+        <button id="mk_rec" class="ghost" title="在右侧浏览器手工操作一遍，录下接口，停止后自动发给助手">录制</button>
+        <button id="mk_try" class="ghost" title="用草稿直接跑一次（不经过助手）">试运行</button>
+        <button id="mk_done" class="ghost" title="检查草稿，通过后放进工具箱">完成</button>
+        <button id="mk_cancel" class="ghost" title="删除草稿，退出制作">放弃</button>
+      </div>
+    </div>
+
+    <div id="settings" hidden>
+      <div class="sbody">
+        <section class="sgroup">
+          <h3>助手</h3>
+          <div class="field">
+            <label>工作目录</label>
+            <p class="hint">助手执行命令、读写相对路径、读取项目说明文件的文件夹；历史对话也按它分开。更换后开始新对话</p>
+            <div class="cwdrow"><span id="cwd" title=""></span><button id="btnCwd" title="选择工作目录">选择…</button></div>
+          </div>
+          <div class="field inline">
+            <label for="model">模型</label>
+            <p class="hint">对话中切换，当前对话会继续</p>
+            <select id="model"></select>
+          </div>
+          <div class="field inline">
+            <label for="mode">权限模式</label>
+            <p class="hint">每次询问最保守；全部允许最省事也最危险</p>
+            <select id="mode">
+              <option value="auto">自动（Auto）</option>
+              <option value="default">每次询问</option>
+              <option value="acceptEdits">自动接受编辑</option>
+              <option value="plan">只做计划</option>
+              <option value="bypassPermissions">全部允许</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="sgroup">
+          <h3>API</h3>
+          <div class="field">
+            <label for="s_apiKey">ANTHROPIC_API_KEY</label>
+            <p class="hint">留空则使用本机已登录的账号</p>
+            <input id="s_apiKey" type="password" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="s_baseUrl">ANTHROPIC_BASE_URL</label>
+            <p class="hint">使用代理或兼容网关时填写，留空为官方地址</p>
+            <input id="s_baseUrl" placeholder="https://api.anthropic.com" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="s_model">自定义模型 ID</label>
+            <p class="hint">填写后会出现在上面的模型列表里</p>
+            <input id="s_model" placeholder="claude-sonnet-5" spellcheck="false">
+          </div>
+        </section>
+
+        <section class="sgroup">
+          <h3>浏览器</h3>
+          <div class="field inline">
+            <label for="s_home">主页</label>
+            <p class="hint">启动时右侧浏览器打开的网址</p>
+            <input id="s_home" placeholder="https://www.xingke888.com" spellcheck="false">
+          </div>
+        </section>
+      </div>
+      <div class="sfoot"><button id="btnCloseSettings" class="ghost">取消</button><button id="btnSaveSettings" class="primary">保存</button></div>
+    </div>
+
+    <div id="history" hidden>
+      <div id="h_list" class="hlist"></div>
+    </div>
+
+    <div id="toolbox" hidden>
+      <div id="tb_list" class="hlist"></div>
+    </div>
+
+    <div id="msgs" aria-live="polite"></div>
+
+    <div class="composer">
+      <div class="cbox">
+        <textarea id="input" rows="2" placeholder="输入你想做的事，比如查资料、操作右侧浏览器…"></textarea>
+        <div class="composer-bar">
+          <span class="chint">Enter 发送 · Shift+Enter 换行</span>
+          <span id="status"></span>
+          <button id="btnStop" class="ghost" hidden title="停止（Esc）">停止</button>
+          <button id="btnSend" class="primary" title="发送（Enter）" aria-label="发送"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3.5M3.5 8 8 3.5 12.5 8"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="splitter" title="拖动调整宽度"></div>
+
+  <section id="browser">
+    <nav class="toolbar">
+      <button id="navBack" class="ghost icon" title="后退" aria-label="后退"><svg viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></svg></button>
+      <button id="navForward" class="ghost icon" title="前进" aria-label="前进"><svg viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></button>
+      <button id="navReload" class="ghost icon" title="刷新" aria-label="刷新"><svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5v3h-3"/></svg></button>
+      <form id="urlForm"><input id="url" spellcheck="false" placeholder="输入网址或搜索"></form>
+      <button id="recMark" class="ghost" title="在录制里插入一个标记，方便把请求和操作步骤对上" hidden>标记</button>
+      <button id="recBtn" class="ghost rec" title="录制网络请求：手工操作一遍，录下接口，交给助手做成工具" aria-label="开始录制"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="4.5"/></svg><span id="recText">录制</span></button>
+      <button id="navDevtools" class="ghost icon" title="开发者工具" aria-label="开发者工具"><svg viewBox="0 0 16 16"><path d="M5.5 4.5L2 8l3.5 3.5M10.5 4.5L14 8l-3.5 3.5"/></svg></button>
+    </nav>
+    <div id="stage">
+      <div id="navError" hidden>
+        <h3>页面没有打开</h3>
+        <p id="ne_msg"></p>
+        <p class="muted" id="ne_detail"></p>
+        <div class="row"><button id="ne_back" class="primary">返回上一页</button><button id="ne_retry" class="ghost">重试</button><button id="ne_home" class="ghost">打开主页</button></div>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="renderer.js"></script>
+</body>
+</html>

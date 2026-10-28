@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>BrowserX 使用说明</title>
+<style>
+:root{--bg:#f5f4ef;--card:#fff;--text:#2b2a26;--muted:#77736a;--line:#e2dfd6;--link:#2563eb;--accent:#c96442;--code:#f1efe8}
+@media (prefers-color-scheme:dark){:root{--bg:#1f1e1c;--card:#2e2d2a;--text:#ecebe6;--muted:#a19d93;--line:#3a3935;--link:#6ea8fe;--accent:#d97757;--code:#1b1a18}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:28px 24px 48px}
+header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+header h1{margin:0;font-family:Optima,"Segoe UI",sans-serif;font-size:30px;font-weight:700;letter-spacing:-.2px}
+header span{color:var(--muted)}
+header .ver{font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:10px;padding:0 8px;line-height:20px}
+header .ver:empty{display:none}
+nav{display:flex;gap:8px;margin:14px 0 22px;flex-wrap:wrap}
+nav a{padding:5px 14px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--text);text-decoration:none;font-size:13px}
+nav a:hover{border-color:var(--link);color:var(--link)}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 22px 18px;margin-bottom:18px;scroll-margin-top:16px}
+h2{font-size:18px;margin:16px 0 4px;color:var(--link)}
+h3{font-size:15px;margin:18px 0 4px}
+p{margin:6px 0}
+ul,ol{margin:6px 0;padding-left:22px}
+li{margin:3px 0}
+b{font-weight:600}
+kbd,code{font:12px Menlo,ui-monospace,monospace;background:var(--code);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.feat{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:12px}
+.feat div{border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.feat b{display:block;color:var(--accent);margin-bottom:2px}
+.feat p{margin:0;font-size:13px;color:var(--muted)}
+.tip{border-left:3px solid var(--accent);padding:4px 12px;margin:10px 0;color:var(--muted);font-size:13px}
+footer{text-align:center;color:var(--muted);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>BrowserX</h1><span class="ver" id="ver"></span><span>左边是智能助手，右边是浏览器</span></header>
+  <nav><a href="#features">软件特色</a><a href="#guide">使用说明</a><a href="#toolbox">工具箱</a><a href="#tips">常见问题</a></nav>
+
+  <section id="features">
+    <h2>软件特色</h2>
+    <p>BrowserX 把智能助手和浏览器放在同一个窗口里：你用中文说要做什么，助手直接在右边的浏览器里帮你点、帮你填、帮你查，你全程都看得到。</p>
+    <div class="feat">
+      <div><b>说话就能操作网页</b><p>打开网站、搜索、点击、填写表单、读取页面内容，一句话交给助手。</p></div>
+      <div><b>登录状态一直保留</b><p>右侧浏览器会记住你登录过的网站，重启软件也不用重新登录。</p></div>
+      <div><b>常用流程做成工具</b><p>重复的操作做成一个工具，以后填几个参数、点一下就跑完，不经过对话、不花额度。</p></div>
+      <div><b>录一遍就能自动化</b><p>手工操作一遍并录制，助手会分析网站接口，帮你做成稳定、快速的工具。</p></div>
+      <div><b>草稿保护</b><p>新建或修改工具都先写在草稿里，试运行没问题再放进工具箱，不会弄坏正在用的版本。</p></div>
+      <div><b>工具可分享</b><p>工具能导出成一个文件发给同事，导入前会列出它用到的敏感能力并可查看源代码。</p></div>
+      <div><b>不只是浏览器</b><p>助手还能读写电脑上的文件、执行命令，整理数据、导出表格都可以。</p></div>
+      <div><b>安全提醒</b><p>录制时自动给密码、令牌打码；导出工具前会检查代码里有没有写死的密码。</p></div>
+    </div>
+  </section>
+
+  <section id="guide">
+    <h2>使用说明</h2>
+
+    <h3>1. 界面</h3>
+    <ul>
+      <li><b>左侧</b>：和助手的对话。顶部有「新对话」「历史」「工具箱」和 ⚙ 设置。</li>
+      <li><b>右侧</b>：浏览器。上方是地址栏、前进后退刷新、录制按钮和开发者工具。</li>
+      <li>中间的分隔线可以拖动，调整左右两边的宽度。点左上角「BrowserX」会打开门户网站。</li>
+    </ul>
+
+    <h3>2. 和助手对话</h3>
+    <ul>
+      <li>在左下角输入框里写你要做的事，按 <kbd>Enter</kbd> 发送，<kbd>Shift</kbd>+<kbd>Enter</kbd> 换行。</li>
+      <li>例子：「打开 baidu.com 搜索 BrowserX」「把这个页面的表格整理成 Excel 存到桌面」。</li>
+      <li>助手执行过程中可以点「停止」或按 <kbd>Esc</kbd> 中断。</li>
+      <li>助手有时会弹出选择题，点选后按「提交」；不想回答可以点「跳过」。</li>
+      <li>需要登录、扫码、输入验证码的地方，请自己在右侧浏览器里完成，再告诉助手继续。</li>
+    </ul>
+
+    <h3>3. 新对话与历史</h3>
+    <ul>
+      <li>「新对话」会清空左侧，开始一个全新的话题。</li>
+      <li>「历史」列出之前的对话，点一条就能接着聊；也可以重命名或删除。</li>
+    </ul>
+
+    <h3>4. 设置</h3>
+    <ul>
+      <li><b>工作目录</b>：助手读写文件、执行命令的文件夹。更换后会开始新对话。</li>
+      <li><b>模型</b>：可随时切换，当前对话会继续。</li>
+      <li><b>权限模式</b>：「每次询问」最稳妥，每个操作都会先问你；「全部允许」最省事，但助手的操作不再确认，请谨慎使用。</li>
+      <li><b>主页</b>：启动时右侧浏览器打开的网址。</li>
+    </ul>
+  </section>
+
+  <section id="toolbox">
+    <h2>工具箱</h2>
+    <h3>运行工具</h3>
+    <ol>
+      <li>点顶部「工具箱」，可以用搜索框按名称或描述查找。</li>
+      <li>点一个工具展开，填好参数，点「运行」。结果会显示在对话区。</li>
+      <li>运行失败时点「让助手诊断并修复」，助手会查明原因并修好工具。</li>
+    </ol>
+    <p class="tip">工具运行时会使用右侧浏览器里已登录的网站，所以先确认相关网站已经登录。</p>
+
+    <h3>制作新工具</h3>
+    <ol>
+      <li>在工具箱点「＋ 新建工具」，填写英文工具名、中文名和要做什么，点「开始制作」。</li>
+      <li>顶部会出现「正在制作工具」横幅。需要的话点「录制」，在右侧浏览器里手工操作一遍再点停止，录制结果会自动交给助手。</li>
+      <li>助手写好后点「试运行」测试；不对就在对话里告诉助手怎么改。</li>
+      <li>没问题后点「完成」，工具放进工具箱，当前对话里马上能用。不想要了就点「放弃」。</li>
+    </ol>
+
+    <h3>修改、导出、导入</h3>
+    <ul>
+      <li>工具卡片上的「编辑」会进入同样的制作流程，改完点「完成」才替换原工具。</li>
+      <li>「导出」把工具存成一个 .js 文件，可以发给别人。</li>
+      <li>「导入工具」选择别人给的文件，先预览风险和源代码，确认后才导入。只导入你信任的人给的工具。</li>
+    </ul>
+  </section>
+
+  <section id="tips">
+    <h2>常见问题</h2>
+    <h3>右侧浏览器空白或显示「页面没有打开」</h3>
+    <p>多半是回到了表单提交后的结果页，或网络切换了。点「返回上一页」重新操作，或点「重试」。</p>
+    <h3>工具提示没有登录</h3>
+    <p>在右侧浏览器里打开对应网站重新登录，再运行工具。</p>
+    <h3>录制的文件在哪里</h3>
+    <p>菜单「帮助 → 打开录制文件夹」。里面可能有业务数据，请勿外传。</p>
+    <h3>工具文件在哪里</h3>
+    <p>菜单「帮助 → 打开工具箱文件夹」。建议通过工具箱的「编辑」修改，不要直接改文件。</p>
+    <h3>快捷键</h3>
+    <ul>
+      <li><kbd>⌘</kbd>+<kbd>,</kbd> 打开设置　<kbd>⌘</kbd>+<kbd>L</kbd> 选中地址栏　<kbd>⌘</kbd>+<kbd>R</kbd> 刷新界面</li>
+      <li><kbd>Enter</kbd> 发送　<kbd>Shift</kbd>+<kbd>Enter</kbd> 换行　<kbd>Esc</kbd> 停止助手</li>
+    </ul>
+  </section>
+
+  <footer>BrowserX <span id="ver2"></span> · www.xingke888.com</footer>
+</div>
+<script src="help.js"></script>
+</body>
+</html>

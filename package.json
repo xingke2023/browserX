@@ -1,0 +1,64 @@
+{
+  "name": "browserx",
+  "version": "0.1.0",
+  "description": "左侧 Claude Code 助手，右侧浏览器",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "prestart": "node scripts/dev-app-name.js",
+    "start": "electron .",
+    "predebug": "node scripts/dev-app-name.js",
+    "debug": "CB_DEBUG_PORT=9334 electron ."
+  },
+  "build": {
+    "appId": "com.browserx.app",
+    "productName": "BrowserX",
+    "asarUnpack": [
+      "**/node_modules/@anthropic-ai/claude-agent-sdk-*/**"
+    ],
+    "files": [
+      "**/*",
+      "!node_modules/@img/**",
+      "!**/*.bak*",
+      "!*.bak-*",
+      "!CLAUDE.md",
+      "!scripts/**",
+      "!logo.svg",
+      "!dist/**",
+      "!package-lock.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "identity": null,
+      "hardenedRuntime": false
+    },
+    "dmg": {
+      "title": "BrowserX ${version}"
+    },
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "afterPack": "scripts/after-pack.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.282",
+    "@anthropic-ai/sdk": "^0.128.0",
+    "@modelcontextprotocol/sdk": "^1.30.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  }
+}
