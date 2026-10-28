@@ -575,7 +575,7 @@ function buildToolForm(t) {
       add('msg ai', md(String(r)), true);
       // 跑完给一个入口：效果不满意就进入修改模式（会开新对话），把这次的参数和结果带过去，用户补一句哪里不好即可
       if (!t.draft) {
-        const d = add('note', `<button class="ghost tbtweak">效果不好？修改工具</button>`, true);
+        const d = add('note', `如果感觉效果不好，<button class="ghost tbtweak">点击修改工具功能</button>`, true);
         d.querySelector('.tbtweak').addEventListener('click', async () => {
           const out = String(r);
           if (!(await beginMaking({ edit: t.name }))) return;
