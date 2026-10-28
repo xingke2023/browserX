@@ -873,14 +873,29 @@ class Agent {
     this.logMaking(`开始${source ? '修改' : '制作'}：${source ? (goal.startsWith('修改现有工具（') ? '（还没说要改什么）' : goal) : goal}`);
     if (keepChat) {
       this.emitMaking();
+      this.introMaking();
       return `${MAKING_PROMPT(this.making)}${resumed ? `\n草稿里有上次没做完的版本，先读一下再接着做。` : ''}`;
     }
     if (this.q) this.reset(); // 每个工具单独一个对话，上下文干净
     this.emitMaking();
+    this.introMaking();
     await this.send(source
       ? `我要修改工具 ${name}。${goal}\n现有代码已复制到草稿 ${draft}，以前的制作记录在 ${notes}，先读一下这两个文件。`
       : `我要新建一个工具 ${name}${title ? `（中文名「${title}」）` : ''}：${goal}\n${resumed ? `草稿 ${draft} 里有上次没做完的版本，先读一下再接着做。\n` : ''}请先说说你打算怎么做、需要我提供什么（比如要不要先录制一遍操作）。`);
     return null;
+  }
+
+  // 横幅一出现先告诉用户接下来怎么走
+  introMaking() {
+    const m = this.making;
+    const verb = m.editing ? '修改' : '制作';
+    this.ctx.emit({ type: 'note', text: `— 开始${verb}工具 ${m.title ? `${m.title}（${m.name}）` : m.name} —
+接下来这样做：
+1. 告诉助手你要${m.editing ? '改什么' : '做什么'}，它会在右侧浏览器里摸索并写好草稿；
+2. 需要你在页面上手工操作时，助手会自动打开录制并告诉你怎么做，做完点「停止录制」；
+3. 草稿写好后点「试运行」看效果，不满意直接说哪里不好；
+4. 满意了点「完成${verb}」：助手先把整个过程精简成最终工具，再试运行一次，然后再点「完成${verb}」放进工具箱。
+整个过程会自动记录下来，以后再改这个工具时助手能接着上次的思路。不想${verb}了点「放弃」。` });
   }
 
   // 「完成」提示上的「继续修改」：在当前对话里重新进入编辑，并把制作规则发给模型
