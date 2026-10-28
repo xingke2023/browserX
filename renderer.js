@@ -573,6 +573,16 @@ function buildToolForm(t) {
     try {
       const r = await (t.draft ? call('making:run', args) : call('tools:run', t.name, args));
       add('msg ai', md(String(r)), true);
+      // 跑完给一个入口：效果不满意就进入修改模式（会开新对话），把这次的参数和结果带过去，用户补一句哪里不好即可
+      if (!t.draft) {
+        const d = add('note', `<button class="ghost tbtweak">效果不好？修改工具</button>`, true);
+        d.querySelector('.tbtweak').addEventListener('click', async () => {
+          const out = String(r);
+          if (!(await beginMaking({ edit: t.name }))) return;
+          $('input').value = `刚才直接运行这个工具，参数：${JSON.stringify(args)}\n结果：\n${out.length > 1500 ? out.slice(0, 1500) + '\n…（后面省略）' : out}\n\n效果不好的地方：`;
+          focusInput();
+        });
+      }
     } catch (e) {
       // 直接运行不经过模型，失败了没人会自动修——这里给一个一键升级到对话的入口，
       // 把参数和报错交给 Claude，让它走 TOOLBOX_PROMPT 里那套「手动补 + 诊断 + 改文件」的流程
