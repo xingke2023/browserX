@@ -321,12 +321,22 @@ body.running #status::before{content:'';display:inline-block;width:6px;height:6p
 .tbf label.tbcheck input{width:16px;height:16px;margin:0;flex:none}
 .tbform .row{display:flex;justify-content:flex-end;gap:8px}
 .tbform .row button{height:34px;min-width:88px;padding:0 16px}
-/* 工具参数表单排紧凑：短的（文字 / 数字 / 下拉 / 勾选）按宽度自动并排，多行输入、错误提示、运行按钮占整行 */
-.tbitem:not(.tbnew)>.tbform:not(.tbpage){display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px 12px;align-items:stretch}
-/* 同一行两格的说明长短不一时，输入框都贴底对齐 */
-.tbitem:not(.tbnew)>.tbform:not(.tbpage)>.tbf>:is(input,select,textarea){margin-top:auto}
+/* 工具参数表单排紧凑：短的（文字 / 数字 / 下拉 / 勾选）按宽度自动并排（够宽就三列），多行输入、错误提示、运行按钮占整行；
+   说明文字跟参数名同一行、超出省略，鼠标移上去或正在填这一项时展开全文；同一行几格的输入框贴底对齐 */
+.tbitem:not(.tbnew)>.tbform:not(.tbpage){display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px 10px;align-items:stretch;margin-top:4px;padding-top:8px}
 .tbitem:not(.tbnew)>.tbform:not(.tbpage)>:is(.tbf:has(textarea),.tberr,.row){grid-column:1/-1}
-.tbitem:not(.tbnew)>.tbform:not(.tbpage) .hint{font-size:11.5px;line-height:1.45}
+/* 每格两行：第一行「参数名 + 说明（一行，超出省略）」，第二行输入框 */
+.tbitem:not(.tbnew)>.tbform:not(.tbpage)>.tbf{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:6px;row-gap:3px;align-items:baseline;align-content:end}
+.tbitem:not(.tbnew)>.tbform:not(.tbpage)>.tbf>:is(input,select,textarea){grid-column:1/-1}
+.tbitem:not(.tbnew)>.tbform:not(.tbpage)>.tbf>.hint{grid-column:2}
+.tbitem:not(.tbnew)>.tbform:not(.tbpage)>.tbf>label.tbcheck{grid-column:1}
+.tbitem:not(.tbnew)>.tbform:not(.tbpage)>.tbf:has(>label.tbcheck){align-items:center;align-self:end;min-height:30px}
+.tbitem:not(.tbnew)>.tbform:not(.tbpage) .tbf label{font-size:12px}
+.tbitem:not(.tbnew)>.tbform:not(.tbpage) .tbf :is(input,select){height:30px;padding:0 8px;font-size:12.5px}
+.tbitem:not(.tbnew)>.tbform:not(.tbpage) .tbf textarea{min-height:56px;font-size:12.5px}
+.tbitem:not(.tbnew)>.tbform:not(.tbpage) .hint{margin:0;font-size:11px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tbitem:not(.tbnew)>.tbform:not(.tbpage) .tbf:is(:hover,:focus-within) .hint{white-space:normal}
+.tbitem:not(.tbnew)>.tbform:not(.tbpage) .row button{height:30px;min-width:72px}
 .pager{display:flex;align-items:center;justify-content:center;gap:4px;padding-top:2px;flex-wrap:wrap}
 /* 收起左侧栏：只留右侧浏览器，切换按钮在浏览器工具栏最左边 */
 body.side-collapsed main{grid-template-columns:minmax(0,1fr)} /* 左栏和分隔条 display:none 后不占网格，只剩一列 */
