@@ -527,6 +527,21 @@ function buildToolPage(t) {
   return box;
 }
 
+// 工具运行中：对话里一条会动的「运行中 · N 秒」提示 + 「停止」按钮，跑完就去掉
+function runningBar(label) {
+  const d = add('note tbrunbar', `<span class="tbspin" aria-hidden="true"></span><span class="tbruntxt">${esc(label)} 运行中…</span><button class="tbstop">停止</button>`, true);
+  const t0 = Date.now();
+  const txt = d.querySelector('.tbruntxt');
+  const timer = setInterval(() => { txt.textContent = `${label} 运行中 · ${Math.round((Date.now() - t0) / 1000)} 秒`; }, 1000);
+  const btn = d.querySelector('.tbstop');
+  btn.addEventListener('click', () => {
+    btn.disabled = true; btn.textContent = '正在停止…';
+    call('tools:stop').catch(() => {});
+  });
+  return { done() { clearInterval(timer); d.remove(); } };
+}
+const isStopped = (e) => /已手动停止/.test(e?.message || '');
+
 // launch 工具：不填参数直接运行（工具自己会打开界面，比如填表视窗）
 async function launchTool(t) {
   if (tbRunning) return;
@@ -534,10 +549,14 @@ async function launchTool(t) {
   $('toolbox').hidden = true;
   const label = t.title ? `${t.title}（${t.name}）` : t.name;
   add('note', `— 打开工具 ${esc(label)} —`, true);
+  const running = runningBar(label);
   try {
-    add('msg ai', md(String(await call('tools:run', t.name, {}))), true);
+    const r = await call('tools:run', t.name, {});
+    running.done();
+    add('msg ai', md(String(r)), true);
   } catch (e) {
-    add('note err', `✗ ${esc(e.message)}`, true);
+    running.done();
+    add(isStopped(e) ? 'note' : 'note err', isStopped(e) ? `■ 已手动停止 ${esc(label)}` : `✗ ${esc(e.message)}`, true);
   } finally {
     tbRunning = false;
   }
@@ -602,8 +621,10 @@ function buildToolForm(t) {
     $('toolbox').hidden = true;
     const label = t.title ? `${t.title}（${t.name}）` : t.name;
     add('note', t.draft ? `— 试运行草稿 ${esc(label)}（不经过对话） —` : `— 直接运行工具 ${esc(label)}（不经过对话，省 token） —`, true);
+    const running = runningBar(label);
     try {
       const r = await (t.draft ? call('making:run', args) : call('tools:run', t.name, args));
+      running.done();
       add('msg ai', md(String(r)), true);
       // 跑完给一个入口：效果不满意就进入修改模式（会开新对话），把这次的参数和结果带过去，用户补一句哪里不好即可
       if (!t.draft) {
@@ -616,6 +637,8 @@ function buildToolForm(t) {
         });
       }
     } catch (e) {
+      running.done();
+      if (isStopped(e)) { add('note', `■ 已手动停止 ${esc(label)}`, true); return; }
       // 直接运行不经过模型，失败了没人会自动修：正式工具直接打开「修改工具」（新对话 + 制作模式），把参数和报错交给助手诊断、改草稿；
       // 草稿试运行失败时本来就在修改中，留在当前对话里让助手接着改
       const d = add('note err', `✗ ${esc(e.message)}<div style="margin-top:6px"><button class="tbfix">${t.draft ? '让助手诊断并修复' : '打开修改工具'}</button></div>`, true);
@@ -1003,9 +1026,24 @@ $('splitter').addEventListener('pointerdown', (e) => {
   addEventListener('pointerup', up);
 });
 
+// 左侧铺满整个窗口（隐藏右侧浏览器），再点一下恢复；跟「收起左侧栏」互斥，记住上次的状态
+const WIDE_KEY = 'browserCollapsed';
+const WIDE_ICON = { off: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5', on: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5' };
+function setBrowserCollapsed(on) {
+  if (on && document.body.classList.contains('side-collapsed')) setSideCollapsed(false);
+  document.body.classList.toggle('browser-collapsed', on);
+  $('btnWide').querySelector('path').setAttribute('d', on ? WIDE_ICON.on : WIDE_ICON.off);
+  const label = on ? '恢复右侧浏览器' : '左侧铺满整个窗口（隐藏右侧浏览器）';
+  $('btnWide').title = label; $('btnWide').setAttribute('aria-label', label);
+  try { localStorage.setItem(WIDE_KEY, on ? '1' : ''); } catch {}
+  reportBounds();
+}
+$('btnWide').addEventListener('click', () => setBrowserCollapsed(!document.body.classList.contains('browser-collapsed')));
+
 // 收起 / 展开左侧栏（记住上次的状态）
 const SIDE_HIDDEN_KEY = 'sideCollapsed';
 function setSideCollapsed(on) {
+  if (on && document.body.classList.contains('browser-collapsed')) setBrowserCollapsed(false);
   document.body.classList.toggle('side-collapsed', on);
   const label = on ? '展开左侧栏' : '收起左侧栏';
   $('sideToggle').title = label; $('sideToggle').setAttribute('aria-label', label);
@@ -1015,6 +1053,7 @@ function setSideCollapsed(on) {
 }
 $('sideToggle').addEventListener('click', () => setSideCollapsed(!document.body.classList.contains('side-collapsed')));
 try { if (localStorage.getItem(SIDE_HIDDEN_KEY)) setSideCollapsed(true); } catch {}
+try { if (localStorage.getItem(WIDE_KEY)) setBrowserCollapsed(true); } catch {}
 
 call('cfg:get').then((c) => { cfg = c; renderCfg(); });
 call('nav:state').then(renderNav).catch(() => {});

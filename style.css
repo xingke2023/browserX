@@ -284,3 +284,13 @@ body.side-collapsed #side,body.side-collapsed #splitter{display:none}
 .tbpage{padding-top:8px}
 .tbitem.tbhaspage .tbdesc{display:none}
 .tbpage iframe{display:block;width:100%;height:calc(100vh - 150px);min-height:420px;border:1px solid var(--line);border-radius:8px;background:#fff}
+/* 工具运行中的提示条：转圈 + 已用秒数 + 停止按钮 */
+.tbrunbar{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid color-mix(in srgb,var(--link) 35%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--link) 7%,var(--card))}
+.tbrunbar .tbruntxt{flex:1;min-width:0}
+.tbspin{flex:none;width:16px;height:16px;border-radius:50%;border:2px solid color-mix(in srgb,var(--link) 25%,transparent);border-top-color:var(--link);animation:tbspin .8s linear infinite}
+@keyframes tbspin{to{transform:rotate(360deg)}}
+#msgs .note.tbrunbar button.tbstop{margin-left:0;color:var(--err);border-color:color-mix(in srgb,var(--err) 45%,var(--line-strong))}
+#msgs .note.tbrunbar button.tbstop:hover:not(:disabled){color:#fff;background:var(--err);border-color:var(--err)}
+/* 左侧铺满整个窗口：右侧浏览器和分隔条隐藏（原生浏览器视图跟着 #stage 变成 0 大小） */
+body.browser-collapsed main{grid-template-columns:minmax(0,1fr)}
+body.browser-collapsed #browser,body.browser-collapsed #splitter{display:none}

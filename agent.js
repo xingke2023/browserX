@@ -253,6 +253,7 @@ class Agent {
       wx: this.wx,
       article: { textToArticle, renderBlocks, THEMES }, // 跟内置 wx_fill 工具用的是同一套 Markdown 风格 -> 公众号 HTML 的转换
       log: (text) => this.ctx.emit({ type: 'note', text }),
+      withSignal: (signal) => this.stoppableCtx(signal), // 工具自己管停止时用（比如自带填表页面的工具）
       ask: (prompt, opts) => this.ask(prompt, opts), // 让模型写一段文字（不带任何工具），返回纯文本
     };
   }
@@ -768,7 +769,7 @@ class Agent {
     return this.readCustomToolDefs().map(({ file, def }) =>
       tool(def.name, `${def.title ? `【${def.title}】` : ''}${def.description || def.name}`, def.params || {},
         wrap(async (a) => {
-          const r = await def.run(a, this.toolCtx);
+          const r = await this.runStoppable(def, a);
           return (r && typeof r === 'object' && Array.isArray(r.content)) ? r : ok(r);
         }, file)));
   }
@@ -823,11 +824,57 @@ class Agent {
     this._toolRunning = true;
     try {
       await this.ctx.show();
-      const r = await def.run(args, this.toolCtx);
+      const r = await this.runStoppable(def, args);
       return typeof r === 'string' ? r : JSON.stringify(r, null, 1).slice(0, 8000);
     } finally {
       this._toolRunning = false;
     }
+  }
+
+  // ------------------------------------------------------------ 手动停止工具
+  // JS 没法强行杀掉一个正在跑的 async 函数，所以是「协作式」停止：工具拿到的 ctx 里每个方法（js / navigate / click / waitFor…）
+  // 调用前先看有没有被停止，正在等的也立刻放弃；整个 run 也跟停止信号赛跑——点「停止」后工具马上返回「已手动停止」，
+  // 工具里后续再碰浏览器都会直接抛错，不会接着往下做。右侧浏览器正在加载的页面也一起停掉。
+  stoppableCtx(signal) {
+    const stopped = () => Object.assign(new Error('已手动停止'), { stopped: true });
+    const onAbort = new Promise((_, reject) => {
+      if (signal.aborted) reject(stopped());
+      else signal.addEventListener('abort', () => reject(stopped()), { once: true });
+    });
+    onAbort.catch(() => {});
+    const out = { signal, stopped: () => signal.aborted };
+    for (const [k, v] of Object.entries(this.toolCtx)) {
+      if (typeof v !== 'function' || k === 'log' || k === 'withSignal') { out[k] = v; continue; }
+      out[k] = (...a) => {
+        if (signal.aborted) return Promise.reject(stopped());
+        return Promise.race([Promise.resolve().then(() => v(...a)), onAbort]);
+      };
+    }
+    out.log = (text) => { if (!signal.aborted) this.toolCtx.log(text); };
+    return out;
+  }
+
+  async runStoppable(def, args) {
+    const ac = new AbortController();
+    this.toolAbort = ac;
+    try {
+      const ctx = this.stoppableCtx(ac.signal);
+      const run = Promise.resolve().then(() => def.run(args, ctx));
+      run.catch(() => {}); // 停止后它可能晚一点才失败，别变成未处理的 rejection
+      return await Promise.race([run, new Promise((_, reject) => {
+        ac.signal.addEventListener('abort', () => reject(Object.assign(new Error('已手动停止'), { stopped: true })), { once: true });
+      })]);
+    } finally {
+      if (this.toolAbort === ac) this.toolAbort = null;
+    }
+  }
+
+  // 停止正在运行的工具（工具箱直接运行、试运行、对话里助手调用的都算）；返回是否真的停了一个
+  stopTool() {
+    if (!this.toolAbort) return false;
+    this.toolAbort.abort();
+    try { this.wc.stop(); } catch {}
+    return true;
   }
 
   // ------------------------------------------------------------ 制作工具模式
@@ -1258,6 +1305,7 @@ class Agent {
   }
 
   async stop() {
+    this.stopTool();
     this.denyAll();
     if (this.q && this.running) await this.q.interrupt().catch(() => {});
   }

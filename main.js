@@ -272,6 +272,7 @@ handle('history:delete', (id) => agent.deleteHistory(id));
 handle('tools:list', () => agent.listCustomTools());
 handle('tools:run', (name, args) => agent.runCustomTool(name, args));
 handle('tools:form', (name) => agent.toolFormUrl(name));
+handle('tools:stop', () => agent.stopTool());
 handle('view:cover', (on) => { covered = !!on; syncViewVisible(); });
 
 // 制作工具模式（见 agent.js startMaking/finishMaking）
