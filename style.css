@@ -330,13 +330,13 @@ body.running #status::before{content:'';display:inline-block;width:6px;height:6p
 .tbitem:not(.tbnew)>.tbform:not(.tbpage)>.tbf>:is(input,select,textarea){grid-column:1/-1}
 .tbitem:not(.tbnew)>.tbform:not(.tbpage)>.tbf>.hint{grid-column:2}
 .tbitem:not(.tbnew)>.tbform:not(.tbpage)>.tbf>label.tbcheck{grid-column:1}
-.tbitem:not(.tbnew)>.tbform:not(.tbpage)>.tbf:has(>label.tbcheck){align-items:center;align-self:end;min-height:30px}
-.tbitem:not(.tbnew)>.tbform:not(.tbpage) .tbf label{font-size:12px}
-.tbitem:not(.tbnew)>.tbform:not(.tbpage) .tbf :is(input,select){height:30px;padding:0 8px;font-size:12.5px}
-.tbitem:not(.tbnew)>.tbform:not(.tbpage) .tbf textarea{min-height:56px;font-size:12.5px}
-.tbitem:not(.tbnew)>.tbform:not(.tbpage) .hint{margin:0;font-size:11px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tbitem:not(.tbnew)>.tbform:not(.tbpage)>.tbf:has(>label.tbcheck){align-items:center;align-self:end;min-height:32px}
+.tbitem:not(.tbnew)>.tbform:not(.tbpage) .tbf label{font-size:14px}
+.tbitem:not(.tbnew)>.tbform:not(.tbpage) .tbf :is(input,select){height:32px;padding:0 8px;font-size:14px}
+.tbitem:not(.tbnew)>.tbform:not(.tbpage) .tbf textarea{min-height:56px;font-size:14px}
+.tbitem:not(.tbnew)>.tbform:not(.tbpage) .hint{margin:0;font-size:13px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tbitem:not(.tbnew)>.tbform:not(.tbpage) .tbf:is(:hover,:focus-within) .hint{white-space:normal}
-.tbitem:not(.tbnew)>.tbform:not(.tbpage) .row button{height:30px;min-width:72px}
+.tbitem:not(.tbnew)>.tbform:not(.tbpage) .row button{height:32px;min-width:76px;font-size:14px}
 .pager{display:flex;align-items:center;justify-content:center;gap:4px;padding-top:2px;flex-wrap:wrap}
 /* 收起左侧栏：只留右侧浏览器，切换按钮在浏览器工具栏最左边 */
 body.side-collapsed main{grid-template-columns:minmax(0,1fr)} /* 左栏和分隔条 display:none 后不占网格，只剩一列 */
