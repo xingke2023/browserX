@@ -505,11 +505,26 @@ function drawToolCards() {
       back.textContent = '← 全部工具';
       back.addEventListener('click', showAllTools);
       list.prepend(back);
-      d.appendChild(buildToolForm(t));
+      d.classList.toggle('tbhaspage', !!t.hasForm); // 自带填表网页时收起描述，把高度留给网页
+      d.appendChild(t.hasForm ? buildToolPage(t) : buildToolForm(t));
     });
     box.appendChild(d);
   }
   tbPager = makePager(box, '.tbitem', 5, tbState); // 描述是多行完整显示的，每页放少一点
+}
+
+// 自带填表页面的工具：点开显示它的网页（本机小服务），网页上填完点按钮才执行
+function buildToolPage(t) {
+  const box = document.createElement('div');
+  box.className = 'tbform tbpage';
+  box.innerHTML = '<div class="muted">正在打开…</div>';
+  call('tools:form', t.name).then((url) => {
+    const f = document.createElement('iframe');
+    f.src = url;
+    f.title = t.title || t.name;
+    box.replaceChildren(f);
+  }).catch((e) => { box.innerHTML = `<div class="tberr">✗ ${esc(e.message)}</div>`; });
+  return box;
 }
 
 // launch 工具：不填参数直接运行（工具自己会打开界面，比如填表视窗）
@@ -532,7 +547,7 @@ function showAllTools() {
   const list = $('tb_list');
   list.querySelector('.tbback')?.remove();
   list.querySelector('.tbtop').hidden = false;
-  for (const x of list.querySelectorAll('.tbitem')) x.querySelector('.tbform')?.remove();
+  for (const x of list.querySelectorAll('.tbitem')) { x.querySelector('.tbform')?.remove(); x.classList.remove('tbhaspage'); }
   tbPager.show(tbState.page);
 }
 

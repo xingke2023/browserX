@@ -280,3 +280,7 @@ body.side-collapsed #side,body.side-collapsed #splitter{display:none}
 #msgs .note button,#msgs .recuse{margin-left:4px;font-size:13px;font-weight:500;height:28px;padding:0 12px;color:var(--text);border:1px solid var(--line-strong);background:linear-gradient(to bottom,var(--card),var(--btn-lo));box-shadow:0 1px 2px var(--btn-shadow);vertical-align:1px}
 #msgs .note button:hover:not(:disabled),#msgs .recuse:hover:not(:disabled){color:var(--link);border-color:var(--link);background:linear-gradient(to bottom,var(--card),var(--btn-lo))}
 #msgs .note div>button,#msgs div>.recuse{margin-left:0}
+/* 工具自带的填表网页（iframe），占满工具箱剩下的高度 */
+.tbpage{padding-top:8px}
+.tbitem.tbhaspage .tbdesc{display:none}
+.tbpage iframe{display:block;width:100%;height:calc(100vh - 150px);min-height:420px;border:1px solid var(--line);border-radius:8px;background:#fff}

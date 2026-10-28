@@ -56,7 +56,7 @@ const TOOLBOX_PROMPT = (dir) => `
     params: { title: z.string(), text: z.string() },
     async run(args, ctx) { return '发布成功'; },
   });
-  工具自己带界面（比如 run 里打开一个填表视窗）时可以加 launch: true，工具箱里点一下就直接运行、不显示参数表单（参数照样可以在对话里传）。name 只能是字母/数字/下划线（它是调用接口用的名字，不能用中文），不能跟内置工具重名；title 是给用户看的中文名（简短，比如「保单查询」），工具箱里显示的就是它，一定要写；params 是 zod schema，复杂结构用 JSON 字符串参数，别用 z.record 或嵌套 object（新版运行时会导致整组工具注册失败，参考 wx_fill 的 images 参数）；run 返回字符串即可（也可以返回 {content:[...]}），失败直接 throw。
+  工具有自己的填表网页时可以加 form: async (ctx) => 'http://127.0.0.1:端口/…'（本机起个小服务），工具箱里点开就显示这个网页代替参数表单，网页上点按钮才执行；工具自己带界面（比如 run 里打开一个视窗）时可以加 launch: true，工具箱里点一下就直接运行、不显示参数表单（参数照样可以在对话里传）。name 只能是字母/数字/下划线（它是调用接口用的名字，不能用中文），不能跟内置工具重名；title 是给用户看的中文名（简短，比如「保单查询」），工具箱里显示的就是它，一定要写；params 是 zod schema，复杂结构用 JSON 字符串参数，别用 z.record 或嵌套 object（新版运行时会导致整组工具注册失败，参考 wx_fill 的 images 参数）；run 返回字符串即可（也可以返回 {content:[...]}），失败直接 throw。
 - run(args, ctx) 里能用：ctx.js(code)（在页面里跑 JS）、ctx.screenshot()、ctx.pageInfo()、ctx.click({x,y}或{selector,text})、ctx.type(text)、ctx.press(key, modifiers)、ctx.scroll(dy,x,y)、ctx.navigate(url)、ctx.sleep(ms)、ctx.waitFor(fn, timeoutMs, step)（轮询直到 fn() 为真，别用固定 sleep 赌时机）、ctx.guard(what, text)（危险操作二次确认，跟内置工具一致）、ctx.log(text)（往界面发一条进度提示）、ctx.ask(prompt, {system, model})（让模型写一段文字，不带工具，返回纯文本；工具里需要「模型来写」的内容用它）、ctx.wc（原始 webContents，进阶用）、ctx.wx（已有的浏览器辅助方法，hover/rect/clickWhenVisible 等，不限于公众号场景）。
 - 真实网站的流程通常有条件分支（弹窗不一定出现、生成的元素数量不固定、按钮位置会变、有些步骤要重试）——照实际情况写判断和重试，别假设一路顺利，参考 wechat.js 里 WeChat.fill() 的写法。
 - **自定义工具调用失败时该怎么办**：失败的工具结果里会带上源文件路径。不要只是把报错转述给用户就结束：
@@ -783,6 +783,7 @@ class Agent {
       title: def.title || '',
       description: def.description || '',
       launch: !!def.launch, // 工具箱里点一下就直接运行（不显示参数表单），适合自己会打开界面的工具
+      hasForm: typeof def.form === 'function', // 工具自带填表页面：工具箱里点开显示它，代替自动生成的参数表单
       file,
       params: Object.entries(def.params || {}).map(([key, schema]) => {
         let s = schema, required = true;
@@ -801,6 +802,16 @@ class Agent {
 
   // 工具箱面板「直接运行」：不经过模型，直接调 run(args, ctx)——ctx 跟对话里被模型调用时完全一样，
   // 所以 ctx.guard() 的危险操作确认、ctx.log() 的进度提示都照常生效。
+  // 自带填表页面的工具：form(ctx) 返回页面地址（只能是本机 127.0.0.1），工具箱里用 iframe 显示；页面上点按钮才真正执行
+  async toolFormUrl(name) {
+    const entry = this.readCustomToolDefs().find((e) => e.def.name === name);
+    if (!entry) throw new Error(`没有名为 "${name}" 的工具`);
+    if (typeof entry.def.form !== 'function') throw new Error(`${name} 没有自带填表页面`);
+    const url = String(await entry.def.form(this.toolCtx));
+    if (!/^http:\/\/127\.0\.0\.1:\d+\//.test(url)) throw new Error(`填表页面只能是本机地址（http://127.0.0.1:端口/），收到 ${url}`);
+    return url;
+  }
+
   async runCustomTool(name, args) {
     const entry = this.readCustomToolDefs().find((e) => e.def.name === name);
     if (!entry) throw new Error(`没有名为 "${name}" 的工具`);
