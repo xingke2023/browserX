@@ -1,8 +1,8 @@
-# BrowserX
+<p align="center"><img src="build/icon.png" alt="BrowserX" width="96"></p>
 
-左边是智能助手，右边是浏览器。用中文说要做什么，助手直接在右边的浏览器里帮你点、帮你填、帮你查，全程看得到。
+<h1 align="center">BrowserX</h1>
 
-![BrowserX](build/icon.png)
+<p align="center">左边是智能助手，右边是浏览器。用中文说要做什么，助手直接在右边的浏览器里帮你点、帮你填、帮你查，全程看得到。</p>
 
 ## 下载安装
 
