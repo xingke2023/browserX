@@ -52,6 +52,8 @@ body.dragging{cursor:col-resize;user-select:none}
   transform:translateY(-1px);box-shadow:inset 0 1px 0 var(--btn-hi),0 2px 2px var(--btn-shadow),0 4px 9px var(--btn-shadow)}
 .headtools button.icon{padding:0;width:36px;height:36px;display:grid;place-items:center}
 .headtools button.icon svg{width:18px;height:18px}
+/* 设置按钮不在顶部显示，从菜单「BrowserX → 设置…」或 ⌘, 打开（按钮留在页面里，菜单靠它打开设置） */
+#btnSettings{display:none}
 .headtools button:active:not(:disabled){transform:translateY(1px);background:var(--btn-lo);
   box-shadow:inset 0 2px 4px var(--btn-shadow),0 0 0 transparent}
 .cwdrow{display:flex;align-items:center;gap:6px;min-width:0}
