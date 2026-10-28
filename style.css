@@ -269,12 +269,8 @@ body.running #status::before{content:'';display:inline-block;width:6px;height:6p
 .tbform .row{display:flex;justify-content:flex-end;gap:8px}
 .tbform .row button{height:34px;min-width:88px;padding:0 16px}
 .pager{display:flex;align-items:center;justify-content:center;gap:4px;padding-top:2px;flex-wrap:wrap}
-/* 收起左侧栏：左栏缩成一条窄边，只留切换按钮 */
-#sideToggle svg{fill:none;stroke:currentColor;stroke-width:1.4}
-body.side-collapsed main{grid-template-columns:52px minmax(0,1fr)} /* 分隔条 display:none 后不占网格 */
-body.side-collapsed #splitter{display:none}
-body.side-collapsed #side{border-right:1px solid var(--line)}
-body.side-collapsed #side>:not(.sidehead),body.side-collapsed .sidehead>:not(.headtools),body.side-collapsed .headtools>:not(#sideToggle){display:none}
-body.side-collapsed .sidehead{padding:12px 0;justify-content:center;border-bottom:0}
+/* 收起左侧栏：只留右侧浏览器，切换按钮在浏览器工具栏最左边 */
+body.side-collapsed main{grid-template-columns:minmax(0,1fr)} /* 左栏和分隔条 display:none 后不占网格，只剩一列 */
+body.side-collapsed #side,body.side-collapsed #splitter{display:none}
 /* 工具栏不放「录制」：平时从「制作工具」栏里录；只在录制进行中显示，方便随时停止 */
 #recBtn:not(.on){display:none}
