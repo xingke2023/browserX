@@ -276,3 +276,6 @@ body.side-collapsed main{grid-template-columns:minmax(0,1fr)} /* 左栏和分隔
 body.side-collapsed #side,body.side-collapsed #splitter{display:none}
 /* 工具栏不放「录制」：平时从「制作工具」栏里录；只在录制进行中显示，方便随时停止 */
 #recBtn:not(.on){display:none}
+/* 工具运行完后的「点击修改工具功能」：实心按钮，跟提示文字同一行 */
+.note .tbtweak{margin-left:4px;font-size:13px;font-weight:500;height:28px;padding:0 12px;color:var(--text);border:1px solid var(--line-strong);background:linear-gradient(to bottom,var(--card),var(--btn-lo));box-shadow:0 1px 2px var(--btn-shadow);vertical-align:1px}
+.note .tbtweak:hover:not(:disabled){color:var(--link);border-color:var(--link)}
