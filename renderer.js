@@ -584,13 +584,17 @@ function buildToolForm(t) {
         });
       }
     } catch (e) {
-      // 直接运行不经过模型，失败了没人会自动修——这里给一个一键升级到对话的入口，
-      // 把参数和报错交给 Claude，让它走 TOOLBOX_PROMPT 里那套「手动补 + 诊断 + 改文件」的流程
-      const d = add('note err', `✗ ${esc(e.message)}<div style="margin-top:6px"><button class="ghost tbfix">让助手诊断并修复</button></div>`, true);
-      d.querySelector('.tbfix').addEventListener('click', () => {
-        $('input').value = t.draft
-          ? `试运行草稿 ${t.name} 失败了。\n参数：${JSON.stringify(args)}\n错误：${e.message}\n请诊断真正原因（用 mcp__browser__* 实际查一下，不要猜），然后改草稿。`
-          : `直接运行 ${t.name} 工具失败了（没经过对话，没花 token）。\n参数：${JSON.stringify(args)}\n错误：${e.message}\n请帮我诊断真正原因（用 mcp__browser__* 实际查一下，不要猜），需要的话先手动把这次任务做完，确认原因后把工具文件改好。`;
+      // 直接运行不经过模型，失败了没人会自动修：正式工具直接打开「修改工具」（新对话 + 制作模式），把参数和报错交给助手诊断、改草稿；
+      // 草稿试运行失败时本来就在修改中，留在当前对话里让助手接着改
+      const d = add('note err', `✗ ${esc(e.message)}<div style="margin-top:6px"><button class="tbfix">${t.draft ? '让助手诊断并修复' : '打开修改工具'}</button></div>`, true);
+      d.querySelector('.tbfix').addEventListener('click', async () => {
+        if (t.draft) {
+          $('input').value = `试运行草稿 ${t.name} 失败了。\n参数：${JSON.stringify(args)}\n错误：${e.message}\n请诊断真正原因（用 mcp__browser__* 实际查一下，不要猜），然后改草稿。`;
+          sendMsg();
+          return;
+        }
+        if (!(await beginMaking({ edit: t.name }))) return;
+        $('input').value = `刚才直接运行这个工具失败了。\n参数：${JSON.stringify(args)}\n错误：${e.message}\n需要的话先用浏览器手动把这次要做的事做完，再诊断真正原因（用 mcp__browser__* 实际查一下，不要猜），然后改草稿；改好后告诉我改了什么，我来试运行。`;
         sendMsg();
       });
     } finally {
