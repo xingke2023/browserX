@@ -146,7 +146,8 @@ function buildMenu() {
       submenu: [
         { role: 'about', label: '关于 BrowserX' },
         { type: 'separator' },
-        { label: '设置…', accelerator: 'CmdOrCtrl+,', click: () => win?.webContents.executeJavaScript("$('settings').hidden && $('btnSettings').click()").catch(() => {}) },
+        // 左侧栏收起时设置面板在隐藏的左栏里，看不到：先展开左栏再打开设置
+        { label: '设置…', accelerator: 'CmdOrCtrl+,', click: () => { win?.show(); win?.webContents.executeJavaScript("document.body.classList.contains('side-collapsed') && $('sideToggle').click(); $('settings').hidden && $('btnSettings').click()").catch(() => {}); } },
         { type: 'separator' },
         { role: 'hide', label: '隐藏 BrowserX' },
         { role: 'hideOthers', label: '隐藏其他' },
