@@ -43,6 +43,8 @@ body.dragging{cursor:col-resize;user-select:none}
 /* 字标：Optima Bold（macOS 自带；其他系统退回系统无衬线体） */
 .brand strong{display:block;font-family:Optima,'Candara','Segoe UI',ui-sans-serif,system-ui,sans-serif;font-size:28px;line-height:1;font-weight:700;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .headtools{display:flex;flex-wrap:wrap;gap:6px;align-items:center;flex:none}
+/* 登录按钮跟 BrowserX 字标同一行、靠右；其它按钮换到下一行 */
+.sidehead .headtools{flex:1 0 100%} /* 登录入口跟 BrowserX 字标同一行靠右，按钮换到下一行 */
 /* 顶部三个按钮（新对话 / 历史 / 工具箱）：渐变 + 顶部高光 + 底部投影，悬停浮起、按下下沉 */
 .headtools button{height:36px;padding:0 12px;font-size:13px;font-weight:500;color:var(--text);border:1px solid var(--line-strong);border-radius:8px;
   background:linear-gradient(to bottom,var(--card),var(--btn-lo));
@@ -131,25 +133,32 @@ body.bypass #settings #mode{border-color:var(--warn);color:var(--warn);backgroun
 .tbimp .row{display:flex;gap:6px;margin-top:10px}
 
 /* 制作工具模式横幅（见 renderer.js renderMaking） */
-/* 标签栏：每个标签 = 一个对话 + 右侧一个浏览器页面。圆点：转 = 运行中，橙 = 等你批准 / 回答，🔧 = 制作工具中 */
-#tabs{display:flex;align-items:center;gap:4px;padding:6px 10px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none;flex:none}
+/* 标签栏：每个标签 = 一个对话 + 右侧一个浏览器页面。开放式：没有外框，标签之间一条竖分隔线，当前标签字加深 + 底部一条蓝线；
+   平时不显示圆点，只有状态时才出现：转圈 = 运行中，橙点 = 等你批准 / 回答，🔧 = 制作工具中 */
+#tabs{flex:none;display:flex;align-items:stretch;padding:0 6px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
 #tabs::-webkit-scrollbar{display:none}
-#tabs .tab{display:flex;align-items:center;gap:6px;min-width:0;max-width:180px;flex:0 1 auto;height:30px;padding:0 6px 0 10px;border:1px solid transparent;border-radius:8px;cursor:pointer;color:var(--muted);font-size:13px;user-select:none}
-#tabs .tab:hover{background:var(--user);color:var(--text)}
-#tabs .tab.on{background:var(--card);border-color:var(--line-strong);color:var(--text);box-shadow:0 1px 2px var(--btn-shadow)}
-#tabs .tab:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-#tabs .tl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#tabs .tdot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--line-strong)}
-#tabs .tab.on .tdot{background:var(--link)}
-#tabs .tab.run .tdot{background:transparent;border:2px solid var(--link);border-right-color:transparent;width:10px;height:10px;animation:tabspin .8s linear infinite}
-#tabs .tab.attn .tdot{background:var(--warn);border:none;width:9px;height:9px;animation:none;box-shadow:0 0 0 3px var(--warn-weak)}
+#tabs .tab{position:relative;display:flex;align-items:center;justify-content:center;gap:6px;flex:1 1 0;min-width:84px;max-width:200px;height:38px;padding:0 24px 0 12px;
+  cursor:pointer;color:var(--muted);font-size:13px;user-select:none;transition:color .12s}
+#tabs .tab:hover{color:var(--text)}
+#tabs .tab.on{color:var(--text);font-weight:600}
+#tabs .tab.on::after{content:'';position:absolute;left:10px;right:10px;bottom:-1px;height:2px;border-radius:2px 2px 0 0;background:var(--link)}
+#tabs .tab:focus-visible{outline:2px solid var(--accent);outline-offset:-4px;border-radius:6px}
+/* 标签之间的竖分隔线 */
+#tabs .tab+.tab::before{content:'';position:absolute;left:0;top:12px;bottom:12px;width:1px;background:var(--line-strong)}
+#tabs .tl{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tabs .tdot{display:none;flex:none;border-radius:50%}
+#tabs .tab.run .tdot{display:block;width:10px;height:10px;border:2px solid var(--link);border-right-color:transparent;animation:tabspin .8s linear infinite}
+#tabs .tab.attn .tdot{display:block;width:8px;height:8px;border:none;background:var(--warn);animation:tabpulse 1.4s ease-in-out infinite}
 #tabs .tab.mk .tl::before{content:'🔧 '}
 @keyframes tabspin{to{transform:rotate(360deg)}}
-#tabs .tx{flex:none;width:20px;height:20px;padding:0;display:grid;place-items:center;border:none;background:transparent;border-radius:5px;color:var(--muted);font-size:15px;line-height:1;opacity:0}
-#tabs .tab:hover .tx,#tabs .tab.on .tx{opacity:1}
+@keyframes tabpulse{50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--warn) 25%,transparent)}}
+#tabs .tx{position:absolute;right:4px;top:50%;translate:0 -50%;width:18px;height:18px;padding:0;display:grid;place-items:center;border:none;background:transparent;
+  border-radius:5px;color:var(--muted);font-size:14px;line-height:1;opacity:0;transition:opacity .12s}
+#tabs .tab:hover .tx,#tabs .tab:focus-within .tx{opacity:1}
 #tabs .tx:hover:not(:disabled){background:var(--user);color:var(--text)}
-#tabs .tnew{flex:none;width:28px;height:28px;padding:0;display:grid;place-items:center;font-size:16px;color:var(--muted)}
-@media (prefers-reduced-motion:reduce){#tabs .tab.run .tdot{animation:none;border-right-color:var(--link)}}
+#tabs .tnew{flex:none;align-self:center;width:28px;height:28px;margin-left:4px;padding:0;display:grid;place-items:center;border:none;border-radius:7px;background:transparent;color:var(--muted);font-size:17px;line-height:1}
+#tabs .tnew:hover:not(:disabled){background:var(--user);color:var(--link)}
+@media (prefers-reduced-motion:reduce){#tabs .tab.run .tdot{animation:none;border-right-color:var(--link)}#tabs .tab.attn .tdot{animation:none}}
 
 #makingBar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px 14px;border-bottom:1px solid var(--making-line);background:var(--making-bg);border-left:5px solid var(--accent);box-shadow:inset 0 -1px 0 color-mix(in srgb,var(--accent) 15%,transparent)}
 #makingBar[hidden]{display:none}
@@ -265,6 +274,25 @@ body.running #status::before{content:'';display:inline-block;width:6px;height:6p
 #recBtn.on{border-color:#d33;color:#d33}
 #recBtn.on svg circle{fill:#d33;stroke:#d33;animation:pulse 1s infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* 收藏夹栏：地址栏下面一行，横向滚动；按钮按下时工具栏图标高亮 */
+#navBookmarks.on{color:var(--link);background:var(--user)}
+#navBookmarks.on svg{fill:currentColor}
+#bookmarks{display:flex;align-items:center;gap:6px;padding:4px 10px;border-bottom:1px solid var(--line);background:var(--panel);min-width:0}
+#bookmarks[hidden]{display:none}
+#bmAdd{flex:none;display:flex;align-items:center;gap:5px;height:26px;padding:0 10px 0 8px;font-size:12px;color:var(--muted)}
+#bmAdd svg{width:14px;height:14px}
+#bmAdd.saved{color:var(--warn)}
+#bmAdd.saved svg{fill:currentColor}
+#bmList{flex:1;min-width:0;display:flex;align-items:center;gap:2px;overflow-x:auto;scrollbar-width:none;border-left:1px solid var(--line);padding-left:6px}
+#bmList::-webkit-scrollbar{display:none}
+#bmList .bm{flex:none;position:relative;display:flex;align-items:center;max-width:180px;border-radius:6px}
+#bmList .bm:hover{background:var(--user)}
+#bmList .bmgo{min-width:0;height:26px;padding:0 22px 0 9px;border:none;background:transparent;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#bmList .bmgo:hover:not(:disabled){color:var(--link);border:none}
+#bmList .bmx{position:absolute;right:2px;width:18px;height:18px;padding:0;display:grid;place-items:center;border:none;background:transparent;border-radius:4px;color:var(--muted);font-size:13px;line-height:1;opacity:0}
+#bmList .bm:hover .bmx,#bmList .bmx:focus-visible{opacity:1}
+#bmList .bmx:hover:not(:disabled){background:var(--line);color:var(--text)}
+#bmList .bmempty{font-size:12px;color:var(--muted);white-space:nowrap}
 #stage{flex:1;min-height:0;background:#fff}
 #navError{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:24px;text-align:center;background:var(--bg);color:var(--text)}
 #navError[hidden]{display:none}
@@ -319,6 +347,12 @@ body.running #status::before{content:'';display:inline-block;width:6px;height:6p
 .tbitem .tbedit:hover:not(:disabled){border-color:var(--link);color:var(--link);background:var(--card)}
 .tbitem .tbfav.on{color:#e6a700;border-color:#e6a700}
 .tbitem .tbdesc{font-size:12.5px;line-height:1.6;color:var(--muted);overflow-wrap:anywhere}
+/* 工具卡片：按钮（收藏 / 编辑 / 导出 / 发布）单独一行，放在名字和描述下面，名字不再被按钮挤窄 */
+.tbitem>.tbhead:has(>.tbacts){display:contents}
+.tbitem>.tbhead>.tbname{order:0}
+.tbitem>.tbdesc{order:1}
+.tbitem>.tbhead>.tbacts{order:2;flex-wrap:wrap}
+.tbitem>:not(.tbhead,.tbdesc){order:3}
 .tbform{display:flex;flex-direction:column;gap:12px;margin-top:6px;padding-top:12px;border-top:1px solid var(--line)}
 .tbnew .tbform{margin-top:0;padding-top:0;border-top:none}
 .tbf{display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -370,3 +404,53 @@ body.side-collapsed #side,body.side-collapsed #splitter{display:none}
 /* 左侧铺满整个窗口：右侧浏览器和分隔条隐藏（原生浏览器视图跟着 #stage 变成 0 大小） */
 body.browser-collapsed main{grid-template-columns:minmax(0,1fr)}
 body.browser-collapsed #browser,body.browser-collapsed #splitter{display:none}
+
+/* ---------------------------------------------------------------- BrowserX 账号面板 / 工具市场 / 发布 */
+/* 顶部「登录」按钮：登录后显示用户名，名字太长截断 */
+/* 顶部账号入口：不做成按钮，没登录是「人像 + 登录」灰字，登录后是「小头像 + 名字」；悬停变蓝 */
+#btnAccount{flex:none;display:flex;align-items:center;gap:6px;max-width:150px;height:30px;padding:0 4px;border:none;background:transparent;border-radius:6px;
+  color:var(--muted);font-size:13px;font-weight:500}
+#btnAccount:hover:not(:disabled){color:var(--link);border:none;background:transparent}
+#btnAccount svg{flex:none;width:17px;height:17px}
+#btnAccount .acname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#btnAccount .acav{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--link);color:#fff;font-size:11px;font-weight:600}
+#btnAccount.in{color:var(--text)}
+#btnAccount.in:hover:not(:disabled){color:var(--link)}
+/* 账号面板：跟设置一样占满左侧，遮住对话和输入框 */
+#account{flex:1;min-height:0;overflow-y:auto;padding:14px;background:var(--panel)}
+#account[hidden]{display:none}
+#side:has(#account:not([hidden])) #msgs,#side:has(#account:not([hidden])) .composer{display:none}
+#ac_body{display:flex;flex-direction:column;gap:12px}
+.ac_card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.ac_card h3{margin:0;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.5px}
+.ac_card p{margin:0;font-size:13px}
+.ac_card .hint{font-size:12px;line-height:1.6;color:var(--muted)}
+.ac_card .row,.ac_foot{display:flex;flex-wrap:wrap;gap:8px}
+.ac_card .row:empty{display:none}
+.ac_card .tberr{color:var(--err);font-size:12px}
+.ac_who{display:flex;align-items:center;gap:12px;min-width:0}
+.ac_who>div{display:flex;flex-direction:column;min-width:0}
+.ac_who b{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ac_who>div span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ac_avatar{flex:none;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--link);color:#fff;font-weight:600;font-size:17px}
+.ac_badge{display:inline-block;padding:1px 8px;margin-right:6px;border-radius:999px;font-size:12px;background:var(--user);color:var(--muted)}
+.ac_badge.ok{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.ac_foot{justify-content:flex-end}
+/* 账号面板、市场卡片里的按钮：有边框，看得出是按钮（ghost 默认没有边框） */
+.ac_card .row button.ghost,.ac_foot button.ghost,.mkact button.ghost,.tbpub .row button.ghost{height:30px;padding:0 12px;font-size:13px;border:1px solid var(--line-strong);background:var(--card)}
+.ac_card .row button.ghost:hover:not(:disabled),.ac_foot button.ghost:hover:not(:disabled),.mkact button.ghost:hover:not(:disabled),.tbpub .row button.ghost:hover:not(:disabled){border-color:var(--link);color:var(--link);background:var(--card)}
+.ac_card .row button.primary{height:30px;padding:0 14px;font-size:13px}
+.tberr .ac_link{margin-left:6px;font-size:12px;padding:2px 8px}
+
+/* 工具市场列表 */
+.mktop select{flex:0 1 140px;height:32px;padding:0 8px;font-size:13px}
+.mkbody{display:flex;flex-direction:column;gap:10px;min-height:0}
+.mkitem .tbhead{align-items:flex-start}
+.mkprice{flex:none;font-size:12px;font-weight:600;color:var(--ok)}
+.mkprice.paid{color:var(--accent)}
+.mkmeta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted)}
+.mkmeta .mklocal{color:var(--link)}
+.mkact{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
+.mkact button{height:28px;padding:0 12px;font-size:13px}
+.mkitem .tberr{color:var(--err);font-size:12px}
+.tbpub .tbform{display:flex;flex-direction:column;gap:10px}
