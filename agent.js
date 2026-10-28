@@ -77,13 +77,23 @@ const MAKING_PROMPT = (m) => `
 - 需要了解网站接口时，请用户点横幅上的「录制」在右侧浏览器手工操作一遍再点停止（录制结果会自动发给你），或者你自己用 rec_start / rec_stop。
 - 写好或改好后请用户点「试运行」测试（试运行直接调用草稿，不经过你）；结果不对就根据用户反馈继续改草稿。
 - 用户点「完成」时程序会检查草稿能否加载、参数能否注册、有没有成功试运行过，通过后才放进工具箱，并且当前对话里马上能用。不要自己移动或复制草稿文件。
-- **制作记录 ${m.notes}**（Markdown，跟草稿一起放进工具箱）：${m.editing ? '先读一下，里面是以前定下的用户意图和使用步骤；' : ''}过程中有结论就随时更新，不用等到最后。重点是两件事：
-  1. **用户意图**：用户**最终**想解决什么问题、要什么结果和格式、有哪些特别要求或不要做的事。文末「过程记录」是程序自动记下的用户原话、问答选择、试运行结果（每次${m.editing ? '修改' : '制作'}都会接着往下记）——把整个过程读一遍再归纳：用户中途改主意的以最新说法为准，前后矛盾或含糊的先问清楚；用自己的话写成最终版本（覆盖旧的写法，不是一条条往下堆）。工具要按这个最终意图来做；
-  2. **使用步骤**：用户怎么用这个工具——用之前要做什么（比如先在右侧浏览器登录某网站）、每个参数填什么（举例）、运行后会发生什么、结果怎么看、常见失败怎么处理。写给用户看，不写代码细节。
-  另外在「关键点」记下以后改这个工具最需要知道的：入口地址、用到的接口、登录态从哪来、为什么这么做、踩过的坑；每次${m.editing ? '修改' : '制作'}在「变更记录」下加一条（日期 + 改了什么 + 原因）。「过程记录」由程序维护，不要改它。不要写密码、token 这类敏感值。`;
+- **过程记录 ${m.process}**：程序自动记下的整个过程——从这条横幅出现到用户点「完成」，用户的原话、你的回复、你做的每一步操作和结果、问答选择、录制、试运行结果（每次${m.editing ? '修改' : '制作'}都接着往下记）。只读，不要改它。
+- **把整个过程精简成一个工具**：过程里有试探、走错的路、重复的操作、失败后重来，工具里只留最终走通的那条路：
+  - 去掉试探和失败的尝试，合并重复步骤；能直接调接口的就不点页面；
+  - 每次会变的东西（保单号、日期、文字等）做成参数，固定不变的写死在工具里；
+  - 过程中手工判断过的情况（弹窗、未登录、没有数据）写成工具里的判断，不要假设一路顺利。
+  写完草稿前、以及用户说要「完成」之前，把过程记录从头读一遍，确认用户最终要的每一点工具都做到了。
+- **制作记录 ${m.notes}**（Markdown，跟草稿一起放进工具箱，由你维护）：${m.editing ? '先读一下；' : ''}过程中有结论就随时更新。
+  1. **用户意图**：读完过程记录再归纳用户**最终**要什么——中途改主意的以最新说法为准，前后矛盾或含糊的先问清楚；用自己的话写成最终版本（覆盖旧写法，不是往下堆）。工具按这个最终意图来做；
+  2. **使用步骤**：写给用户看——用之前要做什么（比如先在右侧浏览器登录某网站）、每个参数填什么（举例）、运行后会发生什么、结果怎么看、常见失败怎么处理；
+  3. **关键点**：以后改这个工具最需要知道的——入口地址、用到的接口、登录态从哪来、为什么这么做、踩过的坑；
+  4. **变更记录**：每次${m.editing ? '修改' : '制作'}加一条（日期 + 改了什么 + 原因）。
+  不要写密码、token 这类敏感值。`;
 
 // 工具的制作记录：xxx.js 旁边的 xxx.notes.md
 const notesFile = (jsFile) => jsFile.replace(/\.js$/, '.notes.md');
+// 过程记录单独一个文件（xxx.process.md），只由程序追加，模型改制作记录时不会把它覆盖掉
+const processFile = (jsFile) => jsFile.replace(/\.js$/, '.process.md');
 
 // 在 Markdown 的某个「## 标题」小节末尾插一行；没有这个小节就加在文末
 function addUnder(body, heading, line) {
@@ -93,6 +103,16 @@ function addUnder(body, heading, line) {
   const next = body.indexOf('\n## ', i + h.length);
   const end = next < 0 ? body.length : next;
   return `${body.slice(0, end).replace(/\s*$/, '\n')}${line}\n${body.slice(end).replace(/^\n*/, next < 0 ? '' : '\n')}`;
+}
+const clip = (t, n) => { t = String(t).trim(); return t.length > n ? `${t.slice(0, n)}…` : t; };
+
+// 过程记录里一行说清楚助手做了什么操作：工具名 + 关键参数（网址、文字、文件、代码开头）
+function describeCall(name, input = {}) {
+  const short = name.replace(/^mcp__\w+__/, '');
+  const keys = ['url', 'selector', 'text', 'key', 'file_path', 'path', 'pattern', 'command', 'code', 'expression', 'name', 'goal'];
+  const parts = keys.filter((k) => input[k] != null && input[k] !== '').map((k) => `${k}=${clip(typeof input[k] === 'string' ? input[k] : JSON.stringify(input[k]), 120).replace(/\n+/g, ' ')}`);
+  if (input.x != null && input.y != null) parts.push(`(${input.x},${input.y})`);
+  return `${short}${parts.length ? ` ${parts.join('，')}` : ''}`;
 }
 const stampNow = () => new Date().toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 
@@ -205,6 +225,14 @@ class Agent {
       emit: (text) => this.ctx.emit({ type: 'note', text }),
       onChange: (s) => this.ctx.emit({ type: 'rec', ...s }), // 让工具栏的录制按钮跟对话里的 rec_* 工具保持同步
     });
+    for (const k of ['start', 'stop']) {
+      const orig = this.rec[k].bind(this.rec);
+      this.rec[k] = async (...a) => {
+        const r = await orig(...a);
+        this.logMaking(k === 'start' ? '开始录制网络请求（用户在右侧浏览器手工操作）' : `停止录制，录制文件：${r.file}`);
+        return r;
+      };
+    }
     // 自定义工具（loadCustomTools）里 run(args, ctx) 拿到的就是这个对象——跟内置工具共用同一套底层实现
     this.toolCtx = {
       js: (code) => this.js(code),
@@ -799,7 +827,7 @@ class Agent {
 
   makingState() {
     const m = this.making;
-    return m ? { name: m.name, title: m.title, goal: m.goal, editing: m.editing, tested: m.tested, draft: m.draft, notes: m.notes } : null;
+    return m ? { name: m.name, title: m.title, goal: m.goal, editing: m.editing, tested: m.tested, draft: m.draft, notes: m.notes, process: m.process } : null;
   }
 
   emitMaking() {
@@ -832,10 +860,13 @@ class Agent {
     if (source) fs.copyFileSync(source, draft);
     // 制作记录跟草稿同名（<name>.notes.md）：修改时带上以前的记录，完成时一起放进工具箱，放弃时一起删掉
     const notes = notesFile(draft);
+    const proc = processFile(draft);
+    if (source && fs.existsSync(processFile(source))) fs.copyFileSync(processFile(source), proc);
+    else if (!fs.existsSync(proc)) fs.writeFileSync(proc, `# ${title || name}（${name}）过程记录\n\n程序自动记录：从「正在${source ? '修改' : '制作'}工具」横幅出现到点「完成」的全过程。\n`);
     if (source && fs.existsSync(notesFile(source))) fs.copyFileSync(notesFile(source), notes);
-    else if (!fs.existsSync(notes)) fs.writeFileSync(notes, `# ${title || name}（${name}）制作记录\n\n## 用户意图\n\n${source ? desc || '（以前没有记录）' : goal}\n\n## 使用步骤\n\n## 关键点\n\n## 变更记录\n\n## 过程记录\n`);
+    else if (!fs.existsSync(notes)) fs.writeFileSync(notes, `# ${title || name}（${name}）制作记录\n\n## 用户意图\n\n${source ? desc || '（以前没有记录）' : goal}\n\n## 使用步骤\n\n## 关键点\n\n## 变更记录\n`);
     title = String(title || '').trim().slice(0, 40);
-    this.making = { name, title, goal, draft, notes, source, editing: !!source, tested: false };
+    this.making = { name, title, goal, draft, notes, process: proc, source, editing: !!source, tested: false };
     this.logMaking(`开始${source ? '修改' : '制作'}：${source ? (goal.startsWith('修改现有工具（') ? '（还没说要改什么）' : goal) : goal}`);
     if (keepChat) {
       this.emitMaking();
@@ -913,15 +944,17 @@ class Agent {
     return this.describeTool(this.draftDef(), this.making.draft);
   }
 
-  // 制作 / 修改期间把过程记进制作记录的「过程记录」：用户原话、问答选择、试运行结果。程序来记，不靠模型自觉
+  // 制作 / 修改期间（横幅出现到点「完成」）把整个过程记进 <name>.process.md：用户原话、助手回复和操作、问答、录制、试运行。程序来记，不靠模型自觉
   logMaking(text) {
     const m = this.making;
-    if (!m?.notes) return;
+    if (!m?.process) return;
     try {
-      const body = fs.existsSync(m.notes) ? fs.readFileSync(m.notes, 'utf8') : '';
       const t = String(text).trim();
-      const line = `- ${stampNow()} ${(t.length > 800 ? `${t.slice(0, 800)}…` : t).replace(/\n+/g, '\n  ')}`;
-      fs.writeFileSync(m.notes, addUnder(body, '过程记录', line));
+      if (!m.logged) { // 每次制作 / 修改单独一段
+        m.logged = true;
+        fs.appendFileSync(m.process, `\n## ${new Date().toLocaleString('zh-CN', { hour12: false })} ${m.editing ? '修改' : '制作'}\n\n`);
+      }
+      fs.appendFileSync(m.process, `- ${stampNow()} ${(t.length > 800 ? `${t.slice(0, 800)}…` : t).replace(/\n+/g, '\n  ')}\n`);
     } catch { /* 记录写不了不影响制作 */ }
   }
 
@@ -963,9 +996,11 @@ class Agent {
       const done = `${m.editing ? '修改' : '制作'}完成${m.tested ? '（已试运行）' : '（未试运行）'}`;
       let body = fs.existsSync(m.notes) ? fs.readFileSync(m.notes, 'utf8') : `# ${def.title || m.name}（${m.name}）制作记录\n`;
       body = addUnder(body, '变更记录', `- ${new Date().toLocaleString('zh-CN', { hour12: false })} ${done}`);
-      body = addUnder(body, '过程记录', `- ${stampNow()} ${done}`);
       fs.writeFileSync(notesFile(target), body);
       fs.rmSync(m.notes, { force: true });
+      this.logMaking(done);
+      fs.copyFileSync(m.process, processFile(target));
+      fs.rmSync(m.process, { force: true });
     } catch { /* 记录写不了不影响工具本身 */ }
     this.making = null;
     this.emitMaking();
@@ -1044,6 +1079,7 @@ class Agent {
     if (!m) return;
     try { fs.unlinkSync(m.draft); } catch { /* 草稿可能还没写出来 */ }
     try { fs.unlinkSync(m.notes); } catch {}
+    try { fs.unlinkSync(m.process); } catch {}
     this.making = null;
     this.emitMaking();
     this.ctx.emit({ type: 'note', text: `— 已放弃${m.editing ? '修改' : '制作'}工具 ${m.title ? `${m.title}（${m.name}）` : m.name}${m.editing ? '，原工具没有改动' : ''} —` });
@@ -1124,13 +1160,16 @@ class Agent {
           this.ctx.emit({ type: 'init', model: m.model, cwd: m.cwd, skills: m.skills || [] });
         } else if (m.type === 'assistant') {
           for (const b of m.message.content) {
-            if (b.type === 'text' && b.text.trim()) this.ctx.emit({ type: 'text', text: b.text });
-            else if (b.type === 'tool_use') this.ctx.emit({ type: 'tool', id: b.id, name: b.name, input: b.input });
+            if (b.type === 'text' && b.text.trim()) { this.ctx.emit({ type: 'text', text: b.text }); this.logMaking(`助手：${clip(b.text, 600)}`); }
+            else if (b.type === 'tool_use') { this.ctx.emit({ type: 'tool', id: b.id, name: b.name, input: b.input }); this.logMaking(`操作：${describeCall(b.name, b.input)}`); }
           }
           if (m.error) this.ctx.emit({ type: 'error', text: `请求出错：${m.error}` });
         } else if (m.type === 'user' && Array.isArray(m.message.content)) {
           for (const b of m.message.content) {
-            if (b.type === 'tool_result') this.ctx.emit({ type: 'tool_result', id: b.tool_use_id, error: !!b.is_error, text: resultText(b.content).slice(0, 3000) });
+            if (b.type !== 'tool_result') continue;
+            const text = resultText(b.content);
+            this.ctx.emit({ type: 'tool_result', id: b.tool_use_id, error: !!b.is_error, text: text.slice(0, 3000) });
+            if (text.trim()) this.logMaking(`${b.is_error ? '操作失败' : '结果'}：${clip(text, b.is_error ? 300 : 160)}`);
           }
         } else if (m.type === 'result') {
           this.running = false;
