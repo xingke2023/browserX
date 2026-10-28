@@ -77,6 +77,7 @@ function createWindow() {
   });
   win.loadFile('index.html');
   win.on('closed', () => app.quit());
+  for (const ev of ['enter-full-screen', 'leave-full-screen']) win.on(ev, () => send('fullscreen', win.isFullScreen()));
 
   view = new WebContentsView({ webPreferences: { partition: 'persist:browser' } }); // 记住登录状态
   win.contentView.addChildView(view);
@@ -228,6 +229,7 @@ handle('nav:forward', () => view.webContents.navigationHistory.goForward());
 handle('nav:reload', () => view.webContents.reload());
 handle('nav:stop', () => view.webContents.stop());
 handle('nav:devtools', () => view.webContents.toggleDevTools());
+handle('win:fullscreen', () => win.setFullScreen(!win.isFullScreen()));
 
 handle('cfg:get', () => cfg);
 handle('cfg:set', (c) => {

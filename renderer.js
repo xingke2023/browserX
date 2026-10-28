@@ -850,6 +850,15 @@ $('navBack').addEventListener('click', () => call('nav:back'));
 $('navForward').addEventListener('click', () => call('nav:forward'));
 $('navReload').addEventListener('click', () => call($('navReload').classList.contains('loading') ? 'nav:stop' : 'nav:reload'));
 $('navDevtools').addEventListener('click', () => call('nav:devtools'));
+// 全屏：按钮切换窗口全屏；系统菜单或绿色按钮进出全屏时也同步图标
+const FULL_ICON = { off: 'M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10', on: 'M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5' };
+function renderFull(on) {
+  $('winFull').querySelector('path').setAttribute('d', on ? FULL_ICON.on : FULL_ICON.off);
+  const label = on ? '退出全屏' : '全屏';
+  $('winFull').title = label; $('winFull').setAttribute('aria-label', label);
+}
+$('winFull').addEventListener('click', () => call('win:fullscreen'));
+api.on('fullscreen', renderFull);
 
 // 左上角 logo / 标题：在右侧浏览器打开门户网站
 const PORTAL = 'https://www.xingke888.com';
