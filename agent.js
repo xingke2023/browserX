@@ -74,7 +74,7 @@ const MAKING_PROMPT = (m) => `
 - 工具名：${m.name}${m.title ? `（中文名 title: '${m.title}'）` : '（请再起一个简短的中文名写进 title）'}
 - 要做什么：${m.goal}
 - **代码只写到草稿文件 ${m.draft}**${m.editing ? '（已复制了现有版本）' : ''}，文件里的 name 必须是 '${m.name}'。不要直接写进工具箱目录：草稿不会出现在工具箱里，也不会被正式加载。写法同上面「工具箱」一节。
-- 需要了解网站接口时，请用户点横幅上的「录制」在右侧浏览器手工操作一遍再点停止（录制结果会自动发给你），或者你自己用 rec_start / rec_stop。
+- **横幅出现时程序已经自动开始录制右侧浏览器的网络请求**（你的操作、用户的手工操作、试运行都会录进去），一直录到「完成」/「放弃」。需要看接口时直接调 rec_stop 拿到清单和录制文件，看完马上 rec_start 接着录；也可以请用户在右侧浏览器手工操作一遍再点横幅上的「停止录制」（结果会自动发给你）。
 - 写好或改好后请用户点「试运行」测试（试运行直接调用草稿，不经过你）；结果不对就根据用户反馈继续改草稿。
 - 用户点「完成」时程序会检查草稿能否加载、参数能否注册、有没有成功试运行过，通过后才放进工具箱，并且当前对话里马上能用。不要自己移动或复制草稿文件。
 - **过程记录 ${m.process}**：程序自动记下的整个过程——从这条横幅出现到用户点「完成」，用户的原话、你的回复、你做的每一步操作和结果、问答选择、录制、试运行结果（每次${m.editing ? '修改' : '制作'}都接着往下记）。只读，不要改它。
@@ -229,7 +229,7 @@ class Agent {
       const orig = this.rec[k].bind(this.rec);
       this.rec[k] = async (...a) => {
         const r = await orig(...a);
-        this.logMaking(k === 'start' ? '开始录制网络请求（用户在右侧浏览器手工操作）' : `停止录制，录制文件：${r.file}`);
+        this.logMaking(k === 'start' ? '开始录制右侧浏览器的网络请求' : `停止录制，录制文件：${r.file}`);
         return r;
       };
     }
@@ -868,6 +868,11 @@ class Agent {
     title = String(title || '').trim().slice(0, 40);
     this.making = { name, title, goal, draft, notes, process: proc, source, editing: !!source, tested: false };
     this.logMaking(`开始${source ? '修改' : '制作'}：${source ? (goal.startsWith('修改现有工具（') ? '（还没说要改什么）' : goal) : goal}`);
+    // 横幅一出现就自动录制右侧浏览器的网络请求，直到「完成」/「放弃」；已经在录（比如用户先点了录制）就沿用
+    if (!this.rec.active) {
+      try { await this.rec.start({ label: `${source ? '修改' : '制作'}工具 ${name}` }); this.making.autoRec = true; }
+      catch (e) { this.ctx.emit({ type: 'note', text: `自动录制没有开始：${e.message}` }); }
+    }
     if (keepChat) {
       this.emitMaking();
       return `${MAKING_PROMPT(this.making)}${resumed ? `\n草稿里有上次没做完的版本，先读一下再接着做。` : ''}`;
@@ -958,6 +963,12 @@ class Agent {
     } catch { /* 记录写不了不影响制作 */ }
   }
 
+  // 「完成」/「放弃」时停掉录制（不管是自动开的还是用户点的），录制文件记进过程记录
+  async stopMakingRec() {
+    if (!this.rec.active) return;
+    try { await this.rec.stop(); } catch (e) { this.logMaking(`停止录制失败：${e.message}`); }
+  }
+
   // 界面上用户发的消息（区别于程序内部发给模型的说明）
   userSend(text) {
     if (text?.trim()) this.logMaking(`用户：${text}`);
@@ -988,6 +999,7 @@ class Agent {
     if (!m.source && (clash || fs.existsSync(target)) && !overwrite) {
       return { confirm: `工具箱里已经有 ${clash ? `同名工具（${path.basename(clash.file)}）` : `文件 ${path.basename(target)}`}，要覆盖吗？`, need: 'overwrite' };
     }
+    await this.stopMakingRec();
     if (clash && clash.file !== target) fs.unlinkSync(clash.file);
     fs.copyFileSync(m.draft, target);
     fs.unlinkSync(m.draft);
@@ -1074,9 +1086,10 @@ class Agent {
     return { name: imp.name };
   }
 
-  cancelMaking() {
+  async cancelMaking() {
     const m = this.making;
     if (!m) return;
+    await this.stopMakingRec();
     try { fs.unlinkSync(m.draft); } catch { /* 草稿可能还没写出来 */ }
     try { fs.unlinkSync(m.notes); } catch {}
     try { fs.unlinkSync(m.process); } catch {}
