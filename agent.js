@@ -76,7 +76,14 @@ const MAKING_PROMPT = (m) => `
 - **代码只写到草稿文件 ${m.draft}**${m.editing ? '（已复制了现有版本）' : ''}，文件里的 name 必须是 '${m.name}'。不要直接写进工具箱目录：草稿不会出现在工具箱里，也不会被正式加载。写法同上面「工具箱」一节。
 - 需要了解网站接口时，请用户点横幅上的「录制」在右侧浏览器手工操作一遍再点停止（录制结果会自动发给你），或者你自己用 rec_start / rec_stop。
 - 写好或改好后请用户点「试运行」测试（试运行直接调用草稿，不经过你）；结果不对就根据用户反馈继续改草稿。
-- 用户点「完成」时程序会检查草稿能否加载、参数能否注册、有没有成功试运行过，通过后才放进工具箱，并且当前对话里马上能用。不要自己移动或复制草稿文件。`;
+- 用户点「完成」时程序会检查草稿能否加载、参数能否注册、有没有成功试运行过，通过后才放进工具箱，并且当前对话里马上能用。不要自己移动或复制草稿文件。
+- **制作记录 ${m.notes}**（Markdown，跟草稿一起放进工具箱）：${m.editing ? '先读一下，里面是以前定下的用户意图和使用步骤；' : ''}过程中有结论就随时更新，不用等到最后。重点是两件事：
+  1. **用户意图**：用户真正想解决什么问题、要什么结果和格式、有哪些特别要求或不要做的事。用户说得含糊时先问清楚再写，用自己的话复述，不是照抄原话；${m.editing ? '这次修改的诉求也补进去，跟原来的意图冲突时问用户以哪个为准；' : ''}
+  2. **使用步骤**：用户怎么用这个工具——用之前要做什么（比如先在右侧浏览器登录某网站）、每个参数填什么（举例）、运行后会发生什么、结果怎么看、常见失败怎么处理。写给用户看，不写代码细节。
+  另外在「关键点」记下以后改这个工具最需要知道的：入口地址、用到的接口、登录态从哪来、为什么这么做、踩过的坑；每次${m.editing ? '修改' : '制作'}在文末「变更记录」下加一条（日期 + 改了什么 + 原因）。不要写密码、token 这类敏感值。`;
+
+// 工具的制作记录：xxx.js 旁边的 xxx.notes.md
+const notesFile = (jsFile) => jsFile.replace(/\.js$/, '.notes.md');
 
 // 导出前查代码里有没有写死的密码 / token / 内网地址，免得把自己的账号一起发出去
 function scanSecrets(code) {
@@ -780,7 +787,7 @@ class Agent {
 
   makingState() {
     const m = this.making;
-    return m ? { name: m.name, title: m.title, goal: m.goal, editing: m.editing, tested: m.tested, draft: m.draft } : null;
+    return m ? { name: m.name, title: m.title, goal: m.goal, editing: m.editing, tested: m.tested, draft: m.draft, notes: m.notes } : null;
   }
 
   emitMaking() {
@@ -792,11 +799,12 @@ class Agent {
   async startMaking({ name, title, goal, edit, keepChat = false } = {}) {
     if (this.making) throw new Error(`正在制作工具 ${this.making.name}，先点「完成」或「放弃」`);
     goal = String(goal || '').trim();
-    let source = null;
+    let source = null, desc = '';
     if (edit) {
       const entry = this.readCustomToolDefs().find((e) => e.def.name === edit);
       if (!entry) throw new Error(`没有名为 "${edit}" 的工具`);
       source = entry.file;
+      desc = entry.def.description || '';
       name = edit;
       title = title || entry.def.title;
       goal = goal || `修改现有工具（${entry.def.description || '无描述'}），具体改什么问用户`;
@@ -810,8 +818,12 @@ class Agent {
     const draft = path.join(this.draftsDir(), `${name}.js`);
     const resumed = !source && fs.existsSync(draft); // 同名草稿是上次没做完的，留着接着改
     if (source) fs.copyFileSync(source, draft);
+    // 制作记录跟草稿同名（<name>.notes.md）：修改时带上以前的记录，完成时一起放进工具箱，放弃时一起删掉
+    const notes = notesFile(draft);
+    if (source && fs.existsSync(notesFile(source))) fs.copyFileSync(notesFile(source), notes);
+    else if (!fs.existsSync(notes)) fs.writeFileSync(notes, `# ${title || name}（${name}）制作记录\n\n## 用户意图\n\n${source ? desc || '（以前没有记录）' : goal}\n\n## 使用步骤\n\n## 关键点\n\n## 变更记录\n`);
     title = String(title || '').trim().slice(0, 40);
-    this.making = { name, title, goal, draft, source, editing: !!source, tested: false };
+    this.making = { name, title, goal, draft, notes, source, editing: !!source, tested: false };
     if (keepChat) {
       this.emitMaking();
       return `${MAKING_PROMPT(this.making)}${resumed ? `\n草稿里有上次没做完的版本，先读一下再接着做。` : ''}`;
@@ -819,7 +831,7 @@ class Agent {
     if (this.q) this.reset(); // 每个工具单独一个对话，上下文干净
     this.emitMaking();
     await this.send(source
-      ? `我要修改工具 ${name}。${goal}\n现有代码已复制到草稿 ${draft}，先读一下。`
+      ? `我要修改工具 ${name}。${goal}\n现有代码已复制到草稿 ${draft}，以前的制作记录在 ${notes}，先读一下这两个文件。`
       : `我要新建一个工具 ${name}${title ? `（中文名「${title}」）` : ''}：${goal}\n${resumed ? `草稿 ${draft} 里有上次没做完的版本，先读一下再接着做。\n` : ''}请先说说你打算怎么做、需要我提供什么（比如要不要先录制一遍操作）。`);
     return null;
   }
@@ -911,6 +923,13 @@ class Agent {
     if (clash && clash.file !== target) fs.unlinkSync(clash.file);
     fs.copyFileSync(m.draft, target);
     fs.unlinkSync(m.draft);
+    // 不管模型有没有写记录，至少留一行：什么时候、制作还是修改、有没有试运行过
+    try {
+      const stamp = new Date().toLocaleString('zh-CN', { hour12: false });
+      const body = fs.existsSync(m.notes) ? fs.readFileSync(m.notes, 'utf8').replace(/\s*$/, '\n') : `# ${def.title || m.name}（${m.name}）制作记录\n\n## 变更记录\n`;
+      fs.writeFileSync(notesFile(target), `${body}- ${stamp} ${m.editing ? '修改' : '制作'}完成${m.tested ? '（已试运行）' : '（未试运行）'}\n`);
+      fs.rmSync(m.notes, { force: true });
+    } catch { /* 记录写不了不影响工具本身 */ }
     this.making = null;
     this.emitMaking();
     const live = await this.reloadCustomTools();
@@ -987,6 +1006,7 @@ class Agent {
     const m = this.making;
     if (!m) return;
     try { fs.unlinkSync(m.draft); } catch { /* 草稿可能还没写出来 */ }
+    try { fs.unlinkSync(m.notes); } catch {}
     this.making = null;
     this.emitMaking();
     this.ctx.emit({ type: 'note', text: `— 已放弃${m.editing ? '修改' : '制作'}工具 ${m.title ? `${m.title}（${m.name}）` : m.name}${m.editing ? '，原工具没有改动' : ''} —` });
