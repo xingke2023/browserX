@@ -495,6 +495,7 @@ function drawToolCards() {
     // 点开一个工具只显示它自己（其它工具、搜索栏、分页栏藏起来），再点一次卡片或「全部工具」回到原来那一页
     d.addEventListener('click', (e) => {
       if (e.target.closest('button, .tbform')) return;
+      if (t.launch) { launchTool(t); return; } // 自带界面的工具：点一下直接运行，不显示参数表单
       if (d.querySelector('.tbform')) { showAllTools(); return; }
       for (const x of box.querySelectorAll('.tbitem')) x.hidden = x !== d;
       if (tbPager.pager) tbPager.pager.hidden = true;
@@ -509,6 +510,22 @@ function drawToolCards() {
     box.appendChild(d);
   }
   tbPager = makePager(box, '.tbitem', 5, tbState); // 描述是多行完整显示的，每页放少一点
+}
+
+// launch 工具：不填参数直接运行（工具自己会打开界面，比如填表视窗）
+async function launchTool(t) {
+  if (tbRunning) return;
+  tbRunning = true;
+  $('toolbox').hidden = true;
+  const label = t.title ? `${t.title}（${t.name}）` : t.name;
+  add('note', `— 打开工具 ${esc(label)} —`, true);
+  try {
+    add('msg ai', md(String(await call('tools:run', t.name, {}))), true);
+  } catch (e) {
+    add('note err', `✗ ${esc(e.message)}`, true);
+  } finally {
+    tbRunning = false;
+  }
 }
 
 function showAllTools() {
