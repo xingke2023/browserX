@@ -1,16 +1,16 @@
 :root{
-  --bg:#f5f4ef;--panel:#fbfaf7;--card:#fff;--line:#e2dfd6;--line-strong:#cfcabd;
+  --bg:#f5f4ef;--panel:#fbfaf7;--card:#fff;--line:#e2dfd6;--line-strong:#cfcabd;--splitter:#b5afa2;
   --text:#2b2a26;--muted:#77736a;--accent:#c96442;--link:#2563eb;--red:#d93025;--btn-hi:rgba(255,255,255,.9);--btn-lo:#ecebe6;--btn-shadow:rgba(40,30,10,.14);--accent-weak:#f6e9e3;--accent-text:#fff;
   --user:#ece9e1;--code:#f1efe8;--ok:#4f8a5b;--err:#b5473a;--warn:#a86b12;--warn-weak:#fbf1de;
   --side:440px;color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#1f1e1c;--panel:#262523;--card:#2e2d2a;--line:#3a3935;--line-strong:#4b4944;
+  --bg:#1f1e1c;--panel:#262523;--card:#2e2d2a;--line:#3a3935;--line-strong:#4b4944;--splitter:#5c5a54;
   --text:#ecebe6;--muted:#a19d93;--accent:#d97757;--link:#6ea8fe;--red:#ff6b6b;--btn-hi:rgba(255,255,255,.1);--btn-lo:#24231f;--btn-shadow:rgba(0,0,0,.45);--accent-weak:#3d2c25;--accent-text:#fff;
   --user:#383631;--code:#1b1a18;--ok:#7fb48a;--err:#e07a6c;--warn:#e0a54a;--warn-weak:#3a3020;color-scheme:dark;
 }}
 :root[data-theme="dark"]{
-  --bg:#1f1e1c;--panel:#262523;--card:#2e2d2a;--line:#3a3935;--line-strong:#4b4944;
+  --bg:#1f1e1c;--panel:#262523;--card:#2e2d2a;--line:#3a3935;--line-strong:#4b4944;--splitter:#5c5a54;
   --text:#ecebe6;--muted:#a19d93;--accent:#d97757;--link:#6ea8fe;--red:#ff6b6b;--btn-hi:rgba(255,255,255,.1);--btn-lo:#24231f;--btn-shadow:rgba(0,0,0,.45);--accent-weak:#3d2c25;--accent-text:#fff;
   --user:#383631;--code:#1b1a18;--ok:#7fb48a;--err:#e07a6c;--warn:#e0a54a;--warn-weak:#3a3020;color-scheme:dark;
 }
@@ -31,7 +31,7 @@ svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke
 input,textarea,select{background:var(--card);border:1px solid var(--line-strong);border-radius:8px;padding:7px 10px;width:100%}
 .muted{color:var(--muted);font-size:12px}
 
-main{height:100vh;display:grid;grid-template-columns:var(--side) 5px minmax(0,1fr)}
+main{height:100vh;display:grid;grid-template-columns:var(--side) 1px minmax(0,1fr)}
 body.dragging{cursor:col-resize;user-select:none}
 
 /* ---------------------------------------------------------------- 左侧 */
@@ -216,7 +216,9 @@ body.running #status{flex:1}
 #btnStop:hover:not(:disabled){border-color:var(--err);color:var(--err);background:transparent}
 body.running #status::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle;animation:pulse 1s infinite}
 
-#splitter{cursor:col-resize;background:var(--line);transition:background .15s}
+/* 分隔线只有 1px；拖动区域向左多出 5px（右边是原生浏览器视图，收不到鼠标事件） */
+#splitter{position:relative;z-index:2;cursor:col-resize;background:var(--splitter);transition:background .15s}
+#splitter::before{content:'';position:absolute;top:0;bottom:0;left:-5px;width:6px;cursor:col-resize}
 #splitter:hover,body.dragging #splitter{background:var(--accent)}
 
 /* ---------------------------------------------------------------- 右侧浏览器 */
@@ -237,7 +239,7 @@ body.running #status::before{content:'';display:inline-block;width:6px;height:6p
 #navError p{margin:0;max-width:520px;font-size:13px;line-height:1.6;overflow-wrap:anywhere}
 #navError .row{display:flex;gap:6px;margin-top:8px}
 
-@media (max-width:900px){main{grid-template-columns:340px 5px minmax(0,1fr)}}
+@media (max-width:900px){main{grid-template-columns:340px 1px minmax(0,1fr)}}
 
 #tb_list{display:flex;flex-direction:column;gap:10px}
 .tbtop{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
