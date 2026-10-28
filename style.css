@@ -245,6 +245,12 @@ body.running #status::before{content:'';display:inline-block;width:6px;height:6p
 .tbtop{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .tbtop .tbsearch{flex:1 1 140px;min-width:0;height:32px;padding:0 10px;font-size:13px;box-sizing:border-box}
 .tbcards{display:flex;flex-direction:column;gap:10px}
+/* 工具列表固定在工具箱的高度里：卡片区自己滚动，分页栏贴在底部，不用往下拉也能看到「下一页」 */
+#toolbox:not([hidden]){overflow:hidden}
+#tb_list{flex:1;min-height:0;overflow-y:auto}
+#tb_list:has(> .tbcards){overflow:hidden}
+.tbcards{flex:1;min-height:0;overflow-y:auto;padding:2px}
+.tbcards>.pager{position:sticky;bottom:-2px;margin-top:auto;padding:8px 0 4px;background:var(--panel);border-top:1px solid var(--line)}
 .tbitem mark{background:color-mix(in srgb,var(--link) 22%,transparent);color:inherit;border-radius:3px;padding:0 1px}
 .tbtop button{height:32px;padding:0 14px;font-size:13px}
 .tbback{align-self:flex-start;height:30px;padding:0 10px;font-size:13px}
