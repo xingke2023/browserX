@@ -232,7 +232,7 @@ class Agent {
         const r = await orig(...a);
         this.logMaking(k === 'start' ? '开始录制右侧浏览器的网络请求' : `停止录制，录制文件：${r.file}`);
         // 录制一开就明确告诉用户：可以动手了，做完点哪里停
-        if (k === 'start') this.ctx.emit({ type: 'note', text: `● 已经打开录制，可以开始在右侧页面操作了。做完点${this.making ? '横幅上' : '浏览器工具栏上'}的「停止录制」。` });
+        if (k === 'start') this.ctx.emit({ type: 'note', text: `● 已经打开录制，可以开始在右侧页面操作了。做完点${this.making ? '横幅上的「停止录制」' : '浏览器工具栏右边的「停止」'}。` });
         return r;
       };
     }
