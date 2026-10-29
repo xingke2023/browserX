@@ -57,7 +57,11 @@ const TOOLBOX_PROMPT = (dir) => `
     params: { title: z.string(), text: z.string() },
     async run(args, ctx) { return '发布成功'; },
   });
-  工具有自己的填表网页时可以加 form: async (ctx) => 'http://127.0.0.1:端口/…'（本机起个小服务），工具箱里点开就显示这个网页代替参数表单，网页上点按钮才执行；工具自己带界面（比如 run 里打开一个视窗）时可以加 launch: true，工具箱里点一下就直接运行、不显示参数表单（参数照样可以在对话里传）。name 只能是字母/数字/下划线（它是调用接口用的名字，不能用中文），不能跟内置工具重名；title 是给用户看的中文名（简短，比如「保单查询」），工具箱里显示的就是它，一定要写；params 是 zod schema，复杂结构用 JSON 字符串参数，别用 z.record 或嵌套 object（新版运行时会导致整组工具注册失败，参考 wx_fill 的 images 参数）；run 返回字符串即可（也可以返回 {content:[...]}），失败直接 throw。
+  **工具箱里的表单统一标准**（用户定的，所有工具都照这个做）：工具箱里点开工具显示的是 BrowserX 的标准表单——紧凑排版、每个字段宽度跟着内容（下拉按最长选项、数字按位数）、一行能放几个放几个、表单常驻（切走再回来内容还在）、可以收起、运行结果出现在下面的对话区。
+  - 字段简单、互不影响：只写 params 就行，表单按 params 自动生成。每个参数的 .describe() 第一小段（第一个冒号 / 逗号 / 括号之前）就是表单上的标题，所以要写成「短标题：详细说明」的样子，比如 z.string().describe('保单号：AES 系统里的 8 位数字')；完整说明会变成鼠标悬停提示。
+  - 有联动逻辑（选了 A 才有 B、选项跟着别的字段变、默认值要算、要读网站上的设定）：写 formSpec: async (values, ctx) => ({ fields: [...], submit: '查询' })，任意 JS 逻辑。字段 { key, label, kind, options:[{value,label}], value, refresh, required, full, width, title, min, max, step, text, tone }；kind 可以是 enum（下拉）/ chips（选项少时的单选胶囊按钮）/ number / string / text（多行）/ boolean / note（一句说明）/ section（分区小标题）/ hidden（不显示，在两次 formSpec 之间记状态）。refresh:true 的字段一改，就带着全部当前值重新调 formSpec 重画（refresh:'input' 是边打字边算）。提交时 run({...值, _form: true}, ctx)，run 里看到 _form 就按表单的值处理。参考 manulife_plan.js。
+  - 写法要求：标题尽量 2–4 个字（「性别」「投保年龄」「起始年度」），不要括号说明；说明放 title（悬停提示）或 placeholder，不要用会把字段撑宽的长 hint；只有长内容（产品名、多行文字）才 full 占整行；分区小标题和说明文字能省就省，说明最多一行；相关的字段挨着放（比如「提取方式」后面紧跟「每年提取」），输出类选项（比如「列出全部年度」）跟主要字段放一起，别混进别的分区；选项少（≤6 个）且常切换的用 chips。
+  工具有自己的填表网页时可以加 form: async (ctx) => 'http://127.0.0.1:端口/…'（本机起个小服务），工具箱里点开就显示这个网页代替参数表单，网页上点按钮才执行——但优先用上面的标准表单（结果进对话、助手看得到），只有标准表单实在做不到的界面（图表、可交互的大表格）才用网页；工具自己带界面（比如 run 里打开一个视窗）时可以加 launch: true，工具箱里点一下就直接运行、不显示参数表单（参数照样可以在对话里传）。name 只能是字母/数字/下划线（它是调用接口用的名字，不能用中文），不能跟内置工具重名；title 是给用户看的中文名（简短，比如「保单查询」），工具箱里显示的就是它，一定要写；params 是 zod schema，复杂结构用 JSON 字符串参数，别用 z.record 或嵌套 object（新版运行时会导致整组工具注册失败，参考 wx_fill 的 images 参数）；run 返回字符串即可（也可以返回 {content:[...]}），失败直接 throw。
 - run(args, ctx) 里能用：ctx.js(code)（在页面里跑 JS）、ctx.screenshot()、ctx.pageInfo()、ctx.click({x,y}或{selector,text})、ctx.type(text)、ctx.press(key, modifiers)、ctx.scroll(dy,x,y)、ctx.navigate(url)、ctx.sleep(ms)、ctx.waitFor(fn, timeoutMs, step)（轮询直到 fn() 为真，别用固定 sleep 赌时机）、ctx.guard(what, text)（危险操作二次确认，跟内置工具一致）、ctx.log(text)（往界面发一条进度提示）、ctx.ask(prompt, {system, model})（让模型写一段文字，不带工具，返回纯文本；工具里需要「模型来写」的内容用它）、ctx.wc（原始 webContents，进阶用）、ctx.wx（已有的浏览器辅助方法，hover/rect/clickWhenVisible 等，不限于公众号场景）。
 - 真实网站的流程通常有条件分支（弹窗不一定出现、生成的元素数量不固定、按钮位置会变、有些步骤要重试）——照实际情况写判断和重试，别假设一路顺利，参考 wechat.js 里 WeChat.fill() 的写法。
 - **自定义工具调用失败时该怎么办**：失败的工具结果里会带上源文件路径。不要只是把报错转述给用户就结束：
@@ -798,6 +802,7 @@ class Agent {
       description: def.description || '',
       launch: !!def.launch, // 工具箱里点一下就直接运行（不显示参数表单），适合自己会打开界面的工具
       hasForm: typeof def.form === 'function', // 工具自带填表页面：工具箱里点开显示它，代替自动生成的参数表单
+      dynamic: typeof def.formSpec === 'function', // 动态表单：字段由工具的 formSpec(当前值, ctx) 算出来（见 toolFormSpec）
       file,
       params: Object.entries(def.params || {}).map(([key, schema]) => {
         let s = schema, required = true;
@@ -836,6 +841,21 @@ class Agent {
     const entry = this.readCustomToolDefs().find((e) => e.def.name === name);
     if (!entry) throw new Error(`没有名为 "${name}" 的工具`);
     return [...new Set([entry.file, notesFile(entry.file), processFile(entry.file)])].filter((f) => fs.existsSync(f));
+  }
+
+  // 动态表单（工具箱里的「自身表单」升级版）：工具写 formSpec(values, ctx)，返回 { fields, submit } 或 fields 数组，
+  // 描述「按现在填的值，表单这一刻该长什么样」。字段：{ key, label, kind, options:[{value,label}], value, refresh, hint,
+  // placeholder, required, full（占整行）, width（输入框宽几个字，默认跟着内容）, title（鼠标悬停提示）, min, max, step, text, tone }；kind = enum / chips（单选胶囊按钮）/ number / string / text / boolean / note / section / hidden。
+  // refresh:true 的字段一改，界面就带着全部当前值再调一次 formSpec 重画——选项依赖、显示隐藏、联动默认值、读网络数据都写在工具里。
+  // 提交时 run(值 + { _form: true }, ctx)
+  async toolFormSpec(name, values = {}) {
+    const entry = this.readCustomToolDefs().find((e) => e.def.name === name);
+    if (!entry) throw new Error(`没有名为 "${name}" 的工具`);
+    if (typeof entry.def.formSpec !== 'function') throw new Error(`${name} 没有动态表单`);
+    const r = await entry.def.formSpec(values || {}, this.toolCtx);
+    const fields = Array.isArray(r) ? r : r?.fields;
+    if (!Array.isArray(fields)) throw new Error(`${name} 的 formSpec 没有返回字段列表`);
+    return { fields, submit: (!Array.isArray(r) && r?.submit) || '运行' };
   }
 
   async runCustomTool(name, args) {

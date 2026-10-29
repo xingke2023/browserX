@@ -50,7 +50,20 @@ function tabOf(id) {
   el.hidden = true;
   el.setAttribute('aria-live', 'polite');
   SIDE_COMPOSER.before(el);
-  t = { id, el, toolEls: new Map(), permEls: new Map(), qEls: new Map(), textEl: null, skills: null, running: false, making: null, attn: false, chatTitle: '', pageTitle: '', url: '', tbRunning: false };
+  // 每个标签自己的工具箱内容区（跟消息区一样：当前标签的拿 id="tb_list"，其它的藏起来但不销毁，
+  // 所以工具自带的填表页面（iframe）切走再切回来还在，填到一半的内容、正在跑的状态都不丢）
+  const tb = document.createElement('div');
+  tb.className = 'hlist';
+  tb.hidden = true;
+  $('toolbox').appendChild(tb);
+  // 自带填表页面的工具（宏利计划书这类）：页面放在 pages 里一直活着，回到工具列表只是藏起来；
+  // 再点那个工具就回到原来的页面（填到一半的内容、正在跑的状态都在）。pageOpen = 正在看的工具名，null = 看列表
+  const pages = document.createElement('div');
+  pages.className = 'tbpages';
+  pages.hidden = true;
+  $('toolbox').appendChild(pages);
+  // panel：切走时左侧开着的面板（toolbox / history / account），切回来恢复
+  t = { id, el, tb, pages, pageOpen: null, panel: null, toolEls: new Map(), permEls: new Map(), qEls: new Map(), textEl: null, skills: null, running: false, making: null, attn: false, chatTitle: '', pageTitle: '', url: '', tbRunning: false };
   tabState.set(id, t);
   return t;
 }
@@ -555,6 +568,7 @@ function drawToolCards() {
   for (const { t, i } of shown) {
     const d = document.createElement('div');
     d.className = 'tbitem';
+    d.dataset.tool = t.name;
     d.innerHTML = `<div class="tbhead"><span class="tbname">${i + 1}、${mark(t.title || t.name)}${t.title ? `<small class="tbid">${mark(t.name)}</small>` : ''}</span><span class="tbacts"><button class="ghost tbedit tbfav${tbFavs.has(t.name) ? ' on' : ''}" title="${tbFavs.has(t.name) ? '取消收藏' : '收藏到常用'}">${tbFavs.has(t.name) ? '★' : '☆'}</button>${t.market ? '<span class="tbmk" title="从工具市场安装的别人的工具：不能编辑、导出、发布">市场</span>' : '<button class="ghost tbedit tbeditbtn" title="进入制作模式修改这个工具（改的是草稿，完成前不影响现在的版本）">编辑</button><button class="ghost tbedit tbexport" title="导出成一个 .js 文件，发给别人导入">导出</button><button class="ghost tbedit tbpublish" title="发布到 BrowserX 网站的工具市场（进入审核）">发布</button>'}<button class="ghost tbedit tbdel" title="从工具箱删除（文件移到废纸篓，可以恢复）">删除</button></span></div>
       ${t.description ? `<div class="tbdesc">${mark(t.description)}</div>` : ''}`;
     d.querySelector('.tbeditbtn')?.addEventListener('click', (e) => { e.stopPropagation(); beginMaking({ edit: t.name }); });
@@ -575,21 +589,76 @@ function drawToolCards() {
     d.addEventListener('click', (e) => {
       if (e.target.closest('button, .tbform')) return;
       if (t.launch) { launchTool(t); return; } // 自带界面的工具：点一下直接运行，不显示参数表单
-      if (d.querySelector('.tbform')) { showAllTools(); return; }
-      for (const x of box.querySelectorAll('.tbitem')) x.hidden = x !== d;
-      if (tbPager.pager) tbPager.pager.hidden = true;
-      list.querySelector('.tbtop').hidden = true;
-      const back = document.createElement('button');
-      back.className = 'ghost tbback';
-      back.textContent = '← 全部工具';
-      back.addEventListener('click', showAllTools);
-      list.prepend(back);
-      d.classList.toggle('tbhaspage', !!t.hasForm); // 自带填表网页时收起描述，把高度留给网页
-      d.appendChild(t.hasForm ? buildToolPage(t) : buildToolForm(t));
+      openToolPage(t); // 打开（或回到）这个标签里一直活着的工具页面：自带网页的显示网页，其它的显示标准表单（formSpec 或按 params 自动生成）
     });
     box.appendChild(d);
   }
   tbPager = makePager(box, '.tbitem', 5, tbState); // 描述是多行完整显示的，每页放少一点
+  markOpenPages();
+}
+
+// 打开工具自带的填表页面：每个标签每个工具一份，建一次就一直留着（藏起来不销毁，iframe 不会重新加载）
+function openToolPage(tool) {
+  const tab = cur;
+  let pg = [...tab.pages.children].find((x) => x.dataset.tool === tool.name);
+  if (!pg) {
+    pg = document.createElement('div');
+    pg.className = 'tbkeep';
+    pg.dataset.tool = tool.name;
+    pg.dataset.title = tool.title || tool.name;
+    pg.innerHTML = `<div class="tbitem tbhaspage"><div class="tbhead tbfoldhead" title="点一下收起 / 展开表单"><span class="tbname">${esc(tool.title || tool.name)}${tool.title ? `<small class="tbid">${esc(tool.name)}</small>` : ''}</span><span class="tbsum"></span><button class="ghost tbfold" type="button">收起 ▴</button></div></div>`;
+    pg.querySelector('.tbitem').appendChild(tool.hasForm ? buildToolPage(tool) : buildDynamicForm(tool));
+    // 收起：只留标题行（后面一行填了什么的摘要），下面的对话区拿到全部空间；点标题行或「展开」回来，填的都在
+    pg.querySelector('.tbfoldhead').addEventListener('click', () => setFolded(pg, !pg.classList.contains('folded')));
+    tab.pages.appendChild(pg);
+  }
+  for (const x of tab.pages.children) x.hidden = x !== pg;
+  tab.pageOpen = tool.name;
+  tab.tb.hidden = true;
+  tab.pages.hidden = false;
+  $('toolbox').classList.add('haspage');
+  $('toolbox').classList.toggle('folded', pg.classList.contains('folded'));
+}
+
+// 收起 / 展开填表页面（每个标签每个工具各记各的）；收起时标题行显示摘要：动态表单里现在选的、填的
+function setFolded(pg, on) {
+  pg.classList.toggle('folded', on);
+  pg.querySelector('.tbfold').textContent = on ? '展开 ▾' : '收起 ▴';
+  const f = pg.querySelector('.tbdyn');
+  pg.querySelector('.tbsum').textContent = on && f ? formSummary(f) : '';
+  if (pg.closest('.tbpages') === cur.pages && !pg.hidden) $('toolbox').classList.toggle('folded', on);
+}
+function formSummary(form) {
+  const out = [];
+  for (const d of form.querySelectorAll(':scope > .tbf')) {
+    const chip = d.querySelector('.dynchip.on'), sel = d.querySelector('select'), cb = d.querySelector('input[type=checkbox]'), inp = d.querySelector('input:not([type=checkbox])');
+    const lb = d.querySelector('label'); // 勾选框的字在 label > span 里；别的 label 里那个 span 是必填的红星
+    const label = (lb?.classList.contains('tbcheck') ? lb.querySelector('span') : lb)?.textContent.replace('*', '').trim();
+    if (chip) continue; // 分类：产品名已经说明了
+    if (sel) out.push(sel.selectedOptions[0]?.textContent || '');
+    else if (cb) { if (cb.checked) out.push(label); }
+    else if (inp && inp.value !== '') out.push(/^\d/.test(inp.value) && label && !/年齡|歲/.test(label) ? `${label} ${inp.value}` : inp.value);
+  }
+  // 「金額方式：保額」后面紧跟「保額 500000」：前一项是后一项的开头就省掉
+  return out.filter((x, i) => x && !(out[i + 1] || '').startsWith(x + ' ')).join(' · ');
+}
+
+// 回到工具列表（填表页面藏起来，不销毁）
+function showToolList() {
+  cur.pageOpen = null;
+  cur.pages.hidden = true;
+  cur.tb.hidden = false;
+  $('toolbox').classList.remove('haspage', 'folded');
+  if ($('tb_list').querySelector('.tbcards')) markOpenPages();
+}
+
+// 列表里标出这个标签已经开着页面的工具（再点就回到那个页面）
+function markOpenPages() {
+  const open = new Set([...cur.pages.children].map((x) => x.dataset.tool));
+  for (const d of $('tb_list').querySelectorAll('.tbitem[data-tool]')) {
+    d.querySelector('.tbopen')?.remove();
+    if (open.has(d.dataset.tool)) d.querySelector('.tbname').insertAdjacentHTML('beforeend', '<span class="tbopen" title="这个标签里已经开着它的页面，点一下回到那个页面">已打开</span>');
+  }
 }
 
 // 自带填表页面的工具：点开显示它的网页（本机小服务），网页上填完点按钮才执行
@@ -641,107 +710,187 @@ async function launchTool(t) {
   }
 }
 
-function showAllTools() {
-  const list = $('tb_list');
-  list.querySelector('.tbback')?.remove();
-  list.querySelector('.tbtop').hidden = false;
-  for (const x of list.querySelectorAll('.tbitem')) { x.querySelector('.tbform')?.remove(); x.classList.remove('tbhaspage'); }
-  tbPager.show(tbState.page);
+// 没写 formSpec 的工具：按 params（agent.js listCustomTools 内省出来的）生成标准表单字段。
+// 标题取参数说明的第一小段（到第一个冒号 / 逗号 / 括号为止，太长就用参数名），完整说明放悬停提示
+const KEY_LABELS = { json: '原始 JSON', open: '打开详情页', csv: '导出 CSV', download: '存成文件', publish: '直接发表', draftOnly: '只存草稿', topics: '话题', tags: '标签', days: '天数', images: '图片', all: '全部年度', limit: '数量', page: '页码', keyword: '关键词', q: '搜索', url: '网址', file: '文件', path: '路径', date: '日期', from: '从', to: '到', start: '开始', end: '结束' };
+function paramsToFields(params, values) {
+  const short = (p) => {
+    // 去掉「true 时 / true 则 / true 才会」「可选，」这类开头，再取第一小段；勾选框的字在框旁边，可以长一点
+    const d = String(p.description || '').replace(/^(true|false)\s*(時|时|則|则|才會|才会)?\s*/i, '').replace(/^(可选|選填|选填|可選|必填)[，,：:]?\s*/, '');
+    const first = d.split(/[：:，,（(；;。\n]/)[0].trim();
+    if (first && first.length <= (p.kind === 'boolean' ? 10 : 8)) return first;
+    return KEY_LABELS[p.key] || p.key; // 说明太长：常见参数名用固定的中文名
+  };
+  return params.map((p) => {
+    const f = { key: p.key, label: short(p), title: p.description || '', required: p.required, param: p.kind, value: values[p.key] };
+    if (p.kind === 'boolean') return { ...f, kind: 'boolean', value: !!values[p.key] };
+    if (p.kind === 'enum') return { ...f, kind: 'enum', options: [...(p.required ? [] : [{ value: '', label: '（不选）' }]), ...(p.enumValues || []).map((v) => ({ value: v, label: v }))] };
+    if (p.kind === 'number') return { ...f, kind: 'number' };
+    if (p.kind === 'string') return { ...f, kind: 'string' };
+    return { ...f, kind: 'text', full: true, placeholder: p.kind === 'array' ? '一行一个' : '按 JSON 格式填' };
+  });
 }
 
-// 按 params 的 kind（agent.js listCustomTools 内省出来的）生成对应表单控件
-function buildToolForm(t) {
+// 动态表单：字段由工具的 formSpec(当前值, ctx) 算出来（见 agent.js toolFormSpec）。refresh 的字段一改（'input' = 打字时就算），
+// 带着全部当前值重新调 formSpec 重画，所以选项依赖、显示隐藏、联动默认值这些逻辑都写在工具里（任意 JS）。
+// 值按标签记住（tab.formValues），重画、再次打开都保留；提交时 run(值 + { _form: true })。
+// kind 'hidden'：不显示、只记值，工具用它在两次 formSpec 之间记状态
+function buildDynamicForm(t) {
+  const tab = cur;
+  tab.formValues ||= {};
+  const values = tab.formValues[t.name] ||= {};
   const form = document.createElement('div');
-  form.className = 'tbform';
-  const fieldId = (key) => `tbf_${t.name}_${key}`;
-  const fieldsHtml = t.params.map((p) => {
-    const req = p.required ? ' <span class="req">*</span>' : '';
-    const id = fieldId(p.key);
-    let control;
-    if (p.kind === 'boolean') control = `<input type="checkbox" id="${id}">`;
-    else if (p.kind === 'array') control = `<textarea id="${id}" placeholder="一行一个"></textarea>`;
-    else if (p.kind === 'enum') control = `<select id="${id}">${(p.enumValues || []).map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select>`;
-    else if (p.kind === 'number') control = `<input id="${id}" inputmode="decimal">`;
-    else if (p.kind === 'string') control = `<input id="${id}">`;
-    else control = `<textarea id="${id}" placeholder="识别不出这个参数的类型，按 JSON 格式填"></textarea>`;
-    const hint = p.description ? `<p class="hint">${esc(p.description)}</p>` : '';
-    if (p.kind === 'boolean') return `<div class="tbf"><label class="tbcheck">${control}<span>${esc(p.key)}${req}</span></label>${hint}</div>`;
-    return `<div class="tbf"><label for="${id}">${esc(p.key)}${req}</label>${hint}${control}</div>`;
-  }).join('');
-  form.innerHTML = `${fieldsHtml}<div class="tberr" hidden></div><div class="row"><button class="primary tbrun">运行</button></div>`;
+  form.className = 'tbform tbdyn';
+  form.innerHTML = '<div class="muted">正在读取表单…</div>';
+  let seq = 0, timer = null, submit = '运行';
+  const fid = (key) => `dyn_${tab.id}_${t.name}_${key}`.replace(/[^\w-]/g, '_');
 
-  form.querySelector('.tbrun').addEventListener('click', async () => {
-    const errEl = form.querySelector('.tberr');
-    errEl.hidden = true;
-    const tab = cur;
-    if (tab.tbRunning) { errEl.hidden = false; errEl.textContent = '这个标签已经有一个工具在运行，等它跑完（或者开个新标签）'; return; }
-
-    const args = {};
-    for (const p of t.params) {
-      const el = form.querySelector('#' + fieldId(p.key));
-      if (p.kind === 'boolean') { args[p.key] = el.checked; continue; }
-      const raw = el.value;
-      if (!raw.trim()) {
-        if (p.required) { errEl.hidden = false; errEl.textContent = `「${p.key}」是必填的`; return; }
-        continue; // 选填留空就不传这个参数
-      }
-      if (p.kind === 'array') args[p.key] = raw.split('\n').map((s) => s.trim()).filter(Boolean);
-      else if (p.kind === 'number') {
-        const n = Number(raw);
-        if (Number.isNaN(n)) { errEl.hidden = false; errEl.textContent = `「${p.key}」不是合法数字`; return; }
-        args[p.key] = n;
-      } else if (p.kind === 'unknown') {
-        try { args[p.key] = JSON.parse(raw); }
-        catch (e) { errEl.hidden = false; errEl.textContent = `「${p.key}」不是合法 JSON：${e.message}`; return; }
-      } else args[p.key] = raw;
+  const readField = (f, el) => {
+    if (f.kind === 'boolean') return el.checked;
+    if (f.kind === 'number') return el.value.trim() === '' ? null : Number(el.value);
+    return el.value;
+  };
+  async function load() {
+    const my = ++seq;
+    let spec;
+    if (!t.dynamic) { // 没写 formSpec：按 params 生成（标题取说明的第一小段，完整说明放悬停提示）
+      submit = t.draft ? '试运行' : '运行';
+      draw(paramsToFields(t.params || [], values));
+      return;
     }
+    try { spec = await call('tools:formSpec', t.name, values, tab.id); }
+    catch (e) { if (my === seq) form.innerHTML = `<div class="tberr">✗ ${esc(e.message)}</div><div class="row"><button class="ghost dyn_retry">重试</button></div>`; form.querySelector('.dyn_retry')?.addEventListener('click', load); return; }
+    if (my !== seq) return; // 有更新的一次在路上，这次的结果丢掉
+    submit = spec.submit || '运行';
+    draw(spec.fields);
+  }
+  const later = (ms) => { clearTimeout(timer); timer = setTimeout(load, ms); };
 
-    tab.tbRunning = true;
-    form.querySelector('.tbrun').disabled = true;
-    $('toolbox').hidden = true;
-    const label = t.title ? `${t.title}（${t.name}）` : t.name;
-    add('note', t.draft ? `— 试运行草稿 ${esc(label)}（不经过对话） —` : `— 直接运行工具 ${esc(label)}（不经过对话，省 token） —`, true);
-    const running = runningBar(label);
-    try {
-      const r = await (t.draft ? call('making:run', args) : call('tools:run', t.name, args, tab.id));
-      T = tab; // 跑的时候用户可能切到了别的标签：结果、按钮都放回发起运行的那个标签（finally 里切回来）
-      running.done();
-      add('msg ai', md(String(r)), true);
-      // 跑完给一个入口：效果不满意就进入修改模式（会开新对话），把这次的参数和结果带过去，用户补一句哪里不好即可
-      if (!t.draft && !t.market) {
-        const d = add('note', `工具运行完毕，如果感觉效果不好，<button class="tbtweak">点击修改工具功能</button>`, true);
-        d.querySelector('.tbtweak').addEventListener('click', async () => {
-          const out = String(r);
-          if (!(await beginMaking({ edit: t.name }))) return;
-          $('input').value = `刚才直接运行这个工具，参数：${JSON.stringify(args)}\n结果：\n${out.length > 1500 ? out.slice(0, 1500) + '\n…（后面省略）' : out}\n\n效果不好的地方：`;
-          focusInput();
+  function draw(fields) {
+    const focus = document.activeElement?.closest?.('.tbdyn') === form ? document.activeElement.id : null;
+    const html = fields.map((f) => {
+      const id = fid(f.key || ''), req = f.required ? ' <span class="req">*</span>' : '';
+      const hint = f.hint ? `<p class="hint">${esc(f.hint)}</p>` : '';
+      // 宽度跟着内容：下拉按最长的选项、数字按位数（max 的位数，或 width 指定几个字），一行能放几个放几个；full 占整行
+      const cls = `tbf${f.full || f.span === 'full' ? ' full' : ''}`;
+      const chars = f.width || (f.kind === 'number' ? Math.max(String(f.max ?? '').length, String(f.value ?? '').length, 3) + 1 : f.kind === 'string' ? 12 : null);
+      if (f.kind === 'hidden') return ''; // 不显示，只记住值（工具用来记状态，比如上次选的产品）
+      if (f.kind === 'section') return `<div class="dynsec">${esc(f.label || '')}</div>`;
+      if (f.kind === 'note') return `<div class="dynnote${f.tone ? ' ' + esc(f.tone) : ''}">${esc(f.text || f.label || '')}</div>`;
+      // chips：单选的胶囊按钮（选项不多、想一眼看全时用，比如产品类别）
+      if (f.kind === 'chips') return `<div class="tbf full"><label>${esc(f.label || f.key)}${req}</label>${hint}<div class="dynchips" id="${id}" role="radiogroup" aria-label="${esc(f.label || f.key)}">${(f.options || []).map((o) => { const v = typeof o === 'object' ? o.value : o, l = typeof o === 'object' ? (o.label ?? o.value) : o, on = String(v) === String(f.value ?? ''); return `<button type="button" class="dynchip${on ? ' on' : ''}" role="radio" aria-checked="${on}" data-v="${esc(v)}">${esc(l)}</button>`; }).join('')}</div></div>`;
+      if (f.kind === 'boolean') return `<div class="${cls}"${f.title ? ` title="${esc(f.title)}"` : ''}><label class="tbcheck"><input type="checkbox" id="${id}"${f.value ? ' checked' : ''}><span>${esc(f.label || f.key)}${req}</span></label>${hint}</div>`;
+      let control;
+      const attrs = `id="${id}"${f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : ''}${f.disabled ? ' disabled' : ''}${chars ? ` style="--w:${chars}"` : ''}`;
+      if (f.kind === 'enum') control = `<select ${attrs}>${(f.options || []).map((o) => { const v = typeof o === 'object' ? o.value : o, l = typeof o === 'object' ? (o.label ?? o.value) : o; return `<option value="${esc(v)}"${String(v) === String(f.value ?? '') ? ' selected' : ''}>${esc(l)}</option>`; }).join('')}</select>`;
+      else if (f.kind === 'text') control = `<textarea ${attrs}>${esc(f.value ?? '')}</textarea>`;
+      else control = `<input ${attrs}${f.kind === 'number' ? ` type="number"${f.min != null ? ` min="${f.min}"` : ''}${f.max != null ? ` max="${f.max}"` : ''}${f.step != null ? ` step="${f.step}"` : ''}` : ''} value="${esc(f.value ?? '')}">`;
+      return `<div class="${cls}"${f.title ? ` title="${esc(f.title)}"` : ''}><label for="${id}">${esc(f.label || f.key)}${req}</label>${hint}${control}</div>`;
+    }).join('');
+    form.innerHTML = `${html}<div class="tberr" hidden></div><div class="row"><button class="primary tbrun">${esc(submit)}</button></div>`;
+    for (const f of fields) {
+      if (!f.key || f.kind === 'note' || f.kind === 'section') continue;
+      if (f.kind === 'hidden') { values[f.key] = f.value; continue; }
+      const el = form.querySelector('#' + fid(f.key));
+      if (f.kind === 'chips') {
+        values[f.key] = f.value ?? '';
+        for (const b of el.querySelectorAll('.dynchip')) b.addEventListener('click', () => {
+          for (const x of el.querySelectorAll('.dynchip')) { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b); }
+          values[f.key] = b.dataset.v;
+          if (f.refresh) later(0);
         });
+        continue;
       }
-    } catch (e) {
-      T = tab;
-      running.done();
-      if (isStopped(e)) { add('note', `■ 已手动停止 ${esc(label)}`, true); return; }
-      // 直接运行不经过模型，失败了没人会自动修：正式工具直接打开「修改工具」（新对话 + 制作模式），把参数和报错交给助手诊断、改草稿；
-      // 草稿试运行失败时本来就在修改中，留在当前对话里让助手接着改
-      if (t.market) { add('note err', `✗ ${esc(e.message)}<div class="muted" style="margin-top:4px">这是从工具市场安装的工具，有问题请联系作者，或在工具市场里更新到新版本</div>`, true); return; }
-      const d = add('note err', `✗ ${esc(e.message)}<div style="margin-top:6px"><button class="tbfix">${t.draft ? '让助手诊断并修复' : '打开修改工具'}</button></div>`, true);
-      d.querySelector('.tbfix').addEventListener('click', async () => {
-        if (t.draft) {
-          $('input').value = `试运行草稿 ${t.name} 失败了。\n参数：${JSON.stringify(args)}\n错误：${e.message}\n请诊断真正原因（用 mcp__browser__* 实际查一下，不要猜），然后改草稿。`;
-          sendMsg();
-          return;
-        }
-        if (!(await beginMaking({ edit: t.name }))) return;
-        $('input').value = `刚才直接运行这个工具失败了。\n参数：${JSON.stringify(args)}\n错误：${e.message}\n需要的话先用浏览器手动把这次要做的事做完，再诊断真正原因（用 mcp__browser__* 实际查一下，不要猜），然后改草稿；改好后告诉我改了什么，我来试运行。`;
-        sendMsg();
+      values[f.key] = f.kind === 'boolean' ? !!f.value : f.value ?? (f.kind === 'number' ? null : ''); // 工具给的值（含它算出来的默认值）为准
+      el.addEventListener(f.kind === 'boolean' || f.kind === 'enum' ? 'change' : 'input', () => {
+        values[f.key] = readField(f, el);
+        // 输入框跟着内容变宽：始终放得下现在的内容再多一个字（金额多打几位也看得全）
+        if (el.tagName === 'INPUT' && el.type !== 'checkbox') el.style.setProperty('--w', Math.max(Number(el.style.getPropertyValue('--w')) || 0, String(el.value).length + 1));
+        if (f.refresh === 'input') later(250);
+        else if (f.refresh && (f.kind === 'boolean' || f.kind === 'enum')) later(0);
       });
-    } finally {
-      T = cur;
-      tab.tbRunning = false;
-      form.querySelector('.tbrun').disabled = false;
+      if (f.refresh === true && f.kind !== 'boolean' && f.kind !== 'enum') el.addEventListener('change', () => later(0)); // 数字 / 文字：改完离开再算
     }
-  });
+    if (focus) form.querySelector('#' + focus)?.focus();
+    form.querySelector('.tbrun').addEventListener('click', async () => {
+      const errEl = form.querySelector('.tberr');
+      errEl.hidden = true;
+      if (tab.tbRunning) { errEl.hidden = false; errEl.textContent = '这个标签已经有一个工具在运行，等它跑完（或者开个新标签）'; return; }
+      for (const f of fields) {
+        if (!f.key || !f.required) continue;
+        const v = values[f.key];
+        if (v == null || v === '' || Number.isNaN(v)) { errEl.hidden = false; errEl.textContent = `「${f.label || f.key}」是必填的`; return; }
+      }
+      const send = {}; // 只提交现在表单上有的字段（藏起来的字段的旧值不带上）
+      for (const f of fields) if (f.key && f.kind !== 'note' && f.kind !== 'section') send[f.key] = values[f.key];
+      if (t.dynamic) { await runToolArgs(t, { ...send, _form: true }, form); return; }
+      // 按 params 生成的表单：转成参数要的类型；选填留空不传
+      const args = {};
+      for (const f of fields) {
+        if (!f.key) continue;
+        const v = send[f.key];
+        if (f.kind === 'boolean') { args[f.key] = !!v; continue; }
+        if (v == null || v === '' || Number.isNaN(v)) continue;
+        if (f.param === 'array') args[f.key] = String(v).split('\n').map((x) => x.trim()).filter(Boolean);
+        else if (f.param === 'unknown') {
+          try { args[f.key] = JSON.parse(v); }
+          catch (e) { errEl.hidden = false; errEl.textContent = `「${f.label}」不是合法 JSON：${e.message}`; return; }
+        } else args[f.key] = v;
+      }
+      await runToolArgs(t, args, form);
+    });
+  }
+  load();
   return form;
+}
+
+// 运行一个工具（静态表单、动态表单共用）：对话里显示「运行中」和停止按钮，结果 / 报错落回发起运行的那个标签
+async function runToolArgs(t, args, form) {
+  const tab = cur;
+  tab.tbRunning = true;
+  form.querySelector('.tbrun').disabled = true;
+  if (!form.closest('.tbkeep')) $('toolbox').hidden = true; // 工具页面里的表单留着（结果在下面的对话区）；草稿试运行收起工具箱看结果
+  const label = t.title ? `${t.title}（${t.name}）` : t.name;
+  add('note', t.draft ? `— 试运行草稿 ${esc(label)}（不经过对话） —` : `— 直接运行工具 ${esc(label)}（不经过对话，省 token） —`, true);
+  const running = runningBar(label);
+  try {
+    const r = await (t.draft ? call('making:run', args) : call('tools:run', t.name, args, tab.id));
+    T = tab; // 跑的时候用户可能切到了别的标签：结果、按钮都放回发起运行的那个标签（finally 里切回来）
+    running.done();
+    add('msg ai', md(String(r)), true);
+    // 跑完给一个入口：效果不满意就进入修改模式（会开新对话），把这次的参数和结果带过去，用户补一句哪里不好即可
+    if (!t.draft && !t.market) {
+      const d = add('note', `工具运行完毕，如果感觉效果不好，<button class="tbtweak">点击修改工具功能</button>`, true);
+      d.querySelector('.tbtweak').addEventListener('click', async () => {
+        const out = String(r);
+        if (!(await beginMaking({ edit: t.name }))) return;
+        $('input').value = `刚才直接运行这个工具，参数：${JSON.stringify(args)}\n结果：\n${out.length > 1500 ? out.slice(0, 1500) + '\n…（后面省略）' : out}\n\n效果不好的地方：`;
+        focusInput();
+      });
+    }
+  } catch (e) {
+    T = tab;
+    running.done();
+    if (isStopped(e)) { add('note', `■ 已手动停止 ${esc(label)}`, true); return; }
+    // 直接运行不经过模型，失败了没人会自动修：正式工具直接打开「修改工具」（新对话 + 制作模式），把参数和报错交给助手诊断、改草稿；
+    // 草稿试运行失败时本来就在修改中，留在当前对话里让助手接着改
+    if (t.market) { add('note err', `✗ ${esc(e.message)}<div class="muted" style="margin-top:4px">这是从工具市场安装的工具，有问题请联系作者，或在工具市场里更新到新版本</div>`, true); return; }
+    const d = add('note err', `✗ ${esc(e.message)}<div style="margin-top:6px"><button class="tbfix">${t.draft ? '让助手诊断并修复' : '打开修改工具'}</button></div>`, true);
+    d.querySelector('.tbfix').addEventListener('click', async () => {
+      if (t.draft) {
+        $('input').value = `试运行草稿 ${t.name} 失败了。\n参数：${JSON.stringify(args)}\n错误：${e.message}\n请诊断真正原因（用 mcp__browser__* 实际查一下，不要猜），然后改草稿。`;
+        sendMsg();
+        return;
+      }
+      if (!(await beginMaking({ edit: t.name }))) return;
+      $('input').value = `刚才直接运行这个工具失败了。\n参数：${JSON.stringify(args)}\n错误：${e.message}\n需要的话先用浏览器手动把这次要做的事做完，再诊断真正原因（用 mcp__browser__* 实际查一下，不要猜），然后改草稿；改好后告诉我改了什么，我来试运行。`;
+      sendMsg();
+    });
+  } finally {
+    T = cur;
+    tab.tbRunning = false;
+    form.querySelector('.tbrun').disabled = false;
+  }
 }
 
 // ---------------------------------------------------------------- 单个工具导入 / 导出（见 agent.js importPreview / importConfirm）
@@ -1078,14 +1227,13 @@ const makingTabState = () => [...tabState.values()].find((x) => x.making);
 function showNewToolForm() {
   const list = $('tb_list');
   list.innerHTML = `<button class="ghost tbback">← 全部工具</button>
-    <div class="tbitem tbnew"><div class="tbform">
-      <div class="tbhead"><span class="tbname">新建工具</span></div>
-      <div class="tbf"><label for="nt_title">工具名（中文） <span class="req">*</span></label><p class="hint">工具箱里显示的名字，例如「保单查询」</p><input id="nt_title" spellcheck="false" maxlength="40"></div>
-      <div class="tbf"><label for="nt_name">工具名（英文）</label><p class="hint">字母、数字、下划线，例如 aes_policy；留空自动分配一个 12 位英文数字代码</p><input id="nt_name" spellcheck="false"></div>
-      <div class="tbf"><label for="nt_goal">要做什么</label><p class="hint">越具体越好：在哪个网站、输入什么、输出什么</p><textarea id="nt_goal" placeholder="例如：输入保单号，在保诚 AES 查保单详情，返回状况、保费、受保人"></textarea></div>
+    <div class="tbitem"><div class="tbhead"><span class="tbname">新建工具</span></div><div class="tbform tbdyn">
+      <div class="tbf" title="工具箱里显示的名字，例如「保单查询」"><label for="nt_title">中文名 <span class="req">*</span></label><input id="nt_title" spellcheck="false" maxlength="40" placeholder="保单查询" style="--w:12"></div>
+      <div class="tbf" title="字母、数字、下划线，例如 aes_policy；留空自动分配一个 12 位英文数字代码"><label for="nt_name">英文名</label><input id="nt_name" spellcheck="false" placeholder="留空自动分配" style="--w:14"></div>
+      <div class="tbf full" title="越具体越好：在哪个网站、输入什么、输出什么"><label for="nt_goal">要做什么</label><textarea id="nt_goal" placeholder="在哪个网站、输入什么、输出什么。例如：输入保单号，在保诚 AES 查保单详情，返回状况、保费、受保人"></textarea></div>
+      <div class="dynnote">会开一个新对话专门做这个工具（当前对话在「历史」里找得回）；代码先写在草稿里，试运行没问题点「完成」才放进工具箱。</div>
       <div class="tberr" hidden></div>
       <div class="row"><button class="primary nt_go">开始制作</button></div>
-      <p class="hint">会开一个新对话专门做这个工具（当前对话可以在「历史」里找回）。代码先写在草稿里，试运行没问题后点「完成」才放进工具箱。</p>
     </div></div>`;
   list.querySelector('.tbback').addEventListener('click', renderToolboxList);
   list.querySelector('.nt_go').addEventListener('click', async () => {
@@ -1140,7 +1288,7 @@ $('mk_try').addEventListener('click', async () => {
   const d = document.createElement('div');
   d.className = 'tbitem';
   d.innerHTML = `<div class="tbhead"><span class="tbname">试运行草稿：${esc(t.title || t.name)}${t.title ? `<small class="tbid">${esc(t.name)}</small>` : ''}</span></div>${t.description ? `<div class="tbdesc">${esc(t.description)}</div>` : ''}`;
-  d.appendChild(buildToolForm(t));
+  d.appendChild(buildDynamicForm(t));
   list.appendChild(d);
 });
 
@@ -1179,13 +1327,25 @@ $('mk_cancel').addEventListener('click', async () => {
   focusInput();
 });
 
+// 「工具箱」按钮在「工具列表」和「刚才的页面」之间来回切：
+// 在对话（或别的面板）里点 → 工具列表，再点 → 回到对话；在某个工具的填表页面上点 → 工具列表，再点 → 回到那个页面（没重新加载，内容都在）
 $('btnToolbox').addEventListener('click', () => {
-  const willShow = $('toolbox').hidden;
+  const tab = cur;
+  const listShown = !$('toolbox').hidden && !tab.pageOpen;
+  if (listShown) {
+    const prev = tab.prevView;
+    tab.prevView = null;
+    if (prev && prev !== 'chat' && tab.pages.querySelector(`.tbkeep[data-tool="${CSS.escape(prev)}"]`)) openToolPage({ name: prev });
+    else $('toolbox').hidden = true;
+    return;
+  }
+  tab.prevView = $('toolbox').hidden ? 'chat' : tab.pageOpen; // 记下从哪来，再点一次回去
   $('history').hidden = true;
   $('settings').hidden = true;
   $('account').hidden = true;
-  $('toolbox').hidden = !willShow;
-  if (willShow) renderToolboxList();
+  $('toolbox').hidden = false;
+  showToolList();
+  renderToolboxList();
 });
 
 // ---------------------------------------------------------------- 设置
@@ -1447,6 +1607,36 @@ $('splitter').addEventListener('pointerdown', (e) => {
   addEventListener('pointerup', up);
 });
 
+// 标准表单的高度上限 = （工具箱顶 → 发送框顶）的一半；窗口大小、发送框高度变了就重算（见 style.css「表单按自身内容的高度」）
+function updateFormMax() {
+  // 工具箱藏着时量不到位置，用标签栏下沿（制作横幅开着就用横幅下沿）
+  const above = !$('makingBar').hidden ? $('makingBar') : $('tabs');
+  const top = above.getBoundingClientRect().bottom, bottom = document.querySelector('#side .composer').getBoundingClientRect().top;
+  if (bottom > top) $('side').style.setProperty('--formMax', Math.floor((bottom - top) / 2) + 'px');
+}
+new ResizeObserver(updateFormMax).observe($('side'));
+new ResizeObserver(updateFormMax).observe(document.querySelector('#side .composer'));
+
+// 填表页面和对话上下分割：拖中间那条改对话区高度（像素，记住上次的）；表单至少留 300px，对话至少 80px
+const CHAT_H_KEY = 'formChatHeight';
+function setChatH(px) {
+  // 上限按实际位置算：工具箱顶到发送框之间，减去拖动条，表单（含标题）至少留 300px
+  const room = document.querySelector('#side .composer').getBoundingClientRect().top - $('toolbox').getBoundingClientRect().top - 1;
+  px = Math.max(80, Math.min(room - 300, px));
+  $('side').style.setProperty('--chatH', px + 'px');
+  try { localStorage.setItem(CHAT_H_KEY, px); } catch {}
+}
+try { const h = +localStorage.getItem(CHAT_H_KEY); if (h) $('side').style.setProperty('--chatH', h + 'px'); } catch {}
+$('formSplit').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  const bottom = document.querySelector('#side .composer').getBoundingClientRect().top; // 对话区下沿 = 发送框上沿
+  document.body.classList.add('vdragging');
+  const move = (ev) => setChatH(bottom - ev.clientY);
+  const up = () => { document.body.classList.remove('vdragging'); removeEventListener('pointermove', move); removeEventListener('pointerup', up); };
+  addEventListener('pointermove', move);
+  addEventListener('pointerup', up);
+});
+
 // 左侧铺满整个窗口（隐藏右侧浏览器），再点一下恢复；跟「收起左侧栏」互斥，记住上次的状态
 const WIDE_KEY = 'browserCollapsed';
 const WIDE_ICON = { off: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5', on: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5' };
@@ -1510,12 +1700,28 @@ function renderTabs() {
 }
 
 // 只切界面这一侧：消息区、运行状态、制作横幅、录制按钮；右侧视图由主进程 tab:switch 切换
+const PANELS = ['toolbox', 'history', 'account'];
 function showTab(id) {
   const t = tabOf(id);
-  if (cur && cur !== t) { cur.el.hidden = true; cur.el.removeAttribute('id'); }
+  if (cur && cur !== t) {
+    cur.panel = PANELS.find((p) => !$(p).hidden) || null; // 记住这个标签开着哪个面板
+    cur.el.hidden = true; cur.el.removeAttribute('id');
+    cur.tb.hidden = true; cur.tb.removeAttribute('id');
+    cur.pages.hidden = true;
+  }
   cur = T = t;
   t.el.id = 'msgs'; // 样式都写在 #msgs 上，当前标签的消息区拿这个 id
   t.el.hidden = false;
+  t.tb.id = 'tb_list';
+  t.tb.hidden = !!t.pageOpen;
+  t.pages.hidden = !t.pageOpen;
+  $('toolbox').classList.toggle('haspage', !!t.pageOpen);
+  $('toolbox').classList.toggle('folded', !!t.pageOpen && !!t.pages.querySelector('.tbkeep.folded:not([hidden])'));
+  // 恢复这个标签上次开着的面板：工具箱原样显示（内容一直在）；历史 / 账号重新拉一次
+  for (const p of PANELS) $(p).hidden = t.panel !== p;
+  if (t.panel === 'toolbox' && !t.tb.children.length) renderToolboxList();
+  if (t.panel === 'history') renderHistoryList();
+  if (t.panel === 'account') renderAccount();
   t.attn = false;
   renderRunning();
   renderMaking(t.making);
@@ -1525,10 +1731,7 @@ function showTab(id) {
 
 async function selectTab(id) {
   if (cur?.id === id) return;
-  $('history').hidden = true;
-  $('toolbox').hidden = true;
-  $('settings').hidden = true;
-  $('account').hidden = true;
+  $('settings').hidden = true; // 其它面板跟着标签走（见 showTab）
   await call('tab:switch', id);
   showTab(id);
   focusInput();
@@ -1548,6 +1751,8 @@ async function closeTab(id) {
   try { next = await call('tab:close', id); } catch (e) { add('note err', `✗ ${esc(e.message)}`, true); return; }
   tabState.delete(id);
   t.el.remove();
+  t.tb.remove();
+  t.pages.remove();
   if (cur === t) { cur = null; showTab(next); focusInput(); }
   else renderTabs();
 }

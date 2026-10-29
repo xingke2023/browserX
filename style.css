@@ -1,16 +1,16 @@
 :root{
-  --bg:#f5f4ef;--panel:#fbfaf7;--card:#fff;--line:#e2dfd6;--line-strong:#cfcabd;--splitter:#b5afa2;--making-bg:#ffedd5;--making-line:#fdba74;
+  --bg:#f5f4ef;--panel:#fbfaf7;--card:#fff;--line:#e2dfd6;--line-strong:#cfcabd;--splitter:#5f5a51;--making-bg:#ffedd5;--making-line:#fdba74;
   --text:#2b2a26;--muted:#77736a;--accent:#c96442;--link:#2563eb;--red:#d93025;--btn-hi:rgba(255,255,255,.9);--btn-lo:#ecebe6;--btn-shadow:rgba(40,30,10,.14);--accent-weak:#f6e9e3;--accent-text:#fff;
   --user:#ece9e1;--code:#f1efe8;--ok:#4f8a5b;--err:#b5473a;--warn:#a86b12;--warn-weak:#fbf1de;
   --side:440px;color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#1f1e1c;--panel:#262523;--card:#2e2d2a;--line:#3a3935;--line-strong:#4b4944;--splitter:#5c5a54;--making-bg:#43301f;--making-line:#8a5a2e;
+  --bg:#1f1e1c;--panel:#262523;--card:#2e2d2a;--line:#3a3935;--line-strong:#4b4944;--splitter:#8f8b82;--making-bg:#43301f;--making-line:#8a5a2e;
   --text:#ecebe6;--muted:#a19d93;--accent:#d97757;--link:#6ea8fe;--red:#ff6b6b;--btn-hi:rgba(255,255,255,.1);--btn-lo:#24231f;--btn-shadow:rgba(0,0,0,.45);--accent-weak:#3d2c25;--accent-text:#fff;
   --user:#383631;--code:#1b1a18;--ok:#7fb48a;--err:#e07a6c;--warn:#e0a54a;--warn-weak:#3a3020;color-scheme:dark;
 }}
 :root[data-theme="dark"]{
-  --bg:#1f1e1c;--panel:#262523;--card:#2e2d2a;--line:#3a3935;--line-strong:#4b4944;--splitter:#5c5a54;--making-bg:#43301f;--making-line:#8a5a2e;
+  --bg:#1f1e1c;--panel:#262523;--card:#2e2d2a;--line:#3a3935;--line-strong:#4b4944;--splitter:#8f8b82;--making-bg:#43301f;--making-line:#8a5a2e;
   --text:#ecebe6;--muted:#a19d93;--accent:#d97757;--link:#6ea8fe;--red:#ff6b6b;--btn-hi:rgba(255,255,255,.1);--btn-lo:#24231f;--btn-shadow:rgba(0,0,0,.45);--accent-weak:#3d2c25;--accent-text:#fff;
   --user:#383631;--code:#1b1a18;--ok:#7fb48a;--err:#e07a6c;--warn:#e0a54a;--warn-weak:#3a3020;color-scheme:dark;
 }
@@ -26,7 +26,10 @@ button.primary:hover:not(:disabled){filter:brightness(1.1);color:#fff;border-col
 button.ghost{background:transparent;border-color:transparent}
 button.ghost:hover:not(:disabled){background:var(--user);border-color:transparent;color:var(--text)}
 button.icon{padding:5px;width:30px;height:30px;display:grid;place-items:center}
-button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+/* 输入框 / 下拉 / 文本框获得焦点：边框变蓝 + 一圈淡蓝光晕（不用生硬的外描边）；勾选框只要光晕 */
+:is(input,textarea,select):focus,:is(input,textarea,select):focus-visible{outline:none;border-color:var(--link);box-shadow:0 0 0 3px color-mix(in srgb,var(--link) 18%,transparent)}
+input[type=checkbox]:focus-visible{border-color:inherit}
 svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
 input,textarea,select{background:var(--card);border:1px solid var(--line-strong);border-radius:8px;padding:7px 10px;width:100%}
 .muted{color:var(--muted);font-size:12px}
@@ -99,7 +102,22 @@ body.bypass #settings #mode{border-color:var(--warn);color:var(--warn);backgroun
 /* 历史面板打开时跟工具箱一样占满对话区、遮住对话 */
 #side:has(#history:not([hidden])) #msgs{display:none}
 /* 历史 / 工具箱 / 设置打开时也藏起底部输入框（关掉面板就回来） */
-#side:has(#history:not([hidden])) .composer,#side:has(#toolbox:not([hidden])) .composer{display:none}
+#side:has(#history:not([hidden])) .composer,#side:has(#toolbox:not([hidden]):not(.haspage)) .composer{display:none}
+/* 工具箱里开着工具自带的填表页面：下面照样显示发送框（填表页高度让出发送框的位置） */
+/* 填表页面 + 对话上下分割：表单在上面一直不动，有对话内容时下面露出对话区（助手的回复），最下面是发送框 */
+#side:has(#toolbox.haspage:not([hidden])) #msgs:not(:empty){display:flex;flex:0 0 var(--chatH,20%);min-height:80px}
+/* 中间的拖动条：只在上下分割时出现；拖动改 --chatH（记住上次的高度） */
+#formSplit{display:none;flex:none;height:1px;cursor:row-resize;background:var(--splitter);position:relative;z-index:2} /* 跟左右分隔条同一个颜色（--splitter） */
+#formSplit::before{content:'';position:absolute;left:0;right:0;top:-4px;bottom:-4px} /* 看起来 1px，能拖的范围上下各 4px */
+#formSplit:hover,body.vdragging #formSplit{background:var(--accent);box-shadow:0 0 0 .5px var(--accent)}
+#side:has(#toolbox.haspage:not([hidden])):has(#msgs:not(:empty)) #formSplit{display:block}
+body.vdragging{cursor:row-resize;user-select:none}
+body.vdragging iframe{pointer-events:none} /* 拖动经过表单（iframe）时别把鼠标事件吞掉 */
+#toolbox.haspage .tbpages{overflow:hidden}
+#toolbox.haspage .tbkeep:not([hidden]){flex:1;min-height:0}
+#toolbox.haspage .tbkeep>.tbitem{flex:1;min-height:0}
+#toolbox.haspage .tbpage{flex:1;min-height:0;display:flex}
+#toolbox.haspage .tbpage iframe{flex:1;height:auto;min-height:0}
 #history:not([hidden]){flex:1;min-height:0;max-height:none;border-bottom:none}
 /* 跟工具箱一样：列表固定在面板高度里自己滚动，分页栏贴在底部 */
 #history:not([hidden]){overflow:hidden}
@@ -245,7 +263,7 @@ body.bypass #settings #mode{border-color:var(--warn);color:var(--warn);backgroun
 .cbox{border:1px solid var(--line-strong);border-radius:14px;background:var(--card);box-shadow:0 1px 3px var(--btn-shadow);transition:border-color .12s,box-shadow .12s}
 .cbox:focus-within{border-color:color-mix(in srgb,var(--text) 35%,var(--line-strong));box-shadow:0 4px 14px var(--btn-shadow)}
 #input{display:block;resize:none;border:none;background:transparent;box-shadow:none;padding:12px 14px 2px;min-height:48px;max-height:240px;font-size:14px;line-height:1.55}
-#input:focus,#input:focus-visible{outline:none}
+#input:focus,#input:focus-visible{outline:none;box-shadow:none} /* 发送框自己处理（外面整个框 focus-within 高亮），不要内圈光晕 */
 .composer-bar{display:flex;align-items:center;gap:6px;padding:4px 8px 8px 14px}
 .composer-bar .chint{flex:1;font-size:11.5px;color:var(--muted)}
 #status{font-size:12px;color:var(--muted)}
@@ -465,3 +483,63 @@ body.browser-collapsed #browser,body.browser-collapsed #splitter{display:none}
 .tbitem.tbflash{animation:tbflash 1.6s ease-out 2}
 @keyframes tbflash{0%{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}100%{border-color:var(--line);box-shadow:none}}
 @media (prefers-reduced-motion:reduce){.tbitem.tbflash{animation:none;border-color:var(--accent)}.tbtip{transition:none}}
+
+/* 工具箱里每个标签各有一份列表区 / 填表页面区：不是当前标签的、或当前没在看的，一律藏起来
+   （.hlist 等写了 display:flex，会盖过 hidden 属性，必须显式压住，否则别的标签的内容会露出来） */
+#toolbox>[hidden],.tbpages>[hidden]{display:none!important}
+.tbpages{flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto}
+.tbkeep{display:flex;flex-direction:column;gap:10px}
+.tbkeep>.tbback{align-self:flex-start}
+.tbname .tbopen{margin-left:8px;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:500;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);vertical-align:2px}
+
+
+/* 动态表单（工具的 formSpec 算出来的）：开在工具箱的页面里，自己滚动；整行字段、小标题、说明文字 */
+#toolbox.haspage .tbkeep .tbform.tbdyn{flex:1;min-height:0;overflow-y:auto;align-content:start}
+.tbitem:not(.tbnew)>.tbform.tbdyn>.tbf.full{grid-column:1/-1}
+.tbform.tbdyn>.dynsec{grid-column:1/-1;margin-top:2px;padding-top:6px;border-top:1px solid var(--line);font-size:12px;font-weight:600;line-height:1.2;color:var(--muted)}
+.tbform.tbdyn>.dynnote{grid-column:1/-1;font-size:12.5px;line-height:1.5;color:var(--muted)}
+.tbform.tbdyn>.dynnote.warn{color:var(--warn)}
+.tbform.tbdyn>.dynnote.ok{color:var(--ok)}
+
+/* 动态表单的 chips：单选胶囊按钮，选中的高亮 */
+.tbform.tbdyn .dynchips{display:flex;flex-wrap:wrap;gap:6px}
+.tbform.tbdyn .dynchip{height:30px;padding:0 13px;border-radius:999px;border:1px solid var(--line-strong);background:var(--card);color:var(--text);font-size:13px}
+.tbform.tbdyn .dynchip:hover:not(:disabled){border-color:var(--link);color:var(--link)}
+.tbform.tbdyn .dynchip.on,.tbform.tbdyn .dynchip.on:hover:not(:disabled){background:var(--link);border-color:var(--link);color:#fff}
+
+/* 动态表单紧凑排版：每个字段宽度跟着内容（下拉按最长选项、数字按位数），从左往右排、放不下换行，一行能放几个放几个 */
+.tbitem:not(.tbnew)>.tbform.tbdyn{display:flex;flex-direction:row;flex-wrap:wrap;align-items:flex-end;align-content:flex-start;gap:8px 12px}
+.tbitem:not(.tbnew)>.tbform.tbdyn>*{flex:0 0 100%}
+.tbitem:not(.tbnew)>.tbform.tbdyn>.tbf{flex:0 1 auto;display:flex;flex-direction:column;gap:3px;min-width:0;max-width:100%}
+.tbitem:not(.tbnew)>.tbform.tbdyn>.tbf.full{flex:0 0 100%}
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf label{font-size:13px;line-height:1.3}
+/* 字段宽度只看输入框：标题不撑宽（width:0 + min-width:100%），比输入框长就折行；勾选框、整行字段照常 */
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf:not(.full)>:is(label:not(.tbcheck),.hint){width:0;min-width:100%}
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf:not(.full):not(:has(>label.tbcheck)){min-width:4.6em} /* 至少放得下四个字的标题 */
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf :is(input,select){height:30px;padding:0 6px;font-size:13px;min-width:0;max-width:100%}
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf select{width:auto}
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf.full select{width:100%}
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf input:not([type=checkbox]){width:calc(var(--w,8) * 1.15ch + 22px)} /* 数字字形比 1ch 宽一点，留够余量才看得全 */
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf:has(>label.tbcheck){height:24px;justify-content:center}
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf .hint{white-space:normal}
+
+/* 填表页面收起：只留标题行 + 摘要，工具箱不再撑满，对话区拿到其余空间（对话是空的也显示） */
+.tbkeep .tbfoldhead{cursor:pointer;user-select:none;align-items:center;gap:8px}
+.tbkeep .tbfoldhead .tbname{flex:none}
+.tbkeep .tbsum{flex:1;min-width:0;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tbkeep .tbfold{flex:none;margin-left:auto;height:28px;padding:0 12px;font-size:13px;font-weight:600;color:var(--link);border:1px solid var(--link);border-radius:999px;background:color-mix(in srgb,var(--link) 8%,var(--card))}
+.tbkeep .tbfold:hover:not(:disabled){color:#fff;background:var(--link);border-color:var(--link)}
+.tbkeep.folded .tbfold{color:#fff;background:var(--link)} /* 收起时实心蓝：一眼看出点它能展开 */
+.tbkeep.folded .tbfold:hover:not(:disabled){filter:brightness(1.1)}
+.tbkeep.folded .tbitem>:not(.tbhead){display:none!important}
+.tbkeep.folded .tbitem .tbhead{border-bottom:none;padding-bottom:0;margin-bottom:0}
+#toolbox.haspage.folded{flex:none!important}
+#toolbox.haspage.folded .tbpages,#toolbox.haspage.folded .tbkeep:not([hidden]),#toolbox.haspage.folded .tbkeep>.tbitem{flex:none!important}
+#side:has(#toolbox.haspage.folded:not([hidden])) #msgs{display:flex!important;flex:1 1 auto!important;min-height:0}
+#side:has(#toolbox.haspage.folded:not([hidden])) #formSplit{display:none!important}
+
+/* 标准表单 + 下面有对话：表单按自身内容的高度，最多占（工具箱顶到发送框）的一半（--formMax，renderer 里算），超过就在里面滚动；
+   对话区占其余。分隔线只是一条线（不能拖）。自带网页（iframe）量不出内容高度，照旧用可拖的 --chatH */
+#side:has(#toolbox.haspage:not(.folded):not([hidden]) .tbkeep:not([hidden]) .tbdyn):has(#msgs:not(:empty)) #toolbox{flex:0 1 auto;max-height:var(--formMax,50%)}
+#side:has(#toolbox.haspage:not(.folded):not([hidden]) .tbkeep:not([hidden]) .tbdyn) #msgs:not(:empty){flex:1 1 0!important}
+#side:has(#toolbox.haspage:not(.folded):not([hidden]) .tbkeep:not([hidden]) .tbdyn) #formSplit{cursor:default;pointer-events:none}

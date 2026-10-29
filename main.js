@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, dialog, safeStorage, Menu, shell } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, dialog, safeStorage, Menu, shell, webFrameMain } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -177,12 +177,48 @@ function toUrl(s) {
   return `https://www.bing.com/search?q=${encodeURIComponent(s)}`;
 }
 
+// 填表页面「跟着最新内容滚动」：点过页面上的按钮（试算、查询…）之后，新内容出现在可见区下面就滚过去
+// （大块内容滚到它的开头）；本来就在页面最底下也一直跟着。在可见区里的变化（选产品后字段重画）不滚。
+// 自己往上滚（滚轮 / ↑ / PageUp / Home）就停，下次点按钮再开始。页面自己设了 window.__bxAutoScroll（自己处理了滚动）就跳过
+const FORM_FOLLOW = `(() => {
+  if (window.__bxFollowInstalled || window.__bxAutoScroll) return;
+  window.__bxFollowInstalled = true;
+  const root = document.scrollingElement || document.documentElement;
+  const atBottom = () => root.scrollHeight - root.scrollTop - innerHeight < 40;
+  let follow = false;
+  addEventListener('click', (e) => { if (e.target.closest('button, input[type=submit], input[type=button], [role=button]')) follow = true; }, true);
+  addEventListener('wheel', (e) => { if (e.deltaY < 0) follow = false; }, { passive: true });
+  addEventListener('keydown', (e) => { if (['ArrowUp', 'PageUp', 'Home'].includes(e.key)) follow = false; });
+  new MutationObserver((ms) => {
+    if (window.__bxAutoScroll) return;
+    const bottom = atBottom();
+    if (!follow && !bottom) return;
+    let el = null;
+    for (const m of ms) {
+      const n = m.type === 'characterData' ? m.target : m.addedNodes[m.addedNodes.length - 1] || m.target;
+      el = (n.nodeType === 1 ? n : n.parentElement) || el;
+    }
+    if (!el || !el.isConnected) return;
+    const r = el.getBoundingClientRect();
+    if (r.height === 0 || r.bottom <= innerHeight) return; // 新内容就在眼前，不动
+    // 一行行冒出来的进度：直接跳（平滑滚动跟不上快速更新）；一大块结果：平滑滚到它开头
+    const big = r.height > innerHeight * 0.8;
+    el.scrollIntoView({ block: big ? 'start' : 'end', behavior: big ? 'smooth' : 'auto' });
+  }).observe(document.body, { childList: true, subtree: true, characterData: true });
+})();`;
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1600, height: 1000, minWidth: 1000, minHeight: 640, title: 'BrowserX',
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
   win.loadFile('index.html');
+  // 工具自带的填表页面（工具箱里的 iframe，本机 127.0.0.1 小服务）：注入「跟着最新内容滚动」，所有这类工具都有，不用每个工具自己写
+  win.webContents.on('did-frame-finish-load', (_e, isMainFrame, processId, routingId) => {
+    if (isMainFrame) return;
+    const f = webFrameMain.fromId(processId, routingId);
+    if (f && /^http:\/\/127\.0\.0\.1:\d+\//.test(f.url)) f.executeJavaScript(FORM_FOLLOW).catch(() => {});
+  });
   win.on('closed', () => app.quit());
   for (const ev of ['enter-full-screen', 'leave-full-screen']) win.on(ev, () => send('fullscreen', win.isFullScreen()));
 
@@ -379,6 +415,7 @@ handle('history:delete', (id) => cur.agent.deleteHistory(id));
 handle('tools:list', () => cur.agent.listCustomTools().map((t) => ({ ...t, market: isMarketTool(t.name) })));
 handle('tools:run', (name, args, tab) => tabOf(tab).agent.runCustomTool(name, args));
 handle('tools:form', (name) => cur.agent.toolFormUrl(name));
+handle('tools:formSpec', (name, values, tab) => tabOf(tab).agent.toolFormSpec(name, values));
 handle('tools:stop', (tab) => tabOf(tab).agent.stopTool());
 handle('view:cover', (on) => { covered = !!on; syncViewVisible(); });
 
