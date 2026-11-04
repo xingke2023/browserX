@@ -1619,7 +1619,7 @@ async function beginMaking(opts) {
   }
 }
 
-const saveLabel = () => '保存'; // 横幅上的圆形按钮，跟 agent.js SAVE_LABEL 一致
+const saveLabel = () => '保存工具'; // 横幅上的圆形按钮，跟 agent.js SAVE_LABEL 一致
 
 // 横幅上的进度：✓ 做完的、● 现在这步、○ 还没到的；没录制时「看你示范」显示成跳过
 function renderMakingSteps(m) {
