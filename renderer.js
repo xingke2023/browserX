@@ -1372,9 +1372,13 @@ async function showSchedHistory(x) {
       <div class="sch_hd"><span class="sch_st">${r.ok ? '✓ 成功' : '✗ 失败'}</span><span class="sch_at">${esc(when(r.at))}</span><span class="sch_ms">用时 ${esc(dur(r.ms || 0))}</span></div>
       ${r.text ? `<div class="sch_txt">${esc(r.text)}</div>` : ''}</div>`).join('')
     : '<div class="hempty">还没有运行过</div>';
-  await modal(`<div class="modal-msg"><b>执行情况：${esc(x.title)}</b><br><span class="muted">${esc(schedRule(x))} · ${rows.length ? `最近 ${rows.length} 次：成功 ${ok} 次${rows.length > ok ? `，失败 ${rows.length - ok} 次` : ''}` : '还没有运行过'}（最多保留最近 50 次）</span></div>
+  const shown = modal(`<div class="modal-msg"><b>执行情况：${esc(x.title)}</b><br><span class="muted">${esc(schedRule(x))} · ${rows.length ? `最近 ${rows.length} 次：成功 ${ok} 次${rows.length > ok ? `，失败 ${rows.length - ok} 次` : ''}` : '还没有运行过'}（最多保留最近 50 次）</span></div>
     <div class="sch_list">${list}</div>
     <div class="modal-actions"><button class="primary" data-a="ok">关闭</button></div>`);
+  // 分页：每页 4 条（跟工具箱列表同一个分页组件）
+  const box = document.querySelector('.modal-overlay:last-child .sch_list');
+  if (box) makePager(box, '.sch_row', 4, { page: 0 });
+  await shown;
 }
 
 async function renderMarket() {
