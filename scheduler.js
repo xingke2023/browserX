@@ -5,7 +5,10 @@ const fs = require('fs');
 const crypto = require('crypto');
 
 const TICK = 30 * 1000;
-const MODES = ['daily', 'weekdays', 'interval'];
+const MODES = ['daily', 'weekdays', 'interval', 'once'];
+// once：一次性任务，at = 本地时间 'YYYY-MM-DDTHH:mm'（跟 <input type=datetime-local> 一样），到点跑一次就结束（enabled 变 false）。
+// 软件当时没开：下次打开时补跑（还没跑过就跑）
+const onceAt = (t) => { const ms = new Date(String(t.at || '')).getTime(); return Number.isFinite(ms) ? ms : NaN; };
 
 const todayAt = (hhmm, now = new Date()) => {
   const [h, m] = String(hhmm).split(':').map(Number);
@@ -47,15 +50,18 @@ class Scheduler {
   static check(t) {
     if (!t.tool) throw new Error('没选工具');
     if (!MODES.includes(t.mode)) throw new Error('定时方式不对');
-    if (t.mode === 'interval') {
+    if (t.mode === 'once') {
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(String(t.at || '')) || !Number.isFinite(onceAt(t))) throw new Error('请选好年月日和时间');
+    } else if (t.mode === 'interval') {
       const n = Number(t.every);
       if (!Number.isInteger(n) || n < 5 || n > 24 * 60) throw new Error('间隔要在 5 到 1440 分钟之间');
     } else if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(t.time || ''))) throw new Error('时间要写成 09:30 这样');
   }
 
   add(t) {
-    const task = { id: crypto.randomUUID(), tool: t.tool, title: t.title || t.tool, args: t.args || {}, mode: t.mode, time: t.time, every: t.every ? Number(t.every) : undefined, enabled: true, createdAt: Date.now(), lastRun: null, lastOk: null, lastText: '' };
+    const task = { id: crypto.randomUUID(), tool: t.tool, title: t.title || t.tool, args: t.args || {}, mode: t.mode, time: t.time, every: t.every ? Number(t.every) : undefined, at: t.mode === 'once' ? t.at : undefined, enabled: true, createdAt: Date.now(), lastRun: null, lastOk: null, lastText: '' };
     Scheduler.check(task);
+    if (task.mode === 'once' && onceAt(task) <= Date.now()) throw new Error('一次性任务的时间要选在现在之后');
     this.tasks.push(task);
     this.save();
     return task;
@@ -65,8 +71,13 @@ class Scheduler {
     const t = this.tasks.find((x) => x.id === id);
     if (!t) throw new Error('定时任务不存在');
     const next = { ...t, ...patch, id: t.id };
-    if (['mode', 'time', 'every', 'args', 'tool'].some((k) => k in patch)) next.changedAt = Date.now();
+    if (['mode', 'time', 'every', 'at', 'args', 'tool'].some((k) => k in patch)) next.changedAt = Date.now();
     Scheduler.check(next);
+    // 一次性任务改了时间：当成新的一次（要在现在之后），重新启用、清掉上次运行
+    if (next.mode === 'once' && ((('at' in patch) && patch.at !== t.at) || t.mode !== 'once')) {
+      if (onceAt(next) <= Date.now()) throw new Error('一次性任务的时间要选在现在之后');
+      Object.assign(next, { enabled: true, lastRun: null, lastOk: null, lastText: '', createdAt: Math.min(t.createdAt || Date.now(), Date.now()) });
+    }
     Object.assign(t, next);
     this.save();
     return t;
@@ -80,6 +91,7 @@ class Scheduler {
   // 下一次什么时候跑（给界面显示）
   nextRun(t, now = Date.now()) {
     if (!t.enabled) return null;
+    if (t.mode === 'once') return t.lastRun ? null : onceAt(t);
     if (t.mode === 'interval') return (t.lastRun || t.createdAt) + t.every * 60000;
     if (this.due(t, now)) return now;
     for (let k = 0; k < 8; k++) {
@@ -94,6 +106,7 @@ class Scheduler {
 
   due(t, now = Date.now()) {
     if (!t.enabled || this.busy.has(t.id)) return false;
+    if (t.mode === 'once') return !t.lastRun && now >= onceAt(t);
     if (t.mode === 'interval') return now - (t.lastRun || t.createdAt) >= t.every * 60000;
     const at = todayAt(t.time, new Date(now));
     if (t.mode === 'weekdays' && [0, 6].includes(new Date(now).getDay())) return false;
@@ -112,10 +125,12 @@ class Scheduler {
     try {
       const text = await this.opts.run(t);
       Object.assign(t, { lastRun: Date.now(), lastOk: true, lastText: String(text ?? '').slice(0, 500) });
+      if (t.mode === 'once') t.enabled = false; // 一次性：跑完就结束
     } catch (e) {
       // 「对话忙 / 标签满」之类没真正跑起来的情况由 run() 抛 retry，不记成跑过，下一轮再试
       if (e.retry) { this.busy.delete(t.id); this.opts.onChange?.(this.list()); return; }
       Object.assign(t, { lastRun: Date.now(), lastOk: false, lastText: String(e.message).slice(0, 500) });
+      if (t.mode === 'once') t.enabled = false;
     } finally {
       this.busy.delete(t.id);
     }

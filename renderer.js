@@ -1232,8 +1232,11 @@ const ymd = (iso) => { if (!iso) return ''; const d = new Date(iso); return `${d
 const mkState = { q: '', category: '', page: 1 };
 let mkMeta = null;
 // ---------------------------------------------------------------- 定时运行（见 scheduler.js）
-const SCHED_MODES = { daily: '每天', weekdays: '工作日', interval: '每隔' };
-const schedRule = (x) => (x.mode === 'interval' ? `每隔 ${x.every} 分钟` : `${SCHED_MODES[x.mode]} ${x.time}`);
+const SCHED_MODES = { daily: '每天', weekdays: '工作日', interval: '每隔', once: '一次' };
+const schedRule = (x) => (x.mode === 'interval' ? `每隔 ${x.every} 分钟` : x.mode === 'once' ? `一次 ${String(x.at || '').replace('T', ' ')}` : `${SCHED_MODES[x.mode]} ${x.time}`);
+// 一次性任务默认时间：一小时后，取整到 5 分钟（<input type=datetime-local> 的格式 YYYY-MM-DDTHH:mm，本地时间）
+const localDT = (d) => { const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+const defaultOnceAt = () => { const d = new Date(Date.now() + 3600000); d.setMinutes(Math.ceil(d.getMinutes() / 5) * 5, 0, 0); return localDT(d); };
 
 // 定时任务的参数编辑：按工具的 params 画成输入框 / 下拉 / 勾选（跟工具表单同一套 paramsToFields），保存时按类型转回去
 function schedArgFields(t, args) {
@@ -1270,13 +1273,14 @@ function schedArgFields(t, args) {
 
 // 「定时运行…」：用表单上现在填的内容做参数，选怎么定时。传 task 就是修改已有的定时任务（时间和参数都能改）
 async function scheduleDialog(t, args, task = null) {
-  const st = task ? { mode: task.mode, time: task.time || '09:00', every: task.every || 60 } : { mode: 'daily', time: '09:00', every: 60 };
+  const st = task ? { mode: task.mode, time: task.time || '09:00', every: task.every || 60, at: task.at || defaultOnceAt() } : { mode: 'daily', time: '09:00', every: 60, at: defaultOnceAt() };
   const af = task ? schedArgFields(t, task.args) : null;
-  const p = modal(`<div class="modal-msg"><b>${task ? '修改定时任务' : '定时运行'}：${esc(task?.title || t?.title || t?.name || '')}</b><br><span class="muted">${task ? (af?.html ? '改完点保存，下一次按新的时间和参数运行。' : '这个工具的参数要在工具页面上填，这里只能改时间。') : '用表单上现在填的内容运行。'}BrowserX 开着时才会运行；打开软件时今天的时间已过、今天又还没跑过，会补跑一次。</span></div>
+  const p = modal(`<div class="modal-msg"><b>${task ? '修改定时任务' : '定时运行'}：${esc(task?.title || t?.title || t?.name || '')}</b><br><span class="muted">${task ? (af?.html ? '改完点保存，下一次按新的时间和参数运行。' : '这个工具的参数要在工具页面上填，这里只能改时间。') : '用表单上现在填的内容运行。'}BrowserX 开着时才会运行；到点时软件没开，下次打开时会补跑一次。</span></div>
     <div class="sc_form">
       <div class="sc_modes">${Object.entries(SCHED_MODES).map(([k, v]) => `<button type="button" class="dynchip${k === st.mode ? ' on' : ''}" data-m="${k}">${v}</button>`).join('')}</div>
-      <label class="sc_time"${st.mode === 'interval' ? ' hidden' : ''}>时间 <input type="time" value="${st.time}"></label>
+      <label class="sc_time"${['interval', 'once'].includes(st.mode) ? ' hidden' : ''}>时间 <input type="time" value="${st.time}"></label>
       <label class="sc_every"${st.mode === 'interval' ? '' : ' hidden'}>间隔 <input type="number" min="5" max="1440" value="${st.every}"> 分钟</label>
+      <label class="sc_at"${st.mode === 'once' ? '' : ' hidden'}>日期和时间 <input type="datetime-local" value="${st.at}" min="${localDT(new Date())}"></label>
     </div>
     ${af?.html || ''}
     <div class="sc_err" hidden></div>
@@ -1290,22 +1294,28 @@ async function scheduleDialog(t, args, task = null) {
   for (const b of box.querySelectorAll('[data-m]')) b.addEventListener('click', () => {
     st.mode = b.dataset.m;
     for (const x of box.querySelectorAll('[data-m]')) x.classList.toggle('on', x === b);
-    box.querySelector('.sc_time').hidden = st.mode === 'interval';
+    box.querySelector('.sc_time').hidden = ['interval', 'once'].includes(st.mode);
     box.querySelector('.sc_every').hidden = st.mode !== 'interval';
+    box.querySelector('.sc_at').hidden = st.mode !== 'once';
   });
   box.querySelector('.sc_time input').addEventListener('input', (e) => { st.time = e.target.value; });
   box.querySelector('.sc_every input').addEventListener('input', (e) => { st.every = Number(e.target.value); });
+  box.querySelector('.sc_at input').addEventListener('input', (e) => { st.at = e.target.value; });
   if (!(await p)) return;
   if (task) {
     try {
-      const u = await call('schedules:update', task.id, { mode: st.mode, time: st.mode === 'interval' ? task.time : st.time, every: st.mode === 'interval' ? st.every : undefined, args: newArgs });
+      const u = await call('schedules:update', task.id, { mode: st.mode, time: ['interval', 'once'].includes(st.mode) ? task.time : st.time, every: st.mode === 'interval' ? st.every : undefined, at: st.mode === 'once' ? st.at : undefined, args: newArgs });
       add('note', `已修改定时任务：${esc(u.title)}，${esc(schedRule(u))}。`, true);
     } catch (e) { add('note err', `✗ 定时任务没改成：${esc(e.message)}`, true); }
     return;
   }
   try {
-    const task = await call('schedules:add', { tool: t.name, title: t.title || t.name, args, mode: st.mode, time: st.time, every: st.mode === 'interval' ? st.every : undefined });
-    add('note', `已设定时运行：${esc(task.title)}，${esc(schedRule(task))}。在工具箱「定时任务」里可以暂停或删除。`, true);
+    const task = await call('schedules:add', { tool: t.name, title: t.title || t.name, args, mode: st.mode, time: st.time, every: st.mode === 'interval' ? st.every : undefined, at: st.mode === 'once' ? st.at : undefined });
+    add('note', `已设定时运行：${esc(task.title)}，${esc(schedRule(task))}。在工具箱「定时任务」里可以修改、暂停或删除。`, true);
+    // 设好之后跳到定时任务列表（新设的排在最上面）
+    if (cur.pageOpen) showToolList();
+    $('toolbox').hidden = false;
+    renderSchedules();
   } catch (e) { add('note err', `✗ 定时运行没设上：${esc(e.message)}`, true); }
 }
 
@@ -1327,14 +1337,14 @@ function drawSchedules(items) {
     d.className = `tbitem sc_item${x.enabled ? '' : ' off'}`;
     const args = Object.entries(x.args || {}).filter(([k]) => k !== '_form').map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`).join('，');
     d.innerHTML = `<div class="tbhead"><span class="tbname">${esc(x.title)}<small class="tbid">${esc(schedRule(x))}</small></span>
-        <span class="tbacts"><button class="ghost tbedit sc_edit">修改</button><button class="ghost tbedit sc_toggle">${x.enabled ? '暂停' : '启用'}</button><button class="ghost tbedit sc_run"${x.running ? ' disabled' : ''}>${x.running ? '运行中…' : '立即运行'}</button><button class="ghost tbedit sc_del">删除</button></span></div>
-      <div class="tbdesc">${x.enabled ? `下次：${esc(when(x.next))}` : '已暂停'} · 上次：${x.lastRun ? `${esc(when(x.lastRun))} ${x.lastOk ? '✓' : '✗'}` : '还没运行过'}${args ? `<br>参数：${esc(args.slice(0, 200))}` : ''}${x.lastRun && x.lastText ? `<br><span class="${x.lastOk ? 'muted' : 'sc_err'}">${esc(x.lastText.slice(0, 160))}</span>` : ''}</div>`;
+        <span class="tbacts"><button class="ghost tbedit sc_edit">修改</button>${x.mode === 'once' && x.lastRun ? '' : `<button class="ghost tbedit sc_toggle">${x.enabled ? '暂停' : '启用'}</button>`}<button class="ghost tbedit sc_run"${x.running ? ' disabled' : ''}>${x.running ? '运行中…' : '立即运行'}</button><button class="ghost tbedit sc_del">删除</button></span></div>
+      <div class="tbdesc">${x.mode === 'once' && x.lastRun ? '已完成（一次性，要再跑一次请点「修改」换个时间）' : x.enabled ? `下次：${esc(when(x.next))}` : '已暂停'} · 上次：${x.lastRun ? `${esc(when(x.lastRun))} ${x.lastOk ? '✓' : '✗'}` : '还没运行过'}${args ? `<br>参数：${esc(args.slice(0, 200))}` : ''}${x.lastRun && x.lastText ? `<br><span class="${x.lastOk ? 'muted' : 'sc_err'}">${esc(x.lastText.slice(0, 160))}</span>` : ''}</div>`;
     const err = (e) => add('note err', `✗ ${esc(e.message)}`, true);
     d.querySelector('.sc_edit').addEventListener('click', async () => {
       const tools = tbItems.length ? tbItems : await call('tools:list').catch(() => []);
       scheduleDialog(tools.find((y) => y.name === x.tool) || { name: x.tool, title: x.title }, x.args, x);
     });
-    d.querySelector('.sc_toggle').addEventListener('click', () => call('schedules:update', x.id, { enabled: !x.enabled }).catch(err));
+    d.querySelector('.sc_toggle')?.addEventListener('click', () => call('schedules:update', x.id, { enabled: !x.enabled }).catch(err));
     d.querySelector('.sc_run').addEventListener('click', () => call('schedules:runNow', x.id).catch(err));
     d.querySelector('.sc_del').addEventListener('click', async () => { if (await askConfirm(`删除定时任务「${x.title}」（${schedRule(x)}）？`)) call('schedules:remove', x.id).catch(err); });
     box.appendChild(d);

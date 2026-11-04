@@ -808,3 +808,4 @@ body.ui-latin #msgs .note.quota span+span::before{content:' '} /* 英文等：�
 .sc_modes .dynchip.on,.sc_modes .dynchip.on:hover:not(:disabled){background:var(--link);border-color:var(--link);color:#fff}
 /* 定时任务列表：卡片之间留 4px */
 .sc_list{display:flex;flex-direction:column;gap:4px}
+.sc_form .sc_at input{height:30px;padding:0 8px;font-size:13px;border:1px solid var(--line-strong);border-radius:7px;background:var(--card);color:var(--text)}
