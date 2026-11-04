@@ -1,6 +1,6 @@
 {
   "name": "browserx",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "左侧 Claude Code 助手，右侧浏览器",
   "main": "main.js",
   "private": true,
