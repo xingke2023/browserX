@@ -327,11 +327,13 @@ function onAgentEvent(ev) {
   // 后台标签要用户批准 / 回答时，在标签上亮提示
   if ((ev.type === 'permission' || ev.type === 'question') && T !== cur) { T.attn = true; renderTabs(); }
   switch (ev.type) {
-    case 'user':
-      add('msg user', esc(ev.text), true);
+    case 'user': {
+      const d = add('msg user', esc(ev.text), true);
+      if (ev.turn != null) userMsgEditable(d, ev.text, ev.turn);
       if (!T.chatTitle) T.chatTitle = ev.text.split('\n')[0].slice(0, 40);
       setRunning(true);
       break;
+    }
     case 'history':
       T.el.innerHTML = '';
       T.toolEls.clear(); T.permEls.clear();
@@ -421,6 +423,8 @@ function onAgentEvent(ev) {
     case 'error': add('note err', `✗ ${esc(ev.text)}`); break;
     case 'reset':
       setRunning(false);
+      // claude 进程关了（登录变了、改设置、出错…）：之前的消息对应的对话没了，不能再改
+      for (const b of T.el.querySelectorAll('.msg_edit')) b.remove();
       if (T.el.children.length) add('note', '— 对话已结束，下一条消息将开始新对话 —');
       break;
     case 'making':
@@ -456,6 +460,48 @@ async function sendMsg() {
   try { await call('agent:send', text, cur.id); } catch (e) { add('note err', errWithLink(e), true); }
 }
 $('btnSend').addEventListener('click', sendMsg);
+
+// 改之前发的消息：鼠标移到自己的消息上出现「修改」，改完发送 = 这条和下面的全部删掉，用新内容重新请求一次
+function userMsgEditable(d, text, turn) {
+  d.dataset.turn = turn;
+  d._text = text;
+  const b = document.createElement('button');
+  b.className = 'msg_edit';
+  b.textContent = TR('修改');
+  b.title = TR('修改这条消息并重新发送（下面的对话会删掉）');
+  b.addEventListener('click', (e) => { e.stopPropagation(); editUserMsg(d); });
+  d.appendChild(b);
+}
+function editUserMsg(d) {
+  const t = cur;
+  if (!t.el.contains(d) || d.classList.contains('editing')) return;
+  if (t.making) { add('note err', '制作工具时不能改之前的消息', true); return; }
+  const old = d._text;
+  d.classList.add('editing');
+  d.innerHTML = `<textarea class="msg_editbox"></textarea><div class="msg_editbar"><button class="msg_cancel">${esc(TR('取消'))}</button><button class="primary msg_resend">${esc(TR('发送'))}</button></div>`;
+  const ta = d.querySelector('textarea');
+  ta.value = old;
+  const fit = () => { ta.style.height = 'auto'; ta.style.height = `${Math.min(ta.scrollHeight + 2, 320)}px`; };
+  fit(); ta.addEventListener('input', fit);
+  ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+  const cancel = () => { d.classList.remove('editing'); d.innerHTML = esc(old); userMsgEditable(d, old, d.dataset.turn); };
+  const resend = async () => {
+    const text = ta.value.trim();
+    if (!text) return;
+    const turn = Number(d.dataset.turn);
+    while (d.nextSibling) d.nextSibling.remove();
+    d.remove();
+    if (!t.el.querySelector('.msg.user')) { t.chatTitle = ''; renderTabs(); } // 改的是第一条：标签名跟着新内容
+    t.toolEls.clear(); t.permEls.clear();
+    try { await call('agent:edit', turn, text, t.id); } catch (e) { inTab(t, () => add('note err', errWithLink(e), true)); }
+  };
+  d.querySelector('.msg_cancel').addEventListener('click', cancel);
+  d.querySelector('.msg_resend').addEventListener('click', resend);
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); resend(); }
+    else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+  });
+}
 $('input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMsg(); }
 });

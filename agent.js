@@ -1743,6 +1743,10 @@ ${old || '（无）'}`);
     // 走门户中转时先确认账号还有效：token 失效后 Claude Code 会一直重试 401，用户只会看到一直在转
     if (env.ANTHROPIC_AUTH_TOKEN) this.checkQuota(await this.ctx.checkAccount?.());
     this.stderr = '';
+    // 对话链：用来「改之前发的消息」。截断恢复时链尾就是截到的那条；全新会话链是空的；普通恢复历史的链尾要等收到第一条消息才知道
+    this.lastChainUuid = runOpts.resumeSessionAt || null;
+    this.chainFresh = !runOpts.resume;
+    if (!runOpts.resumeSessionAt) this.turns = [];
     this.inbox = new Inbox();
     this.q = sdk.query({
       prompt: this.inbox,
@@ -1767,6 +1771,7 @@ ${old || '（无）'}`);
         PostToolUse: [{ matcher: 'Edit|Write|MultiEdit', hooks: [async (input) => this.checkDraftHook(input)] }] },
         pathToClaudeCodeExecutable: nativeClaude(),
         ...(runOpts.resume ? { resume: runOpts.resume } : {}),
+        ...(runOpts.resumeSessionAt ? { resumeSessionAt: runOpts.resumeSessionAt } : {}),
         stderr: (d) => (this.stderr = (this.stderr + d).slice(-2000)),
       },
     });
@@ -1789,6 +1794,7 @@ ${old || '（无）'}`);
           if (m.type === 'result') this.clearing = false;
           if (m.type !== 'system') continue;
         }
+        if ((m.type === 'assistant' || m.type === 'user') && m.uuid && !m.isReplay) this.lastChainUuid = m.uuid;
         if (m.type === 'system' && m.subtype === 'init') {
           this.sessionId = m.session_id;
           this.tagged = false;
@@ -1860,7 +1866,12 @@ ${old || '（无）'}`);
     if (!this.q) await this.start();
     this.pageNotes = [];
     this.running = true;
-    this.ctx.emit({ type: 'user', text: shown });
+    // 记下这条消息之前的链尾：改这条消息时截回到那里重新发（程序代发、界面显示的跟实际发的不一样的消息不让改）
+    this.turns ||= [];
+    const turn = { at: this.lastChainUuid, fresh: !this.lastChainUuid && this.chainFresh !== false };
+    this.turns.push(turn);
+    const editable = shown === text && !this.making && !!(turn.at || turn.fresh);
+    this.ctx.emit({ type: 'user', text: shown, ...(editable ? { turn: this.turns.length - 1 } : {}) });
     // 对话进行中换了回复语言：系统提示是开会话时定的，这条消息前面带一句新规则（用户看不到），不用开新对话
     const lang = this.replyLang();
     if (lang !== this.sessionLang) {
@@ -1882,7 +1893,29 @@ ${old || '（无）'}`);
       if (this.running) { this.reset(); return; } // 停不下来：只好重开进程
     }
     this.clearing = true;
+    this.turns = []; this.lastChainUuid = null; this.chainFresh = true;
     this.inbox.push({ type: 'user', message: { role: 'user', content: '/clear' }, parent_tool_use_id: null });
+  }
+
+  // 改之前发的第 i 条消息：它和之后的对话都丢掉，用新内容重新发。
+  // 是这轮对话的第一条就直接 /clear 再发（进程不关）；后面的消息要截断对话，SDK 只能在打开会话时截（resume + resumeSessionAt），所以重开一次进程
+  async edit(i, text) {
+    if (!text?.trim()) return;
+    if (this.making) throw new Error('制作工具时不能改之前的消息');
+    const turn = this.turns?.[i];
+    if (!turn || !(turn.at || turn.fresh)) throw new Error('这条消息改不了了（对话已经重新开始过），直接在下面发新消息吧');
+    if (this.running) {
+      await this.stop();
+      for (let k = 0; k < 50 && this.running; k++) await new Promise((r) => setTimeout(r, 100));
+      if (this.running) throw new Error('助手还停不下来，稍后再试');
+    }
+    if (!turn.at) { await this.clear(); return this.send(text); }
+    const sid = this.sessionId;
+    const keep = this.turns.slice(0, i);
+    this.closeSession();
+    this.turns = keep;
+    await this.start({ resume: sid, resumeSessionAt: turn.at });
+    return this.send(text);
   }
 
   async stop() {
@@ -1901,6 +1934,12 @@ ${old || '（无）'}`);
   }
 
   reset() {
+    this.closeSession();
+    this.ctx.emit({ type: 'reset' });
+  }
+
+  // 关掉当前 claude 进程（不发 reset 事件，界面不提示「对话已结束」）
+  closeSession() {
     const q = this.q;
     this.q = null;
     this.sessionId = null;
@@ -1909,8 +1948,8 @@ ${old || '（无）'}`);
     this.inbox = null;
     this.running = false;
     this.clearing = false;
+    this.turns = []; this.lastChainUuid = null;
     try { q?.close(); } catch {}
-    this.ctx.emit({ type: 'reset' });
   }
 }
 

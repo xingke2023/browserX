@@ -244,7 +244,15 @@ body.ui-latin #makingBar .mk_btns{gap:10px;flex-wrap:wrap}
 #msgs{flex:1;min-height:0;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px}
 #msgs:empty::before{content:var(--empty-hint, '试试输入：「打开 baidu.com 搜索 BrowserX」');white-space:pre-wrap;color:var(--muted);font-size:13px;margin:auto 10px;text-align:center}
 .msg{padding:8px 12px;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%}
-.msg.user{align-self:flex-end;max-width:88%;background:var(--user)}
+.msg.user{align-self:flex-end;max-width:88%;background:var(--user);position:relative}
+/* 改之前发的消息：鼠标移上去在气泡左边出现「修改」 */
+#msgs .msg_edit{position:absolute;right:100%;top:50%;transform:translateY(-50%);margin-right:6px;padding:2px 8px;font-size:12px;line-height:18px;white-space:nowrap;color:var(--muted);background:var(--card);border:1px solid var(--line-strong);border-radius:6px;cursor:pointer;opacity:0;transition:opacity .12s}
+#msgs .msg.user:hover .msg_edit,#msgs .msg_edit:focus-visible{opacity:1}
+#msgs .msg_edit:hover{color:var(--text);border-color:var(--muted)}
+#msgs .msg.user.editing{align-self:stretch;max-width:100%;white-space:normal}
+#msgs .msg_editbox{display:block;width:100%;box-sizing:border-box;min-height:44px;resize:vertical;font:inherit;line-height:1.5;padding:6px 8px;color:var(--text);background:var(--card);border:1px solid var(--line-strong);border-radius:8px;outline:none}
+#msgs .msg_editbox:focus{border-color:var(--link)}
+#msgs .msg_editbar{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
 .msg.ai{align-self:stretch;padding:2px 2px}
 .msg.ai code,.perm code{font:12px Menlo,monospace;background:var(--code);padding:1px 4px;border-radius:4px}
 .msg.ai pre{font:12px/1.5 Menlo,monospace;background:var(--code);padding:8px 10px;border-radius:8px;overflow-x:auto;white-space:pre;margin:6px 0}
