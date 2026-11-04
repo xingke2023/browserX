@@ -323,6 +323,8 @@
  "完成": "Done",
  "完整参数": "Full Parameters",
  "完整请求/响应（已打码）用 Read 读上面的文件。": "Use Read on the file above to see the full requests/responses (redacted).",
+ "官方": "Official",
+ "官方插件：BrowserX 官方发布并认证": "Official plugin: published and verified by BrowserX",
  "定时任务": "Scheduled Tasks",
  "定时任务{0}：{1}": "Scheduled task {0}: {1}",
  "定时任务不存在": "Scheduled task not found",

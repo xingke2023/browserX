@@ -323,6 +323,8 @@
  "完成": "Terminer",
  "完整参数": "Paramètres complets",
  "完整请求/响应（已打码）用 Read 读上面的文件。": "Pour consulter la requête/réponse complète (données masquées), lisez le fichier ci-dessus avec Read.",
+ "官方": "Officiel",
+ "官方插件：BrowserX 官方发布并认证": "Plugin officiel : publié et certifié par BrowserX",
  "定时任务": "Tâches planifiées",
  "定时任务{0}：{1}": "Tâche planifiée {0} : {1}",
  "定时任务不存在": "Tâche planifiée introuvable",

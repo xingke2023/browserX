@@ -323,6 +323,8 @@
  "完成": "Finalizar",
  "完整参数": "Parámetros completos",
  "完整请求/响应（已打码）用 Read 读上面的文件。": "Para ver la solicitud y la respuesta completas (con datos enmascarados), usa Read para leer el archivo de arriba.",
+ "官方": "Oficial",
+ "官方插件：BrowserX 官方发布并认证": "Complemento oficial: publicado y verificado por BrowserX",
  "定时任务": "Tareas programadas",
  "定时任务{0}：{1}": "Tarea programada {0}: {1}",
  "定时任务不存在": "La tarea programada no existe",
