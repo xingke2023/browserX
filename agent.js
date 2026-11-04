@@ -1871,6 +1871,7 @@ ${old || '（无）'}`);
     const turn = { at: this.lastChainUuid, fresh: !this.lastChainUuid && this.chainFresh !== false };
     this.turns.push(turn);
     const editable = shown === text && !this.making && !!(turn.at || turn.fresh);
+    if (editable) turn.mem = this.memSnapshot(); // 改这条消息时把 Claude 的自动记忆也退回到这条发出之前
     this.ctx.emit({ type: 'user', text: shown, ...(editable ? { turn: this.turns.length - 1 } : {}) });
     // 对话进行中换了回复语言：系统提示是开会话时定的，这条消息前面带一句新规则（用户看不到），不用开新对话
     const lang = this.replyLang();
@@ -1909,6 +1910,8 @@ ${old || '（无）'}`);
       for (let k = 0; k < 50 && this.running; k++) await new Promise((r) => setTimeout(r, 100));
       if (this.running) throw new Error('助手还停不下来，稍后再试');
     }
+    // 截掉的那段对话里 Claude 可能往自动记忆里写了东西（Write / Bash 都有可能，SDK 的文件回滚管不到 Bash），一起退回去
+    if (turn.mem) this.memRestore(turn.mem);
     if (!turn.at) { await this.clear(); return this.send(text); }
     const sid = this.sessionId;
     const keep = this.turns.slice(0, i);
@@ -1936,6 +1939,44 @@ ${old || '（无）'}`);
   reset() {
     this.closeSession();
     this.ctx.emit({ type: 'reset' });
+  }
+
+  // Claude Code 的自动记忆目录（~/.claude/projects/<cwd 换成 ->/memory/），里面是几个小 md 文件
+  memoryDir() {
+    const dir = this.ctx.getCfg().cwd || os.homedir();
+    return path.join(os.homedir(), '.claude', 'projects', dir.replace(/[^a-zA-Z0-9]/g, '-'), 'memory');
+  }
+  memSnapshot() {
+    const snap = {};
+    try {
+      const d = this.memoryDir();
+      for (const f of fs.readdirSync(d)) {
+        const p = path.join(d, f);
+        const st = fs.statSync(p);
+        if (st.isFile() && st.size <= 256 * 1024) snap[f] = fs.readFileSync(p);
+      }
+    } catch {}
+    return snap;
+  }
+  // 退回快照：之后新建的记忆文件删掉，改过 / 删掉的按快照写回
+  memRestore(snap) {
+    const d = this.memoryDir();
+    try {
+      for (const f of fs.readdirSync(d)) {
+        const p = path.join(d, f);
+        if (!(f in snap) && fs.statSync(p).isFile()) fs.rmSync(p);
+      }
+    } catch {}
+    try {
+      const names = Object.keys(snap);
+      if (names.length) fs.mkdirSync(d, { recursive: true });
+      for (const f of names) {
+        const p = path.join(d, f);
+        let cur = null;
+        try { cur = fs.readFileSync(p); } catch {}
+        if (!cur || !cur.equals(snap[f])) fs.writeFileSync(p, snap[f]);
+      }
+    } catch (e) { this.ctx.emit({ type: 'note', text: `— 记忆没能完全退回：${e.message} —` }); }
   }
 
   // 关掉当前 claude 进程（不发 reset 事件，界面不提示「对话已结束」）
