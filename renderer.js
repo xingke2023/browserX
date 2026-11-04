@@ -1329,7 +1329,7 @@ async function scheduleDialog(t, args, task = null) {
 
 async function renderSchedules() {
   const list = $('tb_list');
-  list.innerHTML = `<button class="ghost tbback">← 我的工具</button>
+  list.innerHTML = `<div class="sc_top"><button class="ghost tbback">← 我的工具</button><h2 class="sc_title">定时任务</h2><span></span></div>
     <p class="hint sc_hint">定时任务在后台的「定时任务」对话里直接运行工具（不经过助手、不花 token），跑完发系统通知。只在 BrowserX 开着时运行。要新建，打开一个工具，填好表单后点「定时运行」。最新设置或修改的排在最上面。</p>
     <div class="sc_list"><div class="hempty">加载中…</div></div>`;
   list.querySelector('.tbback').addEventListener('click', renderToolboxList);

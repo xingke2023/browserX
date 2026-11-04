@@ -847,3 +847,7 @@ p.tbimp-ow{display:block;margin:8px 0 0;padding:8px 10px;border-radius:8px;backg
 .sch_row .sch_st{font-weight:700;color:var(--ok)}
 .sch_row.fail .sch_st{color:var(--err)}
 .sch_txt{margin-top:4px;font-size:12.5px;line-height:1.5;color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere;max-height:120px;overflow-y:auto}
+/* 定时任务页：顶部一行，左边返回，正中间标题 */
+.sc_top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-bottom:4px}
+.sc_top .tbback{justify-self:start}
+.sc_top .sc_title{margin:0;font-size:16px;font-weight:700;color:var(--text);text-align:center}
