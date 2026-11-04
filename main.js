@@ -791,7 +791,8 @@ const account = new Account({
 handle('account:state', () => account.state());
 handle('account:login', () => account.login());
 handle('account:cancel', () => account.cancel());
-handle('account:logout', () => account.logout());
+// 退出 BrowserX 账号：这个账号在本机记住的插件账号密码一起清掉
+handle('account:logout', async () => { const key = credAccount(); await account.logout(); clearAccountCreds(key); });
 handle('account:refresh', () => account.refresh());
 // 邀约有礼：邀约链接 / 二维码 / 积分，积分兑换会员天数（兑换后刷新账号状态，会员到期日跟着变）
 handle('invite:get', () => account.api('/invite'));
@@ -859,6 +860,47 @@ handle('market:install', async (id) => {
   fs.rmSync(file, { force: true });
   return { ...preview, market: { title: r.title, version: r.version } };
 });
+// ---------------------------------------------------------------- 插件记住的账号密码
+// 用户在插件表单上勾了「记住账号密码」：只存账号密码那几栏（其它参数不存），用 macOS 钥匙串（safeStorage）加密，
+// 存在 <userData>/tool-creds.json：{ <BrowserX 账号>: { <工具 ID>: 加密后的 base64 } }。按 BrowserX 账号分开（换账号看不到），
+// 没登录时记在 'local' 下。不发给模型、不进对话；删除插件、退出账号时清掉。safeStorage 不可用就不存（不落明文）
+const CRED_FILE = () => path.join(app.getPath('userData'), 'tool-creds.json');
+const readCreds = () => { try { return JSON.parse(fs.readFileSync(CRED_FILE(), 'utf8')); } catch { return {}; } };
+const writeCreds = (all) => fs.writeFileSync(CRED_FILE(), JSON.stringify(all, null, 1), { mode: 0o600 });
+const credAccount = () => { const st = account.state(); return (st?.loggedIn && (st.user?.email || st.user?.name)) || 'local'; };
+function clearToolCreds(tool) {
+  const all = readCreds();
+  let changed = false;
+  for (const acc of Object.keys(all)) if (all[acc][tool]) { delete all[acc][tool]; changed = true; }
+  if (changed) writeCreds(all);
+}
+function clearAccountCreds(acc) {
+  const all = readCreds();
+  if (all[acc]) { delete all[acc]; writeCreds(all); }
+}
+handle('creds:get', (tool) => {
+  const enc = readCreds()[credAccount()]?.[String(tool)];
+  if (!enc || !safeStorage.isEncryptionAvailable()) return null;
+  try { return JSON.parse(safeStorage.decryptString(Buffer.from(enc, 'base64'))); } catch { return null; }
+});
+handle('creds:set', (tool, values) => {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('这台电脑上没法加密保存（钥匙串不可用），没有记住账号密码');
+  const clean = Object.fromEntries(Object.entries(values || {}).filter(([, v]) => typeof v === 'string' && v !== '').map(([k, v]) => [k, v.slice(0, 500)]));
+  const all = readCreds();
+  const acc = credAccount();
+  all[acc] ||= {};
+  if (Object.keys(clean).length) all[acc][String(tool)] = safeStorage.encryptString(JSON.stringify(clean)).toString('base64');
+  else delete all[acc][String(tool)];
+  writeCreds(all);
+  return true;
+});
+handle('creds:clear', (tool) => {
+  const all = readCreds();
+  const acc = credAccount();
+  if (all[acc]?.[String(tool)]) { delete all[acc][String(tool)]; writeCreds(all); }
+  return true;
+});
+
 // ---------------------------------------------------------------- 工具更新
 // 从市场装过的工具，作者发了新版本、管理员审核通过后：启动 40 秒后和每 4 小时问一次网站（market/updates），
 // 工具箱里显示「有新版本」+「更新」按钮。开着「自动更新工具」时直接装上，但新版本比旧版本多用了敏感能力
@@ -938,6 +980,7 @@ handle('tools:delete', async (name) => {
   const files = cur.agent.toolFiles(name);
   for (const f of files) await shell.trashItem(f);
   vault.remove(name); // 加密工具的密钥一起删（废纸篓里的 .bxt 就打不开了，要用请重新从市场安装）
+  clearToolCreds(name); // 记住的账号密码也删
   const installed = readInstalled();
   if (installed[name]) { delete installed[name]; fs.writeFileSync(INSTALLED_FILE(), JSON.stringify(installed, null, 1)); }
   for (const t of tabs.values()) t.agent.reloadCustomTools();

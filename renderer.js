@@ -906,6 +906,26 @@ async function launchTool(t) {
 // 没写 formSpec 的工具：按 params（agent.js listCustomTools 内省出来的）生成标准表单字段。
 // 标题取参数说明的第一小段（到第一个冒号 / 逗号 / 括号为止，太长就用参数名），完整说明放悬停提示
 const KEY_LABELS = { json: '原始 JSON', open: '打开详情页', csv: '导出 CSV', download: '存成文件', publish: '直接发表', draftOnly: '只存草稿', topics: '话题', tags: '标签', days: '天数', images: '图片', all: '全部年度', limit: '数量', page: '页码', keyword: '关键词', q: '搜索', url: '网址', file: '文件', path: '路径', date: '日期', from: '从', to: '到', start: '开始', end: '结束' };
+// ---------------------------------------------------------------- 插件的账号密码栏（记住账号密码）
+// 哪些字段算账号 / 密码：formSpec 字段可以直接写 secret: 'username' | 'password'；否则按参数名，或说明 / 标题开头的词判断。
+// 只认这两类（「代理号」之类的业务参数不算），其它参数不记
+const PASS_KEY = /^(pass(word)?|passwd|pwd|pin)$/i, USER_KEY = /^(user(_?name)?|login(_?(id|name))?|account(_?(id|name))?|uid)$/i;
+const PASS_WORD = /^\s*(密码|密碼|口令|登入密码|登入密碼|登录密码)/, USER_WORD = /^\s*(用户名|用戶名|登入名|登录名|登入代[號号]|登录账号|登入帳號|账号|帳號)/;
+function credKind(f) {
+  if (f.secret === 'password' || f.secret === 'username') return f.secret;
+  if (!['string', undefined].includes(f.kind) || !f.key) return null;
+  if (PASS_KEY.test(f.key) || PASS_WORD.test(f.label || '') || PASS_WORD.test(f.title || '')) return 'password';
+  if (USER_KEY.test(f.key) || USER_WORD.test(f.label || '') || USER_WORD.test(f.title || '')) return 'username';
+  return null;
+}
+// 显示 / 发给助手之前把密码栏换成 ***（参数名像密码的也打码，免得漏掉）
+function maskArgs(args, fields = []) {
+  const pw = new Set(fields.filter((f) => credKind(f) === 'password').map((f) => f.key));
+  const out = {};
+  for (const [k, v] of Object.entries(args || {})) out[k] = (pw.has(k) || PASS_KEY.test(k)) && v ? '***' : v;
+  return out;
+}
+
 function paramsToFields(params, values) {
   const short = (p) => {
     // 去掉「true 时 / true 则 / true 才会」「可选，」这类开头，再取第一小段；勾选框的字在框旁边，可以长一点
@@ -936,6 +956,7 @@ function buildDynamicForm(t) {
   form.className = 'tbform tbdyn';
   form.innerHTML = '<div class="muted">正在读取表单…</div>';
   let seq = 0, timer = null, submit = '运行';
+  const credState = { loaded: false, saved: null, save: null }; // 记住的账号密码（只读一次，重画表单时沿用）；「记住」默认勾上
   const fid = (key) => `dyn_${tab.id}_${t.name}_${key}`.replace(/[^\w-]/g, '_');
 
   const readField = (f, el) => {
@@ -977,10 +998,12 @@ function buildDynamicForm(t) {
       const attrs = `id="${id}"${f.placeholder ? ` placeholder="${esc(f.placeholder)}"` : ''}${f.disabled ? ' disabled' : ''}${chars ? ` style="--w:${chars}"` : ''}`;
       if (f.kind === 'enum') control = `<select ${attrs}>${(f.options || []).map((o) => { const v = typeof o === 'object' ? o.value : o, l = typeof o === 'object' ? (o.label ?? o.value) : o; return `<option value="${esc(v)}"${String(v) === String(f.value ?? '') ? ' selected' : ''}>${esc(l)}</option>`; }).join('')}</select>`;
       else if (f.kind === 'text') control = `<textarea ${attrs}>${esc(f.value ?? '')}</textarea>`;
-      else control = `<input ${attrs}${f.kind === 'number' ? ` type="number"${f.min != null ? ` min="${f.min}"` : ''}${f.max != null ? ` max="${f.max}"` : ''}${f.step != null ? ` step="${f.step}"` : ''}` : ''} value="${esc(f.value ?? '')}">`;
+      else control = `<input ${attrs}${f.kind === 'number' ? ` type="number"${f.min != null ? ` min="${f.min}"` : ''}${f.max != null ? ` max="${f.max}"` : ''}${f.step != null ? ` step="${f.step}"` : ''}` : ''}${credKind(f) === 'password' ? ' type="password" autocomplete="new-password"' : credKind(f) === 'username' ? ' autocomplete="off" spellcheck="false"' : ''} value="${esc(f.value ?? '')}">`;
       return `<div class="${cls}"${f.title ? ` title="${esc(f.title)}"` : ''}><label for="${id}">${esc(f.label || f.key)}${req}</label>${hint}${control}</div>`;
     }).join('');
-    form.innerHTML = `${html}<div class="tberr" hidden></div><div class="row"><button class="primary tbrun"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"/></svg><span>${esc(submit)}</span></button>${t.draft ? '' : '<button class="ghost tbsched" title="按表单上现在填的内容，每天 / 工作日定时或每隔一段时间自动运行（BrowserX 开着时）"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>定时运行</span></button>'}</div>`;
+    const credFields = t.draft ? [] : fields.filter((f) => credKind(f));
+    const credRow = credFields.length ? `<div class="tbf full cred_row"><label class="tbcheck cred_rem" title="只记住账号密码这几栏（其它参数不记），用 macOS 钥匙串加密保存在本机，不会上传，也不会发给助手"><input type="checkbox" class="cred_remember" checked><span>记住账号密码（加密保存在本机）</span></label><button type="button" class="cred_clear"${credState.saved ? '' : ' hidden'}>清除已记住的</button></div>` : '';
+    form.innerHTML = `${html}${credRow}<div class="tberr" hidden></div><div class="row"><button class="primary tbrun"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"/></svg><span>${esc(submit)}</span></button>${t.draft ? '' : '<button class="ghost tbsched" title="按表单上现在填的内容，每天 / 工作日定时或每隔一段时间自动运行（BrowserX 开着时）"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>定时运行</span></button>'}</div>`;
     for (const f of fields) {
       if (!f.key || f.kind === 'note' || f.kind === 'section') continue;
       if (f.kind === 'hidden') { values[f.key] = f.value; continue; }
@@ -1005,6 +1028,47 @@ function buildDynamicForm(t) {
       if (f.refresh === true && f.kind !== 'boolean' && f.kind !== 'enum') el.addEventListener('change', () => later(0)); // 数字 / 文字：改完离开再算
     }
     if (focus) form.querySelector('#' + focus)?.focus();
+    if (credFields.length) {
+      const fill = (saved) => {
+        for (const f of credFields) {
+          if (!saved?.[f.key] || values[f.key]) continue; // 用户已经填了的不覆盖
+          values[f.key] = saved[f.key];
+          const el = form.querySelector('#' + fid(f.key));
+          if (el) el.value = saved[f.key];
+        }
+      };
+      if (credState.loaded) fill(credState.saved);
+      else {
+        credState.loaded = true;
+        call('creds:get', t.name).then((saved) => {
+          credState.saved = saved;
+          if (!saved || !form.isConnected) return;
+          fill(saved);
+          const chk = form.querySelector('.cred_remember');
+          if (chk) chk.checked = true;
+          form.querySelector('.cred_clear')?.removeAttribute('hidden');
+        }).catch(() => {});
+      }
+      const pick = () => Object.fromEntries(credFields.map((f) => [f.key, String(values[f.key] ?? '')]).filter(([, v]) => v));
+      const chk = form.querySelector('.cred_remember'), clr = form.querySelector('.cred_clear');
+      credState.save = async () => {
+        if (!chk?.checked) return;
+        const v = pick();
+        if (!Object.keys(v).length) return;
+        try { await call('creds:set', t.name, v); credState.saved = v; clr.hidden = false; }
+        catch (e) { const errEl = form.querySelector('.tberr'); errEl.hidden = false; errEl.textContent = e.message; }
+      };
+      chk?.addEventListener('change', async () => {
+        if (chk.checked) await credState.save();
+        else { await call('creds:clear', t.name).catch(() => {}); credState.saved = null; clr.hidden = true; }
+      });
+      clr?.addEventListener('click', async () => {
+        await call('creds:clear', t.name).catch(() => {});
+        credState.saved = null;
+        clr.hidden = true; // 「记住」还勾着：下次运行时按新填的重新记
+        for (const f of credFields) { values[f.key] = ''; const el = form.querySelector('#' + fid(f.key)); if (el) el.value = ''; }
+      });
+    }
     // 把表单上现在的内容变成工具参数（运行、定时运行共用）；不合法时在表单上显示原因，返回 null
     const collect = () => {
       const errEl = form.querySelector('.tberr');
@@ -1036,7 +1100,9 @@ function buildDynamicForm(t) {
     form.querySelector('.tbrun').addEventListener('click', async () => {
       if (tab.tbRunning) { const errEl = form.querySelector('.tberr'); errEl.hidden = false; errEl.textContent = '这个标签已经有一个工具在运行，等它跑完（或者开个新标签）'; return; }
       const args = collect();
-      if (args) await runToolArgs(t, args, form);
+      if (!args) return;
+      await credState.save?.(); // 勾着「记住账号密码」：保存这次填的
+      await runToolArgs(t, args, form, fields);
     });
     form.querySelector('.tbsched')?.addEventListener('click', () => { const args = collect(); if (args) scheduleDialog(t, args); });
   }
@@ -1045,7 +1111,8 @@ function buildDynamicForm(t) {
 }
 
 // 运行一个工具（静态表单、动态表单共用）：对话里显示「运行中」和停止按钮，结果 / 报错落回发起运行的那个标签
-async function runToolArgs(t, args, form) {
+async function runToolArgs(t, args, form, fields = []) {
+  const shown = JSON.stringify(maskArgs(args, fields)); // 写进过程记录、发给助手的参数：密码换成 ***
   const tab = cur;
   // 正在修改这个工具时，它的正式版页面跑的是工具箱里的旧版：不跑，提示去横幅上试运行草稿
   if (!t.draft && tab.making?.editing && tab.making.name === t.name) {
@@ -1080,7 +1147,7 @@ async function runToolArgs(t, args, form) {
         const out = String(r);
         if (!(await beginMaking({ edit: t.name }))) return;
         // 不往发送框里塞一大段文字：这次运行的参数和结果悄悄记进过程记录（助手进入修改后会先读），用户只要说哪里不好
-        call('making:log', `修改前刚直接运行过一次：参数 ${JSON.stringify(args)}；结果：${out.length > 1500 ? out.slice(0, 1500) + '…（后面省略）' : out}`).catch(() => {});
+        call('making:log', `修改前刚直接运行过一次：参数 ${shown}；结果：${out.length > 1500 ? out.slice(0, 1500) + '…（后面省略）' : out}`).catch(() => {});
         focusInput();
       });
     }
@@ -1094,12 +1161,12 @@ async function runToolArgs(t, args, form) {
     const d = add('note err', `✗ ${esc(e.message)}<div style="margin-top:6px"><button class="tbfix">${t.draft ? '让助手诊断并修复' : '打开修改工具'}</button></div>`, true);
     d.querySelector('.tbfix').addEventListener('click', async () => {
       if (t.draft) {
-        $('input').value = `试运行草稿 ${t.name} 失败了。\n参数：${JSON.stringify(args)}\n错误：${e.message}\n请诊断真正原因（用 mcp__browser__* 实际查一下，不要猜），然后改草稿。`;
+        $('input').value = `试运行草稿 ${t.name} 失败了。\n参数：${shown}\n错误：${e.message}\n请诊断真正原因（用 mcp__browser__* 实际查一下，不要猜），然后改草稿。`;
         sendMsg();
         return;
       }
       if (!(await beginMaking({ edit: t.name }))) return;
-      $('input').value = `刚才直接运行这个工具失败了。\n参数：${JSON.stringify(args)}\n错误：${e.message}\n需要的话先用浏览器手动把这次要做的事做完，再诊断真正原因（用 mcp__browser__* 实际查一下，不要猜），然后改草稿；改好后告诉我改了什么，我来试运行。`;
+      $('input').value = `刚才直接运行这个工具失败了。\n参数：${shown}\n错误：${e.message}\n需要的话先用浏览器手动把这次要做的事做完，再诊断真正原因（用 mcp__browser__* 实际查一下，不要猜），然后改草稿；改好后告诉我改了什么，我来试运行。`;
       sendMsg();
     });
   } finally {
@@ -1344,7 +1411,7 @@ function drawSchedules(items) {
   for (const x of items) {
     const d = document.createElement('div');
     d.className = `tbitem sc_item${x.enabled ? '' : ' off'}`;
-    const args = Object.entries(x.args || {}).filter(([k]) => k !== '_form').map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`).join('，');
+    const args = Object.entries(maskArgs(x.args)).filter(([k]) => k !== '_form').map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`).join('，');
     d.innerHTML = `<div class="tbhead"><span class="tbname">${esc(x.title)}<small class="tbid">${esc(schedRule(x))}</small></span>
         <span class="tbacts"><button class="ghost tbedit sc_hist">执行情况</button><button class="ghost tbedit sc_edit">修改</button>${x.mode === 'once' && x.lastRun ? '' : `<button class="ghost tbedit sc_toggle">${x.enabled ? '暂停' : '启用'}</button>`}<button class="ghost tbedit sc_run"${x.running ? ' disabled' : ''}>${x.running ? '运行中…' : '立即运行'}</button><button class="ghost tbedit sc_del">删除</button></span></div>
       <div class="tbdesc">${x.runs ? `共运行 ${x.runs} 次 · 成功 ${x.okRuns} 次${x.runs > x.okRuns ? ` · 失败 ${x.runs - x.okRuns} 次` : ''}<br>` : ''}${x.mode === 'once' && x.lastRun ? '已完成（一次性，要再跑一次请点「修改」换个时间）' : x.enabled ? `下次：${esc(when(x.next))}` : '已暂停'} · 上次：${x.lastRun ? `${esc(when(x.lastRun))} ${x.lastOk ? '✓' : '✗'}` : '还没运行过'}${args ? `<br>参数：${esc(args.slice(0, 200))}` : ''}${x.lastRun && x.lastText ? `<br><span class="${x.lastOk ? 'muted' : 'sc_err'}">${esc(x.lastText.slice(0, 160))}</span>` : ''}</div>`;
