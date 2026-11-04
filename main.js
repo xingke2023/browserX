@@ -711,7 +711,8 @@ handle('history:clear', async () => {
 });
 handle('history:prune', () => cur.agent.pruneHistory()); // 打开历史时顺手把超过 30 条的旧记录删掉
 
-handle('tools:list', () => cur.agent.listCustomTools().map((t) => ({ ...t, market: isMarketTool(t.name) })));
+// fromMarket：从插件市场下载安装的（包括自己发布后又装回来的），工具箱里不显示「发布」
+handle('tools:list', () => { const inst = readInstalled(); return cur.agent.listCustomTools().map((t) => ({ ...t, market: isMarketTool(t.name), fromMarket: !!inst[t.name] })); });
 handle('tools:run', (name, args, tab) => tabOf(tab).agent.runCustomTool(name, args));
 handle('tools:form', (name) => cur.agent.toolFormUrl(name));
 handle('tools:formSpec', (name, values, tab) => tabOf(tab).agent.toolFormSpec(name, values));
@@ -947,7 +948,8 @@ handle('tools:delete', async (name) => {
 handle('market:publishInfo', async (name) => {
   const { secrets } = cur.agent.exportInfo(name);
   const [mine, meta] = await Promise.all([account.api('/my-tools'), account.api('/meta')]);
-  return { secrets, remote: mine.find((t) => t.name === name) || null, meta };
+  // developer：有没有开发者认证（网站后台管理员开通；没开通不能发布）
+  return { secrets, remote: mine.find((t) => t.name === name) || null, meta, developer: meta.can_publish !== false };
 });
 handle('market:publish', async (name, form) => {
   const { code, secrets } = cur.agent.exportInfo(name);
