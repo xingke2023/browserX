@@ -1610,7 +1610,7 @@ ${old || '（无）'}`);
   }
 
   // encrypt：插件市场里别人的工具，加密存成 <name>.bxt（见 toolcrypt.js）
-  async importConfirm({ overwrite = false, encrypt = false } = {}) {
+  async importConfirm({ overwrite = false, encrypt = false, quiet = false } = {}) {
     const imp = this.pendingImport;
     if (!imp) throw new Error('没有待导入的工具，请重新选择文件');
     const dir = this.ctx.getToolsDir();
@@ -1634,7 +1634,7 @@ ${old || '（无）'}`);
     this.pendingImport = null;
     const live = await this.reloadCustomTools();
     this.ctx.toolsChanged?.();
-    this.ctx.emit({ type: 'note', text: `— 已${encrypt ? '安装' : '导入'}工具 ${def.title ? `${def.title}（${imp.name}）` : imp.name}${overwrite ? '（覆盖了原来的版本）' : ''}${live ? '，当前对话里可以直接用' : ''} —` });
+    if (!quiet) this.ctx.emit({ type: 'note', text: `— 已${encrypt ? '安装' : '导入'}工具 ${def.title ? `${def.title}（${imp.name}）` : imp.name}${overwrite ? '（覆盖了原来的版本）' : ''}${live ? '，当前对话里可以直接用' : ''} —` });
     return { name: imp.name };
   }
 
@@ -1867,4 +1867,4 @@ ${old || '（无）'}`);
   }
 }
 
-module.exports = { Agent, CB_TAG };
+module.exports = { Agent, CB_TAG, scanRisks };

@@ -643,6 +643,34 @@ function makePager(list, itemSel, size, state) {
 const tbState = { page: 0, q: '', fav: false };
 let tbPager = null;
 let tbItems = [];
+// 市场工具的新版本（main.js checkToolUpdates）：name → { version, from, changelog, can_install, reason, needsConfirm }
+let toolUpdates = {};
+let autoUpdateTools = true;
+call('tools:updates').then((u) => { toolUpdates = u || {}; }).catch(() => {});
+call('cfg:get').then((c) => { autoUpdateTools = c.autoUpdateTools !== false; }).catch(() => {});
+api.on('toolUpdates', (u) => {
+  toolUpdates = u || {};
+  if (!$('toolbox').hidden && $('tb_list').querySelector('.tbcards')) drawToolCards();
+});
+// 点「更新」：直接装新版本；新版本多用了敏感能力时，改走跟安装一样的确认页
+async function updateTool(t, btn, batch = false) {
+  const u = toolUpdates[t.name];
+  if (!u) return;
+  btn.disabled = true;
+  btn.textContent = '更新中…';
+  try {
+    const r = await call('tools:update', t.name);
+    if (r?.needsConfirm) {
+      add('note warn', `「${esc(t.title || t.name)}」的新版本 ${esc(u.version)} 比旧版本多用了这些能力：${esc((r.added || []).join('、'))}，请在确认页上看一下再安装`, true);
+      showImportPreview(await call('market:install', u.id), { update: true });
+      return; // 工具箱里现在是确认页：不重画列表（会把确认页盖掉）
+    }
+  } catch (e) { add('note err', errWithLink(e), true); }
+  if (batch) return;
+  btn.disabled = false;
+  btn.textContent = '更新';
+  renderToolboxList();
+}
 
 // 收藏的工具（按工具名）：存在本机 localStorage，只影响工具箱里的「收藏」筛选
 const TB_FAV_KEY = 'cb.toolFavs';
@@ -657,6 +685,7 @@ async function renderToolboxList() {
   const list = $('tb_list');
   list.innerHTML = '<div class="hempty">加载中…</div>';
   try { tbItems = await call('tools:list'); } catch (e) { list.innerHTML = `<div class="hempty">${esc(e.message)}</div>`; return; }
+  autoUpdateTools = (await call('cfg:get').catch(() => ({}))).autoUpdateTools !== false;
   refreshToolTitles(tbItems);
   list.innerHTML = `<div class="tbtop">
       <button class="primary tbnewbtn">新建工具</button>
@@ -665,12 +694,16 @@ async function renderToolboxList() {
       <button class="ghost tbfavbtn" title="只显示收藏的工具（在工具卡片上点 ☆ 收藏）">收藏</button>
       <button class="ghost tbschedbtn" title="查看、暂停、删除定时运行的工具">定时任务</button>
       <input class="tbsearch" type="search" placeholder="搜索工具名或描述" spellcheck="false">
+      <label class="tbauto" title="从插件市场装的工具，作者发布的新版本审核通过后自动更新（新版本多用了敏感能力时会先问你）"><input type="checkbox" class="tbautochk"${autoUpdateTools ? ' checked' : ''}> 自动更新工具</label>
     </div>
+    <div class="tbupdbar" hidden></div>
     <div class="tbcards"></div>`;
   list.querySelector('.tbnewbtn').addEventListener('click', showNewToolForm);
   list.querySelector('.tbimport').addEventListener('click', pickImportTool);
   list.querySelector('.tbmarketbtn').addEventListener('click', () => renderMarket());
   list.querySelector('.tbschedbtn').addEventListener('click', () => renderSchedules());
+  list.querySelector('.tbautochk').addEventListener('change', (e) => { autoUpdateTools = e.target.checked; call('tools:autoUpdate', autoUpdateTools).catch(() => {}); });
+  call('tools:checkUpdates').catch(() => {}); // 打开工具箱时顺便查一次新版本（结果通过 toolUpdates 事件回来）
   const favBtn = list.querySelector('.tbfavbtn');
   favBtn.classList.toggle('on', tbState.fav);
   favBtn.addEventListener('click', () => { tbState.fav = !tbState.fav; tbState.page = 0; favBtn.classList.toggle('on', tbState.fav); drawToolCards(); });
@@ -691,6 +724,21 @@ function drawToolCards() {
   const re = words.length ? new RegExp(`(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi') : null;
   const mark = (text) => (re ? String(text).split(re).map((part, k) => (k % 2 ? `<mark>${esc(part)}</mark>` : esc(part))).join('') : esc(text));
   const shown = tbItems.map((t, i) => ({ t, i })).filter(({ t }) => hit(t) && (!tbState.fav || tbFavs.has(t.name)));
+  // 有新版本的工具：顶部一行汇总 +「全部更新」，有更新的排在最前面（序号不变）
+  const upNames = tbItems.filter((t) => toolUpdates[t.name]).map((t) => t.name);
+  const bar = list.querySelector('.tbupdbar');
+  bar.hidden = !upNames.length;
+  if (upNames.length) {
+    const can = upNames.filter((n) => toolUpdates[n].can_install);
+    bar.innerHTML = `<span>${upNames.length} 个工具有新版本</span>${can.length ? '<button class="primary tbupdall">全部更新</button>' : ''}`;
+    bar.querySelector('.tbupdall')?.addEventListener('click', async (e) => {
+      const b = e.currentTarget;
+      b.disabled = true;
+      for (const n of can) { const t = tbItems.find((x) => x.name === n); b.textContent = `正在更新 ${t.title || n}…`; await updateTool(t, b, true); }
+      renderToolboxList();
+    });
+  }
+  shown.sort((a, b) => (toolUpdates[b.t.name] ? 1 : 0) - (toolUpdates[a.t.name] ? 1 : 0));
   box.innerHTML = !tbItems.length ? '<div class="hempty">工具箱是空的——点上面「新建工具」让助手帮你做一个</div>'
     : tbState.fav && !tbItems.some((t) => tbFavs.has(t.name)) ? '<div class="hempty">还没有收藏的工具——点工具卡片右上角的 ☆ 收藏，再点「收藏」回到全部工具</div>'
     : !shown.length ? `<div class="hempty">没有找到包含「${esc(tbState.q.trim())}」的工具</div>` : '';
@@ -698,7 +746,9 @@ function drawToolCards() {
     const d = document.createElement('div');
     d.className = 'tbitem';
     d.dataset.tool = t.name;
-    d.innerHTML = `<div class="tbhead"><span class="tbname">${i + 1}、${mark(t.title || t.name)}${t.title ? `<small class="tbid">${mark(t.name)}</small>` : ''}</span><span class="tbacts"><button class="ghost tbedit tbfav${tbFavs.has(t.name) ? ' on' : ''}" title="${tbFavs.has(t.name) ? '取消收藏' : '收藏'}">${tbFavs.has(t.name) ? '★' : '☆'}</button>${t.market ? '<span class="tbmk" title="从插件市场安装的别人的工具：不能编辑、导出、发布">市场</span>' : '<button class="ghost tbedit tbeditbtn" title="进入制作模式修改这个工具（改的是草稿，完成前不影响现在的版本）">编辑</button><button class="ghost tbedit tbexport" title="导出成一个 .js 文件，发给别人导入">导出</button><button class="ghost tbedit tbpublish" title="发布到 BrowserX 网站的插件市场（进入审核）">发布</button>'}<button class="ghost tbedit tbdel" title="从工具箱删除（文件移到废纸篓，可以恢复）">删除</button></span></div>
+    const upd = toolUpdates[t.name];
+    const updHtml = upd ? `<span class="tbupd" title="${esc(upd.changelog ? `更新内容：${upd.changelog}` : '作者发布了新版本')}">有新版本 ${esc(upd.version)}</span>${upd.can_install ? '<button class="primary tbedit tbupdbtn" title="更新到新版本">更新</button>' : `<span class="tbupdno" title="${esc(upd.reason || '')}">${esc(upd.reason || '暂时不能更新')}</span>`}` : '';
+    d.innerHTML = `<div class="tbhead"><span class="tbname">${i + 1}、${mark(t.title || t.name)}${t.title ? `<small class="tbid">${mark(t.name)}</small>` : ''}${updHtml}</span><span class="tbacts"><button class="ghost tbedit tbfav${tbFavs.has(t.name) ? ' on' : ''}" title="${tbFavs.has(t.name) ? '取消收藏' : '收藏'}">${tbFavs.has(t.name) ? '★' : '☆'}</button>${t.market ? '<span class="tbmk" title="从插件市场安装的别人的工具：不能编辑、导出、发布">市场</span>' : '<button class="ghost tbedit tbeditbtn" title="进入制作模式修改这个工具（改的是草稿，完成前不影响现在的版本）">编辑</button><button class="ghost tbedit tbexport" title="导出成一个 .js 文件，发给别人导入">导出</button><button class="ghost tbedit tbpublish" title="发布到 BrowserX 网站的插件市场（进入审核）">发布</button>'}<button class="ghost tbedit tbdel" title="从工具箱删除（文件移到废纸篓，可以恢复）">删除</button></span></div>
       ${t.description ? `<div class="tbdesc" title="${esc(t.description)}">${mark(t.description)}</div>` : ''}`;
     d.querySelector('.tbeditbtn')?.addEventListener('click', (e) => { e.stopPropagation(); beginMaking({ edit: t.name }); });
     d.querySelector('.tbfav').addEventListener('click', (e) => {
@@ -711,6 +761,7 @@ function drawToolCards() {
       e.currentTarget.textContent = on ? '★' : '☆';
       e.currentTarget.title = on ? '取消收藏' : '收藏';
     });
+    d.querySelector('.tbupdbtn')?.addEventListener('click', (e) => { e.stopPropagation(); updateTool(t, e.currentTarget); });
     d.querySelector('.tbexport')?.addEventListener('click', (e) => { e.stopPropagation(); exportTool(t.name); });
     d.querySelector('.tbpublish')?.addEventListener('click', (e) => { e.stopPropagation(); showPublishForm(t); });
     d.querySelector('.tbdel').addEventListener('click', (e) => { e.stopPropagation(); deleteTool(t); });
@@ -1097,7 +1148,7 @@ function toolboxTip(text, name) {
 }
 
 // 导入前的确认页：本地文件导入和插件市场安装共用（市场安装时 p.market 有值，确认 / 取消后回到市场列表）
-function showImportPreview(p) {
+function showImportPreview(p, { update = false } = {}) { // update：从「更新」按钮进来，替换旧版本默认勾上
   const list = $('tb_list');
   const back = p.market ? renderMarket : renderToolboxList;
   const verb = p.market ? '安装' : '导入';
@@ -1108,7 +1159,7 @@ function showImportPreview(p) {
       <p class="muted">${p.market ? `来自插件市场，版本 ${esc(p.market.version)}（已通过网站审核）` : `来自 ${esc(p.from)}`}（${Math.ceil(p.size / 1024)} KB）</p>
       <p class="tbimp-warn">⚠ 工具代码在 BrowserX 里运行，权限跟 BrowserX 一样：能读写你电脑上的文件、用右侧浏览器里已登录的账号操作。只导入你信任的人给的工具，导入前最好看一下源代码。</p>
       ${p.risks.length ? `<div class="tbimp-risks"><b>代码里用到的能力</b>${p.risks.map((r) => `<div class="${r.label === '访问的网址' ? '' : 'risk'}">· ${esc(r.label)}（第 ${r.lines.join('、')} 行${r.more ? ` 等 ${r.more + r.lines.length} 处` : ''}）</div>`).join('')}</div>` : '<p class="muted">没有发现执行命令、读写文件之类的敏感能力。</p>'}
-      ${p.exists ? `<label class="tbimp-ow"><input type="checkbox" id="imp_ow"> 工具箱里已经有 ${esc(p.name)}，${p.market ? '用这个版本替换' : '覆盖它'}</label>` : ''}
+      ${p.exists ? `<label class="tbimp-ow"><input type="checkbox" id="imp_ow"${update ? ' checked' : ''}> 工具箱里已经有 ${esc(p.name)}，${p.market ? '用这个版本替换' : '覆盖它'}</label>` : ''}
       ${p.market ? '' : `<details><summary>查看源代码</summary><pre class="tbimp-code">${esc(p.code)}</pre></details>`}
       <div class="tberr" hidden></div>
       <div class="row"><button class="primary imp_go">${risky.length ? `我已确认，${verb}` : verb}</button><button class="ghost imp_cancel">取消</button></div>
@@ -1265,7 +1316,9 @@ async function loadMarket(body) {
   for (const t of r.items) {
     const d = document.createElement('div');
     d.className = 'tbitem mkitem';
-    const local = t.local.version ? (t.local.version === t.version ? `已安装 ${esc(t.version)}` : `已安装 ${esc(t.local.version)}，有新版本`) : t.local.exists ? '工具箱里有同名工具' : '';
+    // 有没有新版本只看内部版本号 build（旧记录没有 build 时退回比 version 字符串）
+    const newer = Number.isInteger(t.local.build) && Number.isInteger(t.build) ? t.local.build < t.build : t.local.version !== t.version;
+    const local = t.local.version ? (!newer ? `已安装 ${esc(t.version)}` : `已安装 ${esc(t.local.version)}，有新版本 ${esc(t.version)}`) : t.local.exists ? '工具箱里有同名工具' : '';
     const action = t.is_demo ? '<span class="muted">示例，不能安装</span>'
       : t.can_download ? `<button class="primary mk_inst">${t.local.version === t.version ? '重新安装' : t.local.version ? `更新到 ${esc(t.version)}` : '安装'}</button>`
       : account.user?.member ? (buying?.id === t.id ? '<span class="mkwait">等待付款…</span>' : `<button class="primary mk_buy">购买 ${esc(t.price_label)}</button>`)

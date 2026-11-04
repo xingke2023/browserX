@@ -731,3 +731,11 @@ body.making .headtools{display:none}
 body.ui-latin #msgs .note.quota span+span::before{content:' '} /* 英文等：句子之间留空格（中日韩不留） */
 #msgs .note.quota .q_btns button.primary{background:var(--link);border-color:var(--link);color:#fff}
 #msgs .note.quota .q_btns button.primary:hover:not(:disabled){filter:brightness(1.08);color:#fff}
+/* 工具箱：市场工具有新版本 */
+.tbupd{margin-left:8px;font-size:11.5px;font-weight:600;color:#fff;background:var(--accent, #e0702c);border-radius:9px;padding:1px 7px;white-space:nowrap}
+.tbupdno{margin-left:6px;font-size:11.5px;color:var(--muted)}
+.tbitem .tbacts .tbupdbtn,.tbitem .tbname .tbupdbtn{height:24px;padding:0 10px;font-size:12px;margin-left:6px}
+.tbtop .tbauto{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);white-space:nowrap;cursor:pointer}
+.tbupdbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px;padding:8px 12px;border-radius:9px;background:var(--making-bg, #ffedd5);border:1px solid var(--making-line, #fdba74);font-size:13px}
+.tbupdbar[hidden]{display:none}
+.tbupdbar button{height:28px;padding:0 12px;font-size:12.5px}

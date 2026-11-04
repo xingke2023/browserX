@@ -2,7 +2,7 @@ const { app, BrowserWindow, WebContentsView, ipcMain, dialog, safeStorage, Menu,
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { Agent, CB_TAG } = require('./agent');
+const { Agent, CB_TAG, scanRisks } = require('./agent');
 const { Account, PORTAL: ACCOUNT_PORTAL } = require('./account');
 const { Updater } = require('./updater');
 const { Scheduler } = require('./scheduler');
@@ -32,6 +32,7 @@ const WORK_DIR = path.join(os.homedir(), 'BrowserX');
 const DEFAULTS = {
   apiKey: '', baseUrl: '', model: 'claude-opus-5-5', cwd: WORK_DIR, permissionMode: 'bypassPermissions', home: 'https://browserx.xingke888.com/',
   replyLang: 'system', // Claude 的回复语言：system = 跟随系统语言，或 zh-CN / zh-TW / en
+  autoUpdateTools: true, // 从插件市场装的工具有审核通过的新版本时自动更新（工具箱顶部可以关）
 };
 let cfg, win;
 let accountToken = null;
@@ -584,6 +585,9 @@ app.whenReady().then(async () => {
   watchDownloads();
   buildMenu();
   updater.start();
+  // 市场工具更新：启动 40 秒后查一次，之后每 4 小时（没登录就跳过）
+  setTimeout(() => checkToolUpdates({ auto: true }).catch((e) => console.error('检查工具更新失败', e.message)), 40 * 1000);
+  setInterval(() => checkToolUpdates({ auto: true }).catch(() => {}), 4 * 3600 * 1000);
   // npm start 直接跑时 Dock 显示的是 Electron 默认图标；打包后 electron-builder 会用 build/icon.png 生成正式图标
   if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(path.join(__dirname, 'build', 'icon.png'));
   cfg = loadCfg();
@@ -733,13 +737,14 @@ handle('tools:importPick', async () => {
   return importer.importPreview(r.filePaths[0]);
 });
 let importer = null;
-handle('tools:importConfirm', async (opts) => {
+handle('tools:importConfirm', (opts) => confirmImport(opts));
+async function confirmImport(opts = {}) {
   // 从市场装别人的工具：加密保存（.bxt）；自己的工具、本地导入的照旧存明文 .js
   const r = await (importer || cur.agent).importConfirm({ ...opts, encrypt: !!marketPending && !marketPending.mine });
   // 从插件市场装的：记下版本，市场列表上显示「已安装」
   if (marketPending && marketPending.name === r.name) {
     const all = readInstalled();
-    all[r.name] = { id: marketPending.id, version: marketPending.version, sha256: marketPending.sha256, mine: marketPending.mine, at: Date.now() };
+    all[r.name] = { id: marketPending.id, version: marketPending.version, build: marketPending.build, sha256: marketPending.sha256, mine: marketPending.mine, at: Date.now() };
     fs.writeFileSync(INSTALLED_FILE(), JSON.stringify(all, null, 1));
   }
   else if (!marketPending) {
@@ -747,8 +752,9 @@ handle('tools:importConfirm', async (opts) => {
     if (all[r.name]) { delete all[r.name]; fs.writeFileSync(INSTALLED_FILE(), JSON.stringify(all, null, 1)); }
   }
   marketPending = null;
+  if (toolUpdates[r.name]) { delete toolUpdates[r.name]; send('toolUpdates', toolUpdates); } // 装的就是新版本：不再提示更新
   return r;
-});
+}
 
 // 网络录制（界面按钮用；对话里走 rec_start/rec_stop 工具，是同一个 Recorder）
 // ---------------------------------------------------------------- BrowserX 账号（见 account.js）
@@ -791,7 +797,8 @@ handle('account:open', (url) => {
   return shell.openExternal(url);
 });
 
-// 插件市场：从市场装过的工具记在 <userData>/market-installed.json（name → { id, version, sha256 }），列表上据此显示「已安装 / 有更新」
+// 插件市场：从市场装过的工具记在 <userData>/market-installed.json（name → { id, version, build, sha256 }），列表上据此显示「已安装 / 有更新」。
+// version 是开发者填的、只用来显示；build 是网站分配的内部版本号（从 1 开始的整数），判断有没有新版本只看它
 const INSTALLED_FILE = () => path.join(app.getPath('userData'), 'market-installed.json');
 const readInstalled = () => { try { return JSON.parse(fs.readFileSync(INSTALLED_FILE(), 'utf8')); } catch { return {}; } };
 let marketPending = null;
@@ -820,7 +827,7 @@ handle('market:list', async (params = {}) => {
   const r = await account.api(`/market?${q}`);
   const installed = readInstalled();
   const local = new Set(cur.agent.readCustomToolDefs().map((e) => e.def.name));
-  for (const t of r.items) t.local = { exists: local.has(t.name), version: installed[t.name]?.version || null };
+  for (const t of r.items) t.local = { exists: local.has(t.name), version: installed[t.name]?.version || null, build: installed[t.name]?.build ?? null };
   return r;
 });
 // 安装 = 下载代码到临时文件，再走跟「导入」一模一样的流程：静态检查 → 界面上让用户确认 → tools:importConfirm 写进工具箱
@@ -831,12 +838,77 @@ handle('market:install', async (id) => {
   const file = path.join(dir, `${r.name}.js`);
   fs.writeFileSync(file, r.code);
   importer = cur.agent;
-  marketPending = { name: r.name, id: Number(id), version: r.version, sha256: r.sha256, mine: !!r.mine };
+  marketPending = { name: r.name, id: Number(id), version: r.version, build: r.build, sha256: r.sha256, mine: !!r.mine };
   // 市场工具是别人的作品：不把源代码发给界面（确认页不显示「查看源代码」）；代码已读进 pendingImport，临时文件马上删掉
   const { code, ...preview } = importer.importPreview(file);
   fs.rmSync(file, { force: true });
   return { ...preview, market: { title: r.title, version: r.version } };
 });
+// ---------------------------------------------------------------- 工具更新
+// 从市场装过的工具，作者发了新版本、管理员审核通过后：启动 40 秒后和每 4 小时问一次网站（market/updates），
+// 工具箱里显示「有新版本」+「更新」按钮。开着「自动更新工具」时直接装上，但新版本比旧版本多用了敏感能力
+// （scanRisks 多出新的一类，比如开始读 cookie / 读写本机文件）就不自动装，留给用户点「更新」走跟安装一样的确认页
+let toolUpdates = {}; // name → { id, version, from, changelog, can_install, reason, needsConfirm? }
+const riskSet = (code) => new Set(scanRisks(code).map((r) => r.label));
+function installedCode(name) {
+  const js = path.join(TOOLS_DIR(), `${name}.js`), bxt = path.join(TOOLS_DIR(), `${name}.bxt`);
+  if (fs.existsSync(bxt)) return vault.decrypt(name, fs.readFileSync(bxt));
+  if (fs.existsSync(js)) return fs.readFileSync(js, 'utf8');
+  return null;
+}
+async function checkToolUpdates({ auto = false } = {}) {
+  if (!accountToken) return toolUpdates;
+  const installed = readInstalled();
+  // 按内部版本号 build 比（网站上每个工具从 1 开始、每个新版本 +1）；旧记录没有 build 的发 version，网站换算成 build
+  const tools = Object.values(installed).filter((x) => x.id).map((x) => (Number.isInteger(x.build) ? { id: x.id, build: x.build } : { id: x.id, version: x.version || '' }));
+  if (!tools.length) { toolUpdates = {}; send('toolUpdates', toolUpdates); return toolUpdates; }
+  const r = await account.api('/market/updates', { method: 'POST', body: { tools } });
+  const next = {};
+  for (const u of r.updates || []) if (installed[u.name]?.id === u.id) next[u.name] = { ...u, needsConfirm: toolUpdates[u.name]?.needsConfirm };
+  toolUpdates = next;
+  send('toolUpdates', toolUpdates);
+  if (auto && cfg.autoUpdateTools !== false) {
+    for (const name of Object.keys(toolUpdates)) {
+      const u = toolUpdates[name];
+      if (!u.can_install || u.needsConfirm) continue;
+      try { await updateMarketTool(name, { auto: true }); } catch (e) { console.error(`自动更新工具 ${name} 失败：${e.message}`); }
+    }
+  }
+  return toolUpdates;
+}
+// 装新版本。auto：自动更新（敏感能力变多就不装，标 needsConfirm）；手动点「更新」时敏感能力变多返回 { needsConfirm }，界面改走安装确认页
+async function updateMarketTool(name, { auto = false } = {}) {
+  const u = toolUpdates[name];
+  if (!u) throw new Error(`工具 ${name} 没有可用的更新`);
+  if (!u.can_install) throw new Error(u.reason || '现在不能更新这个工具');
+  if (makingTab()?.agent.making?.name === name) throw new Error(`正在修改工具 ${name}，先保存或退出修改再更新`);
+  const r = await account.api(`/market/${Number(u.id)}/download`);
+  const old = installedCode(name);
+  const added = old == null ? [] : [...riskSet(r.code)].filter((x) => !riskSet(old).has(x));
+  if (added.length) {
+    toolUpdates[name] = { ...u, needsConfirm: true, addedRisks: added };
+    send('toolUpdates', toolUpdates);
+    if (auto) return { needsConfirm: true };
+    return { needsConfirm: true, added };
+  }
+  const dir = path.join(os.tmpdir(), 'browserx-market');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `${r.name}.js`);
+  fs.writeFileSync(file, r.code);
+  const agent = cur.agent;
+  importer = agent;
+  marketPending = { name: r.name, id: Number(u.id), version: r.version, build: r.build, sha256: r.sha256, mine: !!r.mine };
+  try { agent.importPreview(file); } finally { fs.rmSync(file, { force: true }); }
+  await confirmImport({ overwrite: true, quiet: true });
+  const title = u.title ? `${u.title}（${name}）` : name;
+  agent.ctx.emit({ type: 'note', text: `— 工具 ${title} 已${auto ? '自动' : ''}更新到 ${r.version}${u.changelog ? `：${String(u.changelog).slice(0, 200)}` : ''} —` });
+  return { ok: true, version: r.version };
+}
+handle('tools:updates', () => toolUpdates);
+handle('tools:checkUpdates', () => checkToolUpdates({ auto: false }));
+handle('tools:update', (name) => updateMarketTool(String(name)));
+handle('tools:autoUpdate', (on) => { cfg.autoUpdateTools = !!on; saveCfg(); if (on) checkToolUpdates({ auto: true }).catch(() => {}); return cfg.autoUpdateTools; });
+
 // 购买付费工具：网站建 Stripe 付款页，用系统浏览器打开（不用另外登录网站）；付款状态由界面轮询 market:purchase
 handle('market:buy', async (id) => {
   const r = await account.api(`/market/${Number(id)}/checkout`, { method: 'POST' });
