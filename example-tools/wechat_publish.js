@@ -36,12 +36,19 @@ module.exports = (z) => ({
     publish: z.boolean().optional().describe('true 才会点「发表」真的推送给所有关注者（不可撤销）；不传或 false 只存草稿'),
   },
   async run(args, ctx) {
+    // 填编辑器 / 存草稿 / 发表：各最多等 3 分钟，超时就报出卡在哪一步（页面卡住时不会一直等下去）
+    const within = (p, step, c) => {
+      let timer;
+      const t = new Promise((_, reject) => { timer = setTimeout(() => { try { c.wc.stop(); } catch {} reject(new Error(`「${step}」3 分钟还没完成，可能页面卡住了：看一下右侧浏览器，刷新后重新运行`)); }, 180000); });
+      return Promise.race([p, t]).finally(() => clearTimeout(timer));
+    };
     const log = (t) => ctx.log(`[公众号] ${t}`);
 
     // 先确认登录，免得模型写完了才发现要扫码：未登录时 ensureLogin 会打开扫码页、切出右侧浏览器并最多等 5 分钟
-    if (!ctx.wx.token()) log('检查登录状态，未登录的话请在右侧浏览器里用微信扫码登录公众号后台…');
+    // 没登录：红字提醒用户去扫码（ctx.warn 旧版本没有就退回普通提示）
+    if (!ctx.wx.token()) (ctx.warn || ctx.log)('公众号后台还没登录：请在右侧浏览器用微信扫码登录（最多等 5 分钟，扫完会自动继续；不想等可以点「停止」）');
     try {
-      await ctx.wx.ensureLogin();
+      await ctx.wx.ensureLogin({ quiet: true }); // 上面已经红字提示过扫码，不要再发一条重复的
     } catch (e) {
       throw new Error(`公众号后台未登录（${e.message}）：请在右侧浏览器扫码登录后重新运行`);
     }
@@ -62,7 +69,7 @@ module.exports = (z) => ({
     const blocks = ctx.article.renderBlocks(art, images, args.theme);
 
     log('填入编辑器…');
-    const problems = await ctx.wx.fill(art, blocks, args.author);
+    const problems = await within(ctx.wx.fill(art, blocks, args.author), '填入编辑器', ctx);
     // 没配图/封面没设上不影响存草稿（实测无封面也能存成功），只拦发表；图片上传失败则一律拦下
     const fatal = problems.filter((p) => !/封面/.test(p));
     if (fatal.length) throw new Error(`填入编辑器时有问题，没有继续存草稿/发表：${fatal.join('；')}`);
@@ -70,7 +77,7 @@ module.exports = (z) => ({
 
     if (!args.publish) {
       log('存草稿…');
-      const r = await ctx.wx.saveDraft();
+      const r = await within(ctx.wx.saveDraft(), '存草稿', ctx);
       if (!r.ok) throw new Error(r.msg);
       return `已存草稿《${a.title}》：${r.msg}${r.appmsgid ? `（appmsgid=${r.appmsgid}）` : ''}${warn}`;
     }
@@ -80,7 +87,7 @@ module.exports = (z) => ({
     // （只在权限模式是「每次询问」时才会真的弹确认；auto/全部允许模式下这一步是空操作，跟内置工具行为一致）
     await ctx.guard('发表公众号文章', `《${a.title}》`);
     log('发表…');
-    await ctx.wx.publish();
+    await within(ctx.wx.publish(), '发表', ctx);
     return `已点击「发表」（标题：《${a.title}》），请在右侧浏览器里完成微信的最终确认`;
   },
 });

@@ -1,9 +1,11 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, dialog, safeStorage, Menu, shell, webFrameMain } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, dialog, safeStorage, Menu, shell, webFrameMain, clipboard, session, Notification } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { Agent } = require('./agent');
+const { Agent, CB_TAG } = require('./agent');
 const { Account, PORTAL: ACCOUNT_PORTAL } = require('./account');
+const { Updater } = require('./updater');
+const { Scheduler } = require('./scheduler');
 const { ToolVault } = require('./toolcrypt');
 
 // 不打包直接跑 `electron .` 时，app.getName() 默认读 package.json 的 name（"browserx"），
@@ -22,11 +24,13 @@ const TOOLS_DIR = () => {
   return d;
 };
 // 网络录制文件存放目录，见 recorder.js（含真实业务数据，放 userData 下，不进项目目录）
-// 工具市场里别人的工具加密保存，密钥存这里（见 toolcrypt.js）
+// 插件市场里别人的工具加密保存，密钥存这里（见 toolcrypt.js）
 const vault = new ToolVault(() => path.join(app.getPath('userData'), 'tool-keys.json'));
 const RECON_DIR = () => path.join(app.getPath('userData'), 'recon');
+// 默认工作目录用单独的 ~/BrowserX：主目录下往往配了跟浏览器任务无关的 MCP 服务、插件（每个新对话都要加载，拖慢启动）
+const WORK_DIR = path.join(os.homedir(), 'BrowserX');
 const DEFAULTS = {
-  apiKey: '', baseUrl: '', model: 'claude-sonnet-5', cwd: os.homedir(), permissionMode: 'bypassPermissions', home: 'https://www.xingke888.com',
+  apiKey: '', baseUrl: '', model: 'claude-opus-5-5', cwd: WORK_DIR, permissionMode: 'bypassPermissions', home: 'https://browserx.xingke888.com/',
 };
 let cfg, win;
 let accountToken = null;
@@ -68,16 +72,19 @@ function saveCfg() {
   fs.writeFileSync(CFG_FILE(), JSON.stringify(out, null, 2));
 }
 
-const send = (ch, v) => win?.webContents.send(ch, v);
+const send = (ch, v) => { if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send(ch, v); };
+let quitting = false; // 退出时网页一个个销毁，不要再当成「网页自己关掉」去补空白页、更新界面
+app.on('before-quit', () => { quitting = true; });
 
 // 右侧页面主框架加载失败时的错误存在各标签的 navError 上（Electron 的错误页是一片空白，交给界面显示说明，见 renderer.js renderNavError）
 let covered = false; // 界面弹窗打开时暂时藏起原生视图（它总是盖在 DOM 上面，居中的弹窗会被挡住）
-const syncViewVisible = () => { for (const t of tabs.values()) t.view.setVisible(t === cur && !t.navError && !covered); };
+// 只显示当前对话的当前网页标签
+const syncViewVisible = () => { for (const t of tabs.values()) for (const p of t.pages) p.view.setVisible(t === cur && p === t.page && !p.navError && !covered); };
 
 function navState(t = cur) {
   const wc = t.view.webContents;
   return { url: wc.getURL(), title: wc.getTitle(), loading: wc.isLoading(),
-    canBack: wc.navigationHistory.canGoBack(), canForward: wc.navigationHistory.canGoForward(), error: t.navError };
+    canBack: wc.navigationHistory.canGoBack(), canForward: wc.navigationHistory.canGoForward(), error: t.page.navError };
 }
 
 const tabList = () => [...tabs.values()].map((t) => ({ id: t.id, title: t.view.webContents.getTitle(), url: t.view.webContents.getURL(), current: t === cur }));
@@ -85,12 +92,42 @@ const sendTabs = () => send('tabs', tabList());
 const tabOf = (id) => (id && tabs.get(id)) || cur;
 const makingTab = () => [...tabs.values()].find((t) => t.agent.making);
 
-function createTab(url = cfg.home) {
-  if (tabs.size >= MAX_TABS) throw new Error(`最多开 ${MAX_TABS} 个标签，先关掉一些`);
-  const id = ++tabSeq;
+// 开会话、工具里调模型（ctx.ask）之前确认账号还有效、额度没用完。1 分钟内查过就用上次的结果（工具里可能连着调好几次模型）；
+// 网络一时不通就按上次的状态继续（真失效了中转会拒绝）。token 失效时 refresh 会清掉登录并抛「登录已失效，请重新登录」
+let accountCheckedAt = 0;
+async function checkAccount() {
+  if (Date.now() - accountCheckedAt < 60 * 1000 && account.user) return account.state();
+  try {
+    const st = await account.refresh();
+    accountCheckedAt = Date.now();
+    return st;
+  } catch (e) {
+    if (e.network && account.user) return account.state();
+    throw e;
+  }
+}
+
+// ---------------------------------------------------------------- 网页标签
+// 一个对话（左侧标签）可以开多个网页标签（右侧浏览器上方那一排）：t.pages，t.page 是当前的，t.view 指向它。
+// 网站 window.open / target=_blank 时新开一个网页标签并切过去（保留 opener，登录弹窗之类回传结果的流程能走通）；助手用 tab_* 工具切换
+const MAX_PAGES = 10;
+const pageList = (t) => t.pages.map((p, i) => {
+  const wc = p.view.webContents;
+  return { index: i + 1, title: wc.getTitle(), url: wc.getURL(), loading: wc.isLoading(), active: p === t.page };
+});
+const sendPages = (t) => { if (t === cur) send('pages', pageList(t)); };
+const pageAt = (t, index) => {
+  const p = index == null ? t.page : t.pages[Number(index) - 1];
+  if (!p) throw new Error(`没有标签页 ${index}，现在有 ${t.pages.length} 个`);
+  return p;
+};
+
+// 往对话 t 里加一个网页标签。view 是网站 window.open 时 Electron 建好的，或者这里新建
+function addPage(t, { view, url, activate = true } = {}) {
+  if (t.pages.length >= MAX_PAGES) throw new Error(`一个对话最多开 ${MAX_PAGES} 个标签页，先关掉一些`);
   // backgroundThrottling 关掉：藏起来的标签里，页面计时器和助手的操作照常跑
-  const view = new WebContentsView({ webPreferences: { partition: 'persist:browser', backgroundThrottling: false } }); // 记住登录状态（所有标签共用）
-  const t = { id, view, navError: null };
+  view = view || new WebContentsView({ webPreferences: { partition: 'persist:browser', backgroundThrottling: false } }); // 记住登录状态（所有标签共用）
+  const p = { view, navError: null };
   win.contentView.addChildView(view);
   if (stageBounds) view.setBounds(stageBounds);
   view.setVisible(false);
@@ -99,17 +136,17 @@ function createTab(url = cfg.home) {
   // 下一次成功导航（did-navigate 只在非错误页时触发）再显示回来。-3 ERR_ABORTED 是被新导航打断，不算失败
   wc.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {
     if (!isMainFrame || code === -3) return;
-    t.navError = { code, desc, url };
+    p.navError = { code, desc, url };
     syncViewVisible();
   });
   wc.on('did-navigate', () => {
-    t.navError = null;
+    p.navError = null;
     syncViewVisible();
   });
   for (const ev of ['did-navigate', 'did-navigate-in-page', 'page-title-updated', 'did-start-loading', 'did-stop-loading', 'did-fail-load']) {
-    wc.on(ev, () => { if (t === cur) send('nav', navState()); });
+    wc.on(ev, () => { if (t === cur && p === t.page) send('nav', navState()); sendPages(t); });
   }
-  for (const ev of ['did-navigate', 'page-title-updated']) wc.on(ev, sendTabs);
+  for (const ev of ['did-navigate', 'page-title-updated']) wc.on(ev, () => { if (p === t.page) sendTabs(); });
   // 焦点在右侧网页里时，标签快捷键（⌘T / ⌘W / ⌘1…9 / ⌘⇧[ ]）也要能用：拦下来转给界面处理
   wc.on('before-input-event', (e, i) => {
     if (i.type !== 'keyDown' || !i.meta || i.alt || i.control) return;
@@ -118,15 +155,74 @@ function createTab(url = cfg.home) {
       send('tabkey', { key: i.key, code: i.code, shift: i.shift });
     }
   });
-  // 新窗口链接在本标签的视图里打开（标签和对话一一对应，不凭空多出没有对话的标签）
-  wc.setWindowOpenHandler(({ url }) => { wc.loadURL(url); return { action: 'deny' }; });
-  wc.loadURL(url).catch(() => {});
+  // 网站要开新窗口 / 新标签：在这个对话里新开一个网页标签并切过去（不另开系统窗口）。标签太多时退回在当前页打开
+  wc.setWindowOpenHandler(({ url }) => {
+    if (t.pages.length >= MAX_PAGES) { wc.loadURL(url).catch(() => {}); return { action: 'deny' }; }
+    return {
+      action: 'allow',
+      outlivesOpener: true, // 关掉打开它的标签时不跟着关
+      createWindow: (options) => {
+        const child = new WebContentsView({ webContents: options.webContents, webPreferences: { ...options.webPreferences, backgroundThrottling: false } });
+        const np = addPage(t, { view: child });
+        t.agent.pageOpened({ index: t.pages.indexOf(np) + 1, url });
+        return child.webContents;
+      },
+    };
+  });
+  // 网页自己关掉（window.close()，比如登录弹窗登完）：从标签里拿掉
+  wc.once('destroyed', () => { if (!quitting && win && !win.isDestroyed() && t.pages.includes(p)) removePage(t, p, false); });
+  t.pages.push(p);
+  t.agent.watchPage(wc);
+  if (url) wc.loadURL(url).catch(() => {});
+  if (activate || !t.page) activatePage(t, p);
+  else sendPages(t);
+  return p;
+}
 
+function activatePage(t, p) {
+  t.page = p;
+  syncViewVisible();
+  if (t === cur) send('nav', navState());
+  sendPages(t);
+  sendTabs();
+}
+
+function removePage(t, p, closeIt = true) {
+  const i = t.pages.indexOf(p);
+  if (i < 0) return;
+  t.pages.splice(i, 1);
+  try { win.contentView.removeChildView(p.view); } catch {}
+  if (closeIt && !p.view.webContents.isDestroyed()) p.view.webContents.close();
+  if (!t.pages.length) { if (tabs.has(t.id)) addPage(t, { url: 'about:blank' }); return; } // 最后一个网页自己关掉了：留一个空白页
+  if (t.page === p) activatePage(t, t.pages[i] || t.pages[i - 1]);
+  else sendPages(t);
+}
+
+// 给 Agent 用的网页标签操作（编号从 1 开始，跟 tab_list 一致）
+const pagesApi = (t) => ({
+  list: () => pageList(t),
+  open: (url) => { const p = addPage(t, { url: toUrl(url || 'about:blank') }); return t.pages.indexOf(p) + 1; },
+  switch: (index) => activatePage(t, pageAt(t, index)),
+  close: (index) => {
+    if (t.pages.length === 1) throw new Error('最后一个标签页不能关');
+    removePage(t, pageAt(t, index));
+  },
+  // 只留当前标签（制作新工具时从干净的浏览器开始）
+  reset: () => { for (const p of [...t.pages]) if (p !== t.page) removePage(t, p); },
+});
+
+function createTab(url = cfg.home) {
+  if (tabs.size >= MAX_TABS) throw new Error(`最多开 ${MAX_TABS} 个标签，先关掉一些`);
+  const id = ++tabSeq;
+  const t = { id, pages: [], page: null, get view() { return this.page.view; } };
   t.agent = new Agent({
-    webContents: wc,
+    getWc: () => t.page.view.webContents,
+    pages: pagesApi(t),
     vault,
     show: async () => {},
     getCfg: () => cfg,
+    getAccountToken: () => accountToken, // 没填 API Key 时，Claude 请求经门户中转，用账号 token 认证
+    checkAccount, // 开会话 / 调模型前确认账号（见 checkAccount）
     getToolsDir: TOOLS_DIR,
     getReconDir: RECON_DIR,
     emit: (ev) => send('agent', { ...ev, tab: id }),
@@ -135,8 +231,10 @@ function createTab(url = cfg.home) {
     // 工具箱有变化（制作完成、导入）：其它标签正在进行的对话也重新加载工具
     toolsChanged: () => { for (const x of tabs.values()) if (x !== t) x.agent.reloadCustomTools(); },
     isMarketTool: (name) => isMarketTool(name),
+    trash: (f) => shell.trashItem(f), // 放弃制作时草稿移到废纸篓
   });
   tabs.set(id, t);
+  addPage(t, { url: toUrl(url) });
   sendTabs();
   return t;
 }
@@ -147,6 +245,7 @@ function switchTab(id) {
   cur = t;
   syncViewVisible();
   send('nav', navState());
+  sendPages(t);
   sendTabs();
   return id;
 }
@@ -155,15 +254,14 @@ function closeTab(id) {
   const t = tabs.get(id);
   if (!t) return cur?.id;
   if (tabs.size === 1) throw new Error('至少要留一个标签');
-  if (t.agent.making) throw new Error(`这个标签正在制作工具 ${t.agent.making.name}，先点横幅上的「完成」或「放弃」`);
+  if (t.agent.making) throw new Error(`这个标签正在制作工具「${t.agent.making.title || '新工具'}」，先点横幅上的「保存」或「不做了」`);
   try { if (t.agent.rec.active) t.agent.rec.save(); } catch {}
   t.agent.stopTool();
   t.agent.reset();
   const ids = [...tabs.keys()];
   const i = ids.indexOf(id);
   tabs.delete(id);
-  win.contentView.removeChildView(t.view);
-  t.view.webContents.close();
+  for (const p of [...t.pages]) { t.pages = t.pages.filter((x) => x !== p); try { win.contentView.removeChildView(p.view); } catch {} if (!p.view.webContents.isDestroyed()) p.view.webContents.close(); }
   if (cur === t) switchTab(ids[i + 1] ?? ids[i - 1]);
   else sendTabs();
   return cur.id;
@@ -172,7 +270,7 @@ function closeTab(id) {
 // 地址栏输入：网址直接打开，其它当作搜索
 function toUrl(s) {
   s = s.trim();
-  if (/^https?:\/\//i.test(s)) return s;
+  if (/^(https?:\/\/|about:|file:)/i.test(s)) return s;
   if (/^[\w-]+(\.[\w-]+)+(:\d+)?(\/\S*)?$/.test(s) || /^localhost(:\d+)?/.test(s)) return (s.startsWith('localhost') ? 'http://' : 'https://') + s;
   return `https://www.bing.com/search?q=${encodeURIComponent(s)}`;
 }
@@ -231,6 +329,9 @@ app.on('before-quit', () => {
 });
 
 const PORTAL = 'https://www.xingke888.com';
+// 正式打包给客户的版本不显示设置（API Key、模型、工作目录等）：客户登录账号就能用，不需要也不该改这些。
+// 开发时（npm start）照常显示；正式版要排查问题时用 CB_SETTINGS=1 启动
+const SHOW_SETTINGS = !app.isPackaged || process.env.CB_SETTINGS === '1';
 
 // 应用菜单：替换 Electron 默认菜单（默认的「帮助」里全是 Electron 官网 / 文档 / 社区链接）。
 // 编辑 / 显示 / 窗口 用系统角色保留：复制粘贴（⌘C/⌘V）、刷新界面（⌘R）等快捷键靠它们
@@ -253,6 +354,9 @@ function openHelp(section) {
   helpWin.loadFile(path.join(__dirname, 'help.html'), opts);
 }
 
+// 自动更新（见 updater.js）
+const updater = new Updater({ portal: ACCOUNT_PORTAL, getWin: () => win });
+
 function buildMenu() {
   const openInView = (url) => cur?.view.webContents.loadURL(url).catch(() => {});
   const template = [
@@ -260,10 +364,13 @@ function buildMenu() {
       label: 'BrowserX',
       submenu: [
         { role: 'about', label: '关于 BrowserX' },
+        { label: '检查更新…', click: () => updater.menuCheck() },
         { type: 'separator' },
         // 左侧栏收起时设置面板在隐藏的左栏里，看不到：先展开左栏再打开设置
-        { label: '设置…', accelerator: 'CmdOrCtrl+,', click: () => { win?.show(); win?.webContents.executeJavaScript("document.body.classList.contains('side-collapsed') && $('sideToggle').click(); $('settings').hidden && $('btnSettings').click()").catch(() => {}); } },
-        { type: 'separator' },
+        ...(SHOW_SETTINGS ? [
+          { label: '设置…', accelerator: 'CmdOrCtrl+,', click: () => { win?.show(); win?.webContents.executeJavaScript("document.body.classList.contains('side-collapsed') && $('sideToggle').click(); $('settings').hidden && $('btnSettings').click()").catch(() => {}); } },
+          { type: 'separator' },
+        ] : []),
         { role: 'hide', label: '隐藏 BrowserX' },
         { role: 'hideOthers', label: '隐藏其他' },
         { role: 'unhide', label: '全部显示' },
@@ -302,9 +409,6 @@ function buildMenu() {
         { type: 'separator' },
         { label: '打开门户网站', click: () => openInView(PORTAL) },
         { label: '在系统浏览器打开门户网站', click: () => shell.openExternal(PORTAL) },
-        { type: 'separator' },
-        { label: '打开工具箱文件夹', click: () => shell.openPath(TOOLS_DIR()) },
-        { label: '打开录制文件夹', click: () => { fs.mkdirSync(RECON_DIR(), { recursive: true }); shell.openPath(RECON_DIR()); } },
       ],
     },
   ];
@@ -318,16 +422,121 @@ function buildMenu() {
   });
 }
 
-app.whenReady().then(() => {
+// 旧版默认工作目录是主目录：换到 ~/BrowserX，并把本应用自己的对话（带 CB_TAG 标签的）搬过去，历史列表照样能看到、能继续。
+// 会话按工作目录存在 ~/.claude/projects/<目录名>/，终端里 claude 的会话（没有这个标签）留在原处不动
+async function migrateWorkDir() {
+  if (cfg.cwd !== os.homedir()) return;
+  fs.mkdirSync(WORK_DIR, { recursive: true });
+  try {
+    const sdk = await import('@anthropic-ai/claude-agent-sdk');
+    const projDir = (d) => path.join(os.homedir(), '.claude', 'projects', d.replace(/[^a-zA-Z0-9]/g, '-'));
+    const from = projDir(os.homedir()), to = projDir(WORK_DIR);
+    const mine = (await sdk.listSessions({ dir: os.homedir(), limit: 5000 })).filter((s) => s.tag === CB_TAG);
+    fs.mkdirSync(to, { recursive: true });
+    for (const s of mine) {
+      for (const name of [`${s.sessionId}.jsonl`, s.sessionId]) { // 会话文件 + 同名目录（子任务、大工具结果）
+        const src = path.join(from, name);
+        if (fs.existsSync(src) && !fs.existsSync(path.join(to, name))) fs.renameSync(src, path.join(to, name));
+      }
+    }
+  } catch (e) { console.error(`搬历史对话失败：${e.message}`); }
+  cfg.cwd = WORK_DIR;
+  saveCfg();
+}
+
+// 下载：右侧网页下载文件时不弹「存储为」（助手操作不了），直接存到 下载/BrowserX/，重名加 (1)(2)…；存好后告诉发起下载的那个对话
+const DOWNLOAD_DIR = () => path.join(app.getPath('downloads'), 'BrowserX');
+function uniquePath(dir, name) {
+  name = (name || 'download').replace(/[\\/:*?"<>|]/g, '_').slice(0, 200);
+  const ext = path.extname(name), base = name.slice(0, name.length - ext.length);
+  let p = path.join(dir, name);
+  for (let i = 1; fs.existsSync(p); i++) p = path.join(dir, `${base} (${i})${ext}`);
+  return p;
+}
+// 右侧网页的浏览器身份（User-Agent）：去掉 Electron 默认加的「Electron/x.y」「BrowserX/x.y」，跟真 Chrome 一样。
+// 有的网站（Akamai 这类防爬虫）看到这两个标记就当成自动化程序直接拦（实测永明）。内核本来就是同版本的 Chromium，报 Chrome 是实话
+function useChromeIdentity() {
+  const ses = session.fromPartition('persist:browser');
+  const ua = ses.getUserAgent().replace(/\s+(Electron|BrowserX|browserx|claude-browser)\/\S+/gi, '');
+  ses.setUserAgent(ua);
+  // 改了 User-Agent 以后，打开网页（主文档、iframe）的请求不再带 sec-ch-ua 这组请求头（页面里的 fetch 由 agent.applyIdentity 补上了）。
+  // 真 Chrome 访问 https 时默认都会带这三个，没有反而像自动化程序：缺了就补上，有了不动
+  const major = process.versions.chrome.split('.')[0];
+  const ch = {
+    'sec-ch-ua': `"Google Chrome";v="${major}", "Chromium";v="${major}", "Not:A-Brand";v="8"`,
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': `"${process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : 'Linux'}"`,
+  };
+  ses.webRequest.onBeforeSendHeaders({ urls: ['https://*/*'] }, (d, cb) => {
+    const h = d.requestHeaders;
+    if (d.resourceType === 'mainFrame' || d.resourceType === 'subFrame') {
+      const has = new Set(Object.keys(h).map((k) => k.toLowerCase()));
+      for (const [k, v] of Object.entries(ch)) if (!has.has(k)) h[k] = v;
+    }
+    cb({ requestHeaders: h });
+  });
+  return ua;
+}
+
+function watchDownloads() {
+  session.fromPartition('persist:browser').on('will-download', (_e, item, wc) => {
+    const t = [...tabs.values()].find((x) => x.pages.some((p) => p.view.webContents === wc)) || cur;
+    fs.mkdirSync(DOWNLOAD_DIR(), { recursive: true });
+    const file = uniquePath(DOWNLOAD_DIR(), item.getFilename());
+    item.setSavePath(file);
+    const url = item.getURL();
+    t?.agent.downloadStarted({ file, url });
+    item.once('done', (_ev, state) => t?.agent.downloadDone({ file, url, state, bytes: item.getReceivedBytes() }));
+  });
+}
+
+// 定时运行工具（见 scheduler.js）：到点后在后台的「定时任务」对话里直接调工具（不经过模型、不花 token），跑完发系统通知，点通知切到那个对话
+let schedTabId = null;
+async function runScheduled(task) {
+  let t = tabs.get(schedTabId);
+  if (!t) {
+    if (tabs.size >= MAX_TABS) throw Object.assign(new Error(`左侧标签已满（最多 ${MAX_TABS} 个），关掉一个才能运行定时任务`), { retry: true });
+    t = createTab('about:blank');
+    schedTabId = t.id;
+  }
+  if (t.agent._toolRunning || t.agent.running || t.agent.making) throw Object.assign(new Error('「定时任务」对话正忙'), { retry: true }); // 下一轮再试
+  if (!t.agent.listCustomTools().some((x) => x.name === task.tool)) throw new Error(`工具箱里没有 ${task.tool} 了（可能被删了）`);
+  const emit = (ev) => send('agent', { ...ev, tab: t.id });
+  emit({ type: 'sched', phase: 'start', title: task.title });
+  let ok = true, text;
+  try { text = await t.agent.runCustomTool(task.tool, task.args || {}); }
+  catch (e) { ok = false; text = e.message; }
+  emit({ type: 'sched', phase: 'done', title: task.title, ok, text });
+  if (Notification.isSupported()) {
+    const n = new Notification({ title: `定时任务${ok ? '完成' : '失败'}：${task.title}`, body: String(text).replace(/\s+/g, ' ').slice(0, 120), silent: ok });
+    n.on('click', () => { if (win) { win.show(); win.focus(); } if (tabs.has(t.id)) switchTab(t.id); });
+    n.show();
+  }
+  if (!ok) throw new Error(text);
+  return text;
+}
+const scheduler = new Scheduler({
+  file: () => path.join(app.getPath('userData'), 'schedules.json'),
+  run: runScheduled,
+  onChange: (list) => send('schedules', list),
+});
+
+app.whenReady().then(async () => {
+  useChromeIdentity(); // 要在建第一个网页标签之前
+  watchDownloads();
   buildMenu();
+  updater.start();
   // npm start 直接跑时 Dock 显示的是 Electron 默认图标；打包后 electron-builder 会用 build/icon.png 生成正式图标
   if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(path.join(__dirname, 'build', 'icon.png'));
   cfg = loadCfg();
   cfg.permissionMode = 'bypassPermissions'; // 每次启动都从「全部允许」开始（等同 claude --dangerously-skip-permissions），会话中可以在界面上切换
   encryptMarketTools();
+  await migrateWorkDir();
+  fs.mkdirSync(cfg.cwd, { recursive: true });
   createWindow();
   if (process.env.CB_ACCOUNT_TOKEN) accountToken = process.env.CB_ACCOUNT_TOKEN; // 测试用：不走浏览器授权，直接用给定的 token（配合 CB_PORTAL / CB_USER_DATA）
   account.refresh().catch(() => {}); // 上次登录过：拉一下账号和授权状态（网络不通就先显示上次的登录状态）
+  scheduler.start(); // 窗口和第一个标签都有了再开始（定时任务要在后台开一个对话）
 });
 app.on('window-all-closed', () => app.quit());
 
@@ -343,14 +552,25 @@ handle('bounds', (r) => {
   const b = { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) };
   if (!b.width || !b.height) { cur?.view.setBounds(b); return; }
   stageBounds = b;
-  for (const t of tabs.values()) t.view.setBounds(b);
+  for (const t of tabs.values()) for (const p of t.pages) p.view.setBounds(b);
 });
 handle('nav:state', () => navState());
-handle('nav:go', (s) => cur.view.webContents.loadURL(toUrl(s)).catch(() => {}));
-handle('nav:back', () => cur.view.webContents.navigationHistory.goBack());
-handle('nav:forward', () => cur.view.webContents.navigationHistory.goForward());
-handle('nav:reload', () => cur.view.webContents.reload());
+// 地址栏 / 前进后退 / 刷新也算用户在操作网页：制作工具时自动开始录制（见 Agent.autoRecord）
+handle('nav:go', (s) => { cur.agent.autoRecord(); return cur.view.webContents.loadURL(toUrl(s)).catch(() => {}); });
+handle('nav:back', () => { cur.agent.autoRecord(); cur.view.webContents.navigationHistory.goBack(); });
+handle('nav:forward', () => { cur.agent.autoRecord(); cur.view.webContents.navigationHistory.goForward(); });
+handle('nav:reload', () => { cur.agent.autoRecord(); cur.view.webContents.reload(); });
 handle('nav:stop', () => cur.view.webContents.stop());
+// 右侧浏览器上方的网页标签条
+handle('pages:switch', (index) => activatePage(cur, pageAt(cur, index)));
+handle('pages:close', (index) => pagesApi(cur).close(index));
+handle('pages:new', () => { cur.agent.autoRecord(); addPage(cur, { url: 'about:blank' }); });
+handle('schedules:list', () => scheduler.list());
+handle('schedules:add', (task) => scheduler.add(task));
+handle('schedules:update', (id, patch) => scheduler.update(id, patch));
+handle('schedules:remove', (id) => scheduler.remove(id));
+handle('schedules:runNow', (id) => { const t = scheduler.tasks.find((x) => x.id === id); if (!t) throw new Error('定时任务不存在'); scheduler.runTask(t).catch(() => {}); });
+handle('downloads:show', (file) => { if (String(file).startsWith(DOWNLOAD_DIR() + path.sep)) shell.showItemInFolder(file); }); // 只能打开下载文件夹里的文件
 // 收藏夹：<userData>/bookmarks.json，[{ url, title, added }]，所有标签共用，新收藏放最前面
 const BM_FILE = () => path.join(app.getPath('userData'), 'bookmarks.json');
 const readBookmarks = () => { try { return JSON.parse(fs.readFileSync(BM_FILE(), 'utf8')); } catch { return []; } };
@@ -372,6 +592,7 @@ handle('tabs:find', (sessionId) => [...tabs.values()].find((t) => t.agent.sessio
 handle('win:fullscreen', () => win.setFullScreen(!win.isFullScreen()));
 
 handle('cfg:get', () => cfg);
+handle('app:showSettings', () => SHOW_SETTINGS);
 handle('cfg:set', (c) => {
   const same = (k) => JSON.stringify(c[k]) === JSON.stringify(cfg[k]);
   // 密钥、地址、工作目录变化后开始新会话；换模型不用重开
@@ -424,6 +645,8 @@ handle('making:state', (tab) => tabOf(tab).agent.makingState());
 handle('making:start', (opts) => cur.agent.startMaking(opts));
 handle('making:draft', () => (makingTab() || cur).agent.describeDraft());
 handle('making:run', (args) => (makingTab() || cur).agent.runDraft(args));
+handle('making:formSpec', (values) => (makingTab() || cur).agent.draftFormSpec(values));
+handle('making:log', (text) => (makingTab() || cur).agent.logMaking(String(text))); // 界面上的事记进过程记录（不发给助手）
 handle('making:finish', (opts) => (makingTab() || cur).agent.finishMaking(opts));
 handle('making:cancel', () => (makingTab() || cur).agent.cancelMaking());
 handle('making:continue', (name) => cur.agent.continueMaking(name));
@@ -451,7 +674,7 @@ let importer = null;
 handle('tools:importConfirm', async (opts) => {
   // 从市场装别人的工具：加密保存（.bxt）；自己的工具、本地导入的照旧存明文 .js
   const r = await (importer || cur.agent).importConfirm({ ...opts, encrypt: !!marketPending && !marketPending.mine });
-  // 从工具市场装的：记下版本，市场列表上显示「已安装」
+  // 从插件市场装的：记下版本，市场列表上显示「已安装」
   if (marketPending && marketPending.name === r.name) {
     const all = readInstalled();
     all[r.name] = { id: marketPending.id, version: marketPending.version, sha256: marketPending.sha256, mine: marketPending.mine, at: Date.now() };
@@ -470,7 +693,14 @@ handle('tools:importConfirm', async (opts) => {
 
 const account = new Account({
   getToken: () => accountToken,
-  setToken: (t) => { accountToken = t || null; saveCfg(); },
+  setToken: (t) => {
+    const changed = (t || null) !== accountToken;
+    accountToken = t || null;
+    accountCheckedAt = 0; // 换了账号：下次重新确认
+    saveCfg();
+    // 登录 / 退出 / token 失效：没填自己 API Key 的对话要换新 token 重开（下一条消息自动重开）
+    if (changed && !cfg.apiKey) for (const { agent } of tabs.values()) if (agent.q) agent.reset();
+  },
   open: (url) => shell.openExternal(url),
   focus: () => { if (win) { if (win.isMinimized()) win.restore(); win.show(); app.focus({ steal: true }); } },
   emit: (st) => send('account', st),
@@ -480,13 +710,21 @@ handle('account:login', () => account.login());
 handle('account:cancel', () => account.cancel());
 handle('account:logout', () => account.logout());
 handle('account:refresh', () => account.refresh());
+// 邀约有礼：邀约链接 / 二维码 / 积分，积分兑换会员天数（兑换后刷新账号状态，会员到期日跟着变）
+handle('invite:get', () => account.api('/invite'));
+handle('invite:redeem', async (days) => {
+  const r = await account.api('/invite/redeem', { method: 'POST', body: { days } });
+  account.refresh().catch(() => {});
+  return r;
+});
+handle('invite:copy', (text) => { clipboard.writeText(String(text)); });
 // 只允许用系统浏览器打开账号网站上的页面（会员中心、购买、我的工具）
 handle('account:open', (url) => {
   if (!String(url).startsWith(ACCOUNT_PORTAL + '/')) throw new Error('只能打开 BrowserX 网站上的页面');
   return shell.openExternal(url);
 });
 
-// 工具市场：从市场装过的工具记在 <userData>/market-installed.json（name → { id, version, sha256 }），列表上据此显示「已安装 / 有更新」
+// 插件市场：从市场装过的工具记在 <userData>/market-installed.json（name → { id, version, sha256 }），列表上据此显示「已安装 / 有更新」
 const INSTALLED_FILE = () => path.join(app.getPath('userData'), 'market-installed.json');
 const readInstalled = () => { try { return JSON.parse(fs.readFileSync(INSTALLED_FILE(), 'utf8')); } catch { return {}; } };
 let marketPending = null;
@@ -542,7 +780,7 @@ handle('market:purchase', (id) => account.api(`/market/${Number(id)}/purchase`))
 
 // 删除本地工具：文件移到废纸篓（可以从废纸篓恢复），所有标签正在进行的对话里也去掉这个工具
 handle('tools:delete', async (name) => {
-  if (makingTab()?.agent.making.name === name) throw new Error(`正在修改工具 ${name}，先点横幅上的「完成」或「放弃」`);
+  if (makingTab()?.agent.making.name === name) throw new Error(`正在修改工具 ${name}，先点横幅上的「完成制作 / 保存工具」或「退出」`);
   const files = cur.agent.toolFiles(name);
   for (const f of files) await shell.trashItem(f);
   vault.remove(name); // 加密工具的密钥一起删（废纸篓里的 .bxt 就打不开了，要用请重新从市场安装）
@@ -568,3 +806,4 @@ handle('rec:status', () => cur.agent.rec.status());
 handle('rec:start', (opts) => cur.agent.rec.start(opts));
 handle('rec:mark', (label) => cur.agent.rec.mark(label));
 handle('rec:stop', () => cur.agent.rec.stop());
+handle('making:recStop', (tab) => tabOf(tab).agent.finishMakingRec()); // 制作工具时点「停止录制」：停录制 + 结果交给助手

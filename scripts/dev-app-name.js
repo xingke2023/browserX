@@ -21,6 +21,13 @@ for (const key of ['CFBundleName', 'CFBundleDisplayName']) {
   execFileSync('plutil', ['-replace', key, '-string', NAME, plist]);
   changed = true;
 }
+// 改 Info.plist 会弄坏 Electron.app 原来的签名。签名坏了，macOS 记不住钥匙串里「BrowserX Safe Storage」（safeStorage 加密账号 token 用）的
+// 「始终允许」，每次启动都要输钥匙串密码。所以改完（或发现签名已经坏了）重新做一次本机签名（ad-hoc），之后点一次「始终允许」就不再问
+const valid = () => { try { execFileSync('codesign', ['--verify', '--deep', '--strict', app], { stdio: 'ignore' }); return true; } catch { return false; } };
+if (changed || !valid()) {
+  execFileSync('codesign', ['--force', '--deep', '--sign', '-', app], { stdio: 'ignore' });
+  console.log('[dev-app-name] 已重新签名开发用 Electron.app（签名有效，钥匙串的「始终允许」才记得住）');
+}
 if (changed) {
   // 让 Launch Services 重新读这个 .app 的信息，否则菜单栏可能还显示旧名字
   try { execFileSync('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister', ['-f', app]); } catch {}

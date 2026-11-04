@@ -73,15 +73,17 @@ function inTab(t, fn) {
   try { return fn(); } finally { T = prev || cur; }
 }
 
-function nearBottom() { return T.el.scrollHeight - T.el.scrollTop - T.el.clientHeight < 60; }
 function add(cls, html, force) {
-  const stick = force || nearBottom();
   const d = document.createElement('div');
   d.className = cls;
   d.innerHTML = html;
   T.el.appendChild(d);
-  if (stick) T.el.scrollTop = T.el.scrollHeight;
+  autoScroll(force);
   return d;
+}
+// 有新内容就滚到底部；只有在等用户回答问题 / 批准时不动（那时问题卡片已经滚到眼前，见 showWaiting）
+function autoScroll(force) {
+  if (force || !waitingCard(T)) T.el.scrollTop = T.el.scrollHeight;
 }
 
 function setRunning(r) {
@@ -89,10 +91,23 @@ function setRunning(r) {
   if (T === cur) renderRunning();
   renderTabs();
 }
+// 还没回答的提问卡片 / 批准卡片（第一张）：有的话助手是在等用户，不是在忙
+function waitingCard(t) {
+  return [...t.qEls.values()][0] || [...t.permEls.values()].find((d) => !d.classList.contains('done')) || null;
+}
+// 等你回答时：卡片顶部滚进视野（「提交」可能在下面，但先让人看到问题），状态栏换成醒目的「等你回答」
+function showWaiting(d) {
+  requestAnimationFrame(() => d.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  if (T === cur) renderRunning();
+}
 function renderRunning() {
+  const waiting = cur.running && !!waitingCard(cur);
   $('btnStop').hidden = !cur.running;
-  $('status').textContent = cur.running ? '执行中…' : '';
+  $('status').textContent = !cur.running ? '' : waiting ? '⏳ 等你回答（点这里看问题）' : '执行中…';
   document.body.classList.toggle('running', cur.running);
+  document.body.classList.toggle('waiting', waiting);
+  $('mk_ask').hidden = !(cur.making && cur.qEls.size); // 制作横幅：有问题等你回答时，在 RUNNING 左边提示
+  $('mk_busy').hidden = !(cur.running && cur.making); // 制作工具时，助手在工作：横幅右上角转圈（跟标签上的一样）
 }
 
 const BROWSER = 'mcp__browser__';
@@ -148,6 +163,7 @@ function toolResult(ev) {
   const out = d.querySelector('.tout');
   out.hidden = !ev.text;
   out.textContent = ev.text;
+  autoScroll();
 }
 
 function permissionCard(ev) {
@@ -161,6 +177,7 @@ function permissionCard(ev) {
     <div class="pb"><button class="primary" data-d="allow">允许</button>${ev.warn ? '' : '<button data-d="always">本会话总是允许</button>'}<button class="ghost" data-d="deny">拒绝</button><span class="pr"></span></div>`, true);
   d.querySelectorAll('[data-d]').forEach((b) => b.addEventListener('click', () => call('agent:permit', ev.id, b.dataset.d, ev.tab).catch(() => {})));
   T.permEls.set(ev.id, d);
+  showWaiting(d);
   window.focus();
 }
 
@@ -170,23 +187,26 @@ function permissionDone(ev) {
   d.classList.add('done');
   d.querySelectorAll('[data-d]').forEach((b) => (b.disabled = true));
   d.querySelector('.pr').textContent = { allow: '已允许', always: '已允许（本会话）', deny: '已拒绝' }[ev.decision] || '';
+  if (T === cur) renderRunning();
 }
 
 // Claude 的 AskUserQuestion：画成可点选的卡片，提交后答案交回 agent.js questionHook
 function questionCard(ev) {
   const qs = ev.questions;
-  const d = add('perm qcard', `<div class="ph">助手想问你</div>
+  const CN = '一二三四五六七八九十';
+  const d = add('perm qcard', `<div class="ph">请您回答以下问题</div>
     ${qs.map((q, i) => `<div class="qq" data-i="${i}">
-      <div class="qh">${q.header ? `<span class="qchip">${esc(q.header)}</span>` : ''}${esc(q.question)}${q.multiSelect ? '<span class="qmulti">（可多选）</span>' : ''}</div>
+      <div class="qh"><span class="qno">问题${CN[i] || i + 1}：</span>${esc(q.question)}${q.multiSelect ? '<span class="qmulti">（可多选）</span>' : ''}</div>
       <div class="qopts">
-        ${(q.options || []).map((o, j) => `<button class="qopt" data-j="${j}"><b>${esc(o.label)}</b>${o.description ? `<small>${esc(o.description)}</small>` : ''}</button>`).join('')}
-        <button class="qopt qother"><b>其他…</b><small>都不合适，自己写</small></button>
+        ${(q.options || []).map((o, j) => `<button class="qopt" data-j="${j}"><span class="qn">${j + 1}.</span><span class="qt"><b>${esc(o.label)}</b>${o.description ? `<small>${esc(o.description)}</small>` : ''}</span></button>`).join('')}
+        <button class="qopt qother"><span class="qn">${(q.options || []).length + 1}.</span><span class="qt"><b>其他…</b><small>都不合适，自己写</small></span></button>
         <input class="qother-in" hidden placeholder="写下你的回答">
       </div>
       <pre class="qprev" hidden></pre>
     </div>`).join('')}
     <div class="pb"><button class="primary qsubmit" disabled>提交</button><button class="ghost qskip">跳过</button><span class="pr"></span></div>`, true);
   T.qEls.set(ev.id, d);
+  showWaiting(d);
 
   const answerOf = (qd, q) => {
     const picked = [...qd.querySelectorAll('.qopt.sel:not(.qother)')].map((b) => q.options[b.dataset.j].label);
@@ -235,6 +255,7 @@ function questionDone(ev) {
   d.classList.add('done');
   d.querySelectorAll('button, input').forEach((b) => (b.disabled = true));
   d.querySelector('.pr').textContent = ev.answered ? `已回答 · ${d.dataset.summary || ''}` : '已跳过';
+  if (T === cur) renderRunning();
 }
 
 // 把 resume 拿到的历史文字/工具记录一次性铺进消息区（不触发「运行中」状态）
@@ -258,8 +279,29 @@ api.on('agent', (ev) => {
   const t = tabState.get(ev.tab);
   if (t) inTab(t, () => onAgentEvent(ev));
 });
+// 逐字显示：收到一小段就追加到「正在写」的那段消息里；渲染 Markdown 合并到下一帧做，避免每个字都重排
+function streamText(text) {
+  if (!T.streamEl) { T.streamEl = add('msg ai streaming', ''); T.streamEl.dataset.raw = ''; }
+  const el = T.streamEl, tab = T;
+  el.dataset.raw += text;
+  if (el._raf) return;
+  el._raf = requestAnimationFrame(() => {
+    el._raf = 0;
+    if (!el.classList.contains('streaming')) return; // 已经定稿
+    el.innerHTML = md(el.dataset.raw);
+    inTab(tab, () => autoScroll());
+  });
+}
+function endStream() {
+  const el = T.streamEl;
+  T.streamEl = null;
+  if (!el) return;
+  el.classList.remove('streaming');
+  if (el.dataset.raw.trim()) el.innerHTML = md(el.dataset.raw); else el.remove();
+}
 function onAgentEvent(ev) {
-  if (ev.type !== 'text') T.textEl = null;
+  if (ev.type !== 'text' && ev.type !== 'text_delta') T.textEl = null;
+  if (ev.type !== 'text' && ev.type !== 'text_delta' && T.streamEl) endStream(); // 正在逐字写的那段被别的事件打断（比如停止）：按已收到的定稿
   // 后台标签要用户批准 / 回答时，在标签上亮提示
   if ((ev.type === 'permission' || ev.type === 'question') && T !== cur) { T.attn = true; renderTabs(); }
   switch (ev.type) {
@@ -277,10 +319,37 @@ function onAgentEvent(ev) {
       setRunning(false);
       break;
     case 'init': T.skills = ev.skills; break;
-    case 'text':
-      if (T.textEl) { T.textEl.dataset.raw += '\n\n' + ev.text; T.textEl.innerHTML = md(T.textEl.dataset.raw); }
-      else { T.textEl = add('msg ai', md(ev.text)); T.textEl.dataset.raw = ev.text; }
+    case 'text_delta': streamText(ev.text); break;
+    case 'making_tested': { // 助手自己测试草稿通过（agent.makingTest）：给一个保存按钮，也可以换参数再试
+      const args = Object.entries(ev.args || {}).filter(([k]) => k !== '_form').map(([k, v]) => `${k} = ${typeof v === 'string' ? v : JSON.stringify(v)}`).join('，');
+      const d = add('note mksave mktested', `<div class="nhd">✓ 助手测试通过${args ? `<span class="muted">（${esc(args.slice(0, 160))}）</span>` : ''}</div>
+        <div class="mkres">${esc(String(ev.text).slice(0, 600))}</div>
+        <div class="row"><button class="primary mksavebtn">${T.making?.editing ? '保存修改' : '保存到工具箱'}</button><button class="ghost mktrybtn">换个参数试试</button><span class="muted">不满意直接在下面说哪里要改</span></div>`, true);
+      d.querySelector('.mksavebtn').addEventListener('click', (e) => { if (!cur.making) { e.currentTarget.disabled = true; return; } $('mk_done').click(); });
+      d.querySelector('.mktrybtn').addEventListener('click', () => $('mk_try').click());
       break;
+    }
+    case 'sched': // 定时任务在这个（后台）对话里跑（见 main.js runScheduled）
+      if (!T.chatTitle) { T.chatTitle = '定时任务'; renderTabs(); }
+      if (ev.phase === 'start') add('note', `— 定时任务：${esc(ev.title)} 开始运行（${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}，不经过对话） —`, true);
+      else if (ev.ok) add('msg ai', md(String(ev.text)), true);
+      else add('note err', `✗ 定时任务 ${esc(ev.title)} 失败：${esc(ev.text)}`, true);
+      break;
+    case 'rec_suggest': if (T === cur && cur.making) showRecAsk(); break;
+    case 'rec_result': add('msg ai', md(`**录制结果**\n\`\`\`\n${ev.summary}\n\`\`\``), true); break; // 制作工具时录制停止（见 agent.finishMakingRec）
+    case 'text': {
+      // 整段写完：逐字显示的那段换成完整文字（以完整消息为准）；跟上一段文字之间没有操作卡片就并成一段
+      const el = T.streamEl;
+      if (el) { T.streamEl = null; el.classList.remove('streaming'); }
+      if (T.textEl) {
+        T.textEl.dataset.raw += '\n\n' + ev.text; T.textEl.innerHTML = md(T.textEl.dataset.raw);
+        el?.remove();
+      } else if (el) {
+        el.dataset.raw = ev.text; el.innerHTML = md(ev.text); T.textEl = el;
+      } else { T.textEl = add('msg ai', md(ev.text)); T.textEl.dataset.raw = ev.text; }
+      autoScroll();
+      break;
+    }
     case 'tool': toolCard(ev); break;
     case 'tool_result': toolResult(ev); break;
     case 'image': {
@@ -292,14 +361,28 @@ function onAgentEvent(ev) {
     case 'question': questionCard(ev); break;
     case 'question-done': questionDone(ev); break;
     case 'permission-done': permissionDone(ev); break;
-    case 'note': add('note', esc(ev.text), true); break;
+    case 'note': {
+      // tone：比如 intro（制作工具的流程说明：正文颜色，第一行当标题、字大一些）
+      const tone = (ev.tone || '').replace(/[^\w-]/g, '');
+      if (tone === 'intro') { // 第一行当标题；最后一句问用户的话（以「？」结尾）加粗
+        const [hd, ...rest] = String(ev.text).split('\n');
+        const q = /？\s*$/.test(rest[rest.length - 1] || '') ? rest.pop() : '';
+        add('note intro', `<div class="nhd">${esc(hd)}</div>${esc(rest.join('\n').replace(/\n+$/, ''))}${q ? `<div class="nq">${esc(q)}</div>` : ''}`, true);
+      }
+      else if (ev.file) { // 下载完成：带一个「在访达中显示」
+        const d = add('note', `${esc(ev.text)} <button class="ghost dl_show">在访达中显示</button>`, true);
+        d.querySelector('.dl_show').addEventListener('click', () => call('downloads:show', ev.file).catch(() => {}));
+      }
+      else add('note' + (tone ? ` ${tone}` : ''), esc(ev.text), true);
+      break;
+    }
     case 'tool_done': {
       refreshToolTitles();
       // 工具制作完成：带一个「继续修改」，在当前对话里重新进入编辑（不清空对话）
       const d = add('note', `${esc(ev.text)}<div style="margin-top:6px"><button class="ghost tbcont">继续修改</button></div>`, true);
       d.querySelector('.tbcont').addEventListener('click', () => {
         const mk = makingTabState();
-        if (mk) { add('note err', `✗ 正在制作工具 ${esc(mk.making.name)}，先点横幅上的「完成」或「放弃」`, true); return; }
+        if (mk) { add('note err', `✗ 正在制作工具「${esc(mk.making.title || '新工具')}」，先点横幅上的「保存」或「不做了」`, true); return; }
         call('making:continue', ev.name).catch((e) => add('note err', `✗ ${esc(e.message)}`, true));
       });
       break;
@@ -307,12 +390,13 @@ function onAgentEvent(ev) {
     case 'done':
       setRunning(false);
       if (ev.error) add('note err', `✗ ${esc(ev.error)}`);
-      else add('note', '✓ 指令完成，还有什么需要可以继续告诉我');
+      else add('note', '✓ 当前命令完成，如有需要请继续输入指令');
       break;
     case 'error': add('note err', `✗ ${esc(ev.text)}`); break;
     case 'reset':
       setRunning(false);
-      if (T.el.children.length) add('note', '— 对话已结束，下一条消息将开始新对话 —');
+      if (T.quietReset) T.quietReset = false; // 换工具时开的新会话：freshChatForTool 自己加分隔线
+      else if (T.el.children.length) add('note', '— 对话已结束，下一条消息将开始新对话 —');
       break;
     case 'making':
       T.making = ev.making;
@@ -321,6 +405,9 @@ function onAgentEvent(ev) {
       break;
     case 'rec':
       if (T === cur) renderRec(ev);
+      break;
+    case 'prefill': // 制作工具：表单里填的「要做什么」放进发送框，等用户确认后自己发
+      if (T === cur) { $('input').value = ev.text; focusInput(); }
       break;
   }
 }
@@ -360,6 +447,21 @@ async function clearChat() {
   t.chatTitle = '';
   renderTabs();
 }
+// 从工具箱换一个工具：让助手从新会话开始（之前的对话不再每次请求都带上，省 token；旧会话在「历史」里），
+// 界面上的内容不删（直接运行工具的结果不在「历史」里，删了就找不回来），插一条分隔线；对话区只留最近 MAX_CHAT_ITEMS 条，长时间用也不卡。
+// 助手还在回复、有工具在跑、在制作工具时不动（会打断正在做的事）
+const MAX_CHAT_ITEMS = 300;
+async function freshChatForTool(tool) {
+  const t = cur;
+  if (t.running || t.tbRunning || t.making) return;
+  t.quietReset = true;
+  await call('agent:reset', t.id).catch(() => { t.quietReset = false; });
+  t.toolEls.clear(); t.permEls.clear(); // 旧会话里的操作卡片不会再有结果回来
+  if (!t.el.children.length) return;
+  add('note sessionsep', `—— 新会话：${esc(tool.title || tool.name)}（之前的对话不再发给助手，省 token） ——`, true);
+  while (t.el.children.length > MAX_CHAT_ITEMS) t.el.firstElementChild.remove();
+}
+
 $('btnNew').addEventListener('click', async () => {
   await clearChat();
   focusInput();
@@ -517,7 +619,7 @@ const tbState = { page: 0, q: '', fav: false };
 let tbPager = null;
 let tbItems = [];
 
-// 收藏的工具（按工具名）：存在本机 localStorage，只影响工具箱里的「常用」筛选
+// 收藏的工具（按工具名）：存在本机 localStorage，只影响工具箱里的「收藏」筛选
 const TB_FAV_KEY = 'cb.toolFavs';
 let tbFavs = new Set();
 try { tbFavs = new Set(JSON.parse(localStorage.getItem(TB_FAV_KEY) || '[]')); } catch {}
@@ -532,16 +634,18 @@ async function renderToolboxList() {
   try { tbItems = await call('tools:list'); } catch (e) { list.innerHTML = `<div class="hempty">${esc(e.message)}</div>`; return; }
   refreshToolTitles(tbItems);
   list.innerHTML = `<div class="tbtop">
-      <button class="primary tbnewbtn">＋ 新建工具</button>
+      <button class="primary tbnewbtn">新建工具</button>
       <button class="ghost tbimport" title="导入别人做好的工具（一个 .js 文件）">导入</button>
-      <button class="ghost tbmarketbtn" title="在 BrowserX 网站的工具市场里找工具、直接安装">工具市场</button>
-      <button class="ghost tbfavbtn" title="只显示收藏的工具（在工具卡片上点 ☆ 收藏）">★ 常用</button>
+      <button class="ghost tbmarketbtn" title="在 BrowserX 网站的插件市场里找工具、直接安装">插件市场</button>
+      <button class="ghost tbfavbtn" title="只显示收藏的工具（在工具卡片上点 ☆ 收藏）">收藏</button>
+      <button class="ghost tbschedbtn" title="查看、暂停、删除定时运行的工具">定时任务</button>
       <input class="tbsearch" type="search" placeholder="搜索工具名或描述" spellcheck="false">
     </div>
     <div class="tbcards"></div>`;
   list.querySelector('.tbnewbtn').addEventListener('click', showNewToolForm);
   list.querySelector('.tbimport').addEventListener('click', pickImportTool);
   list.querySelector('.tbmarketbtn').addEventListener('click', () => renderMarket());
+  list.querySelector('.tbschedbtn').addEventListener('click', () => renderSchedules());
   const favBtn = list.querySelector('.tbfavbtn');
   favBtn.classList.toggle('on', tbState.fav);
   favBtn.addEventListener('click', () => { tbState.fav = !tbState.fav; tbState.page = 0; favBtn.classList.toggle('on', tbState.fav); drawToolCards(); });
@@ -562,25 +666,25 @@ function drawToolCards() {
   const re = words.length ? new RegExp(`(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi') : null;
   const mark = (text) => (re ? String(text).split(re).map((part, k) => (k % 2 ? `<mark>${esc(part)}</mark>` : esc(part))).join('') : esc(text));
   const shown = tbItems.map((t, i) => ({ t, i })).filter(({ t }) => hit(t) && (!tbState.fav || tbFavs.has(t.name)));
-  box.innerHTML = !tbItems.length ? '<div class="hempty">工具箱是空的——点上面「＋ 新建工具」让助手帮你做一个</div>'
-    : tbState.fav && !tbItems.some((t) => tbFavs.has(t.name)) ? '<div class="hempty">还没有收藏的工具——点工具卡片右上角的 ☆ 收藏，再点「★ 常用」回到全部工具</div>'
+  box.innerHTML = !tbItems.length ? '<div class="hempty">工具箱是空的——点上面「新建工具」让助手帮你做一个</div>'
+    : tbState.fav && !tbItems.some((t) => tbFavs.has(t.name)) ? '<div class="hempty">还没有收藏的工具——点工具卡片右上角的 ☆ 收藏，再点「收藏」回到全部工具</div>'
     : !shown.length ? `<div class="hempty">没有找到包含「${esc(tbState.q.trim())}」的工具</div>` : '';
   for (const { t, i } of shown) {
     const d = document.createElement('div');
     d.className = 'tbitem';
     d.dataset.tool = t.name;
-    d.innerHTML = `<div class="tbhead"><span class="tbname">${i + 1}、${mark(t.title || t.name)}${t.title ? `<small class="tbid">${mark(t.name)}</small>` : ''}</span><span class="tbacts"><button class="ghost tbedit tbfav${tbFavs.has(t.name) ? ' on' : ''}" title="${tbFavs.has(t.name) ? '取消收藏' : '收藏到常用'}">${tbFavs.has(t.name) ? '★' : '☆'}</button>${t.market ? '<span class="tbmk" title="从工具市场安装的别人的工具：不能编辑、导出、发布">市场</span>' : '<button class="ghost tbedit tbeditbtn" title="进入制作模式修改这个工具（改的是草稿，完成前不影响现在的版本）">编辑</button><button class="ghost tbedit tbexport" title="导出成一个 .js 文件，发给别人导入">导出</button><button class="ghost tbedit tbpublish" title="发布到 BrowserX 网站的工具市场（进入审核）">发布</button>'}<button class="ghost tbedit tbdel" title="从工具箱删除（文件移到废纸篓，可以恢复）">删除</button></span></div>
-      ${t.description ? `<div class="tbdesc">${mark(t.description)}</div>` : ''}`;
+    d.innerHTML = `<div class="tbhead"><span class="tbname">${i + 1}、${mark(t.title || t.name)}${t.title ? `<small class="tbid">${mark(t.name)}</small>` : ''}</span><span class="tbacts"><button class="ghost tbedit tbfav${tbFavs.has(t.name) ? ' on' : ''}" title="${tbFavs.has(t.name) ? '取消收藏' : '收藏'}">${tbFavs.has(t.name) ? '★' : '☆'}</button>${t.market ? '<span class="tbmk" title="从插件市场安装的别人的工具：不能编辑、导出、发布">市场</span>' : '<button class="ghost tbedit tbeditbtn" title="进入制作模式修改这个工具（改的是草稿，完成前不影响现在的版本）">编辑</button><button class="ghost tbedit tbexport" title="导出成一个 .js 文件，发给别人导入">导出</button><button class="ghost tbedit tbpublish" title="发布到 BrowserX 网站的插件市场（进入审核）">发布</button>'}<button class="ghost tbedit tbdel" title="从工具箱删除（文件移到废纸篓，可以恢复）">删除</button></span></div>
+      ${t.description ? `<div class="tbdesc" title="${esc(t.description)}">${mark(t.description)}</div>` : ''}`;
     d.querySelector('.tbeditbtn')?.addEventListener('click', (e) => { e.stopPropagation(); beginMaking({ edit: t.name }); });
     d.querySelector('.tbfav').addEventListener('click', (e) => {
       e.stopPropagation();
       toggleFav(t.name);
-      // 在「常用」里取消收藏会让这张卡消失，整体重画；否则只改按钮，不打断已展开的表单
+      // 在「收藏」筛选里取消收藏会让这张卡消失，整体重画；否则只改按钮，不打断已展开的表单
       if (tbState.fav && !d.querySelector('.tbform')) { drawToolCards(); return; }
       const on = tbFavs.has(t.name);
       e.currentTarget.classList.toggle('on', on);
       e.currentTarget.textContent = on ? '★' : '☆';
-      e.currentTarget.title = on ? '取消收藏' : '收藏到常用';
+      e.currentTarget.title = on ? '取消收藏' : '收藏';
     });
     d.querySelector('.tbexport')?.addEventListener('click', (e) => { e.stopPropagation(); exportTool(t.name); });
     d.querySelector('.tbpublish')?.addEventListener('click', (e) => { e.stopPropagation(); showPublishForm(t); });
@@ -588,8 +692,12 @@ function drawToolCards() {
     // 点开一个工具只显示它自己（其它工具、搜索栏、分页栏藏起来），再点一次卡片或「全部工具」回到原来那一页
     d.addEventListener('click', (e) => {
       if (e.target.closest('button, .tbform')) return;
-      if (t.launch) { launchTool(t); return; } // 自带界面的工具：点一下直接运行，不显示参数表单
-      openToolPage(t); // 打开（或回到）这个标签里一直活着的工具页面：自带网页的显示网页，其它的显示标准表单（formSpec 或按 params 自动生成）
+      // 换一个工具：助手开新会话（省 token）；回到这个标签里已经开着的同一个工具页面不用
+      const reopen = [...cur.pages.children].some((x) => x.dataset.tool === t.name);
+      (reopen ? Promise.resolve() : freshChatForTool(t)).then(() => {
+        if (t.launch) { launchTool(t); return; } // 自带界面的工具：点一下直接运行，不显示参数表单
+        openToolPage(t); // 打开（或回到）这个标签里一直活着的工具页面：自带网页的显示网页，其它的显示标准表单（formSpec 或按 params 自动生成）
+      });
     });
     box.appendChild(d);
   }
@@ -758,7 +866,7 @@ function buildDynamicForm(t) {
       draw(paramsToFields(t.params || [], values));
       return;
     }
-    try { spec = await call('tools:formSpec', t.name, values, tab.id); }
+    try { spec = await (t.draft ? call('making:formSpec', values) : call('tools:formSpec', t.name, values, tab.id)); } // 草稿还不在工具箱里，从草稿读
     catch (e) { if (my === seq) form.innerHTML = `<div class="tberr">✗ ${esc(e.message)}</div><div class="row"><button class="ghost dyn_retry">重试</button></div>`; form.querySelector('.dyn_retry')?.addEventListener('click', load); return; }
     if (my !== seq) return; // 有更新的一次在路上，这次的结果丢掉
     submit = spec.submit || '运行';
@@ -787,7 +895,7 @@ function buildDynamicForm(t) {
       else control = `<input ${attrs}${f.kind === 'number' ? ` type="number"${f.min != null ? ` min="${f.min}"` : ''}${f.max != null ? ` max="${f.max}"` : ''}${f.step != null ? ` step="${f.step}"` : ''}` : ''} value="${esc(f.value ?? '')}">`;
       return `<div class="${cls}"${f.title ? ` title="${esc(f.title)}"` : ''}><label for="${id}">${esc(f.label || f.key)}${req}</label>${hint}${control}</div>`;
     }).join('');
-    form.innerHTML = `${html}<div class="tberr" hidden></div><div class="row"><button class="primary tbrun">${esc(submit)}</button></div>`;
+    form.innerHTML = `${html}<div class="tberr" hidden></div><div class="row"><button class="primary tbrun">${esc(submit)}</button>${t.draft ? '' : '<button class="ghost tbsched" title="按表单上现在填的内容，每天 / 工作日定时或每隔一段时间自动运行（BrowserX 开着时）">定时运行…</button>'}</div>`;
     for (const f of fields) {
       if (!f.key || f.kind === 'note' || f.kind === 'section') continue;
       if (f.kind === 'hidden') { values[f.key] = f.value; continue; }
@@ -812,18 +920,19 @@ function buildDynamicForm(t) {
       if (f.refresh === true && f.kind !== 'boolean' && f.kind !== 'enum') el.addEventListener('change', () => later(0)); // 数字 / 文字：改完离开再算
     }
     if (focus) form.querySelector('#' + focus)?.focus();
-    form.querySelector('.tbrun').addEventListener('click', async () => {
+    // 把表单上现在的内容变成工具参数（运行、定时运行共用）；不合法时在表单上显示原因，返回 null
+    const collect = () => {
       const errEl = form.querySelector('.tberr');
       errEl.hidden = true;
-      if (tab.tbRunning) { errEl.hidden = false; errEl.textContent = '这个标签已经有一个工具在运行，等它跑完（或者开个新标签）'; return; }
+      const fail = (msg) => { errEl.hidden = false; errEl.textContent = msg; return null; };
       for (const f of fields) {
         if (!f.key || !f.required) continue;
         const v = values[f.key];
-        if (v == null || v === '' || Number.isNaN(v)) { errEl.hidden = false; errEl.textContent = `「${f.label || f.key}」是必填的`; return; }
+        if (v == null || v === '' || Number.isNaN(v)) return fail(`「${f.label || f.key}」是必填的`);
       }
       const send = {}; // 只提交现在表单上有的字段（藏起来的字段的旧值不带上）
       for (const f of fields) if (f.key && f.kind !== 'note' && f.kind !== 'section') send[f.key] = values[f.key];
-      if (t.dynamic) { await runToolArgs(t, { ...send, _form: true }, form); return; }
+      if (t.dynamic) return { ...send, _form: true };
       // 按 params 生成的表单：转成参数要的类型；选填留空不传
       const args = {};
       for (const f of fields) {
@@ -834,11 +943,17 @@ function buildDynamicForm(t) {
         if (f.param === 'array') args[f.key] = String(v).split('\n').map((x) => x.trim()).filter(Boolean);
         else if (f.param === 'unknown') {
           try { args[f.key] = JSON.parse(v); }
-          catch (e) { errEl.hidden = false; errEl.textContent = `「${f.label}」不是合法 JSON：${e.message}`; return; }
+          catch (e) { return fail(`「${f.label}」不是合法 JSON：${e.message}`); }
         } else args[f.key] = v;
       }
-      await runToolArgs(t, args, form);
+      return args;
+    };
+    form.querySelector('.tbrun').addEventListener('click', async () => {
+      if (tab.tbRunning) { const errEl = form.querySelector('.tberr'); errEl.hidden = false; errEl.textContent = '这个标签已经有一个工具在运行，等它跑完（或者开个新标签）'; return; }
+      const args = collect();
+      if (args) await runToolArgs(t, args, form);
     });
+    form.querySelector('.tbsched')?.addEventListener('click', () => { const args = collect(); if (args) scheduleDialog(t, args); });
   }
   load();
   return form;
@@ -847,9 +962,15 @@ function buildDynamicForm(t) {
 // 运行一个工具（静态表单、动态表单共用）：对话里显示「运行中」和停止按钮，结果 / 报错落回发起运行的那个标签
 async function runToolArgs(t, args, form) {
   const tab = cur;
+  // 正在修改这个工具时，它的正式版页面跑的是工具箱里的旧版：不跑，提示去横幅上试运行草稿
+  if (!t.draft && tab.making?.editing && tab.making.name === t.name) {
+    add('note warn', `这是工具箱里的旧版「${esc(t.title || t.name)}」，改过的内容还在草稿里。要测改过的版本，请点横幅上的「试运行」；满意后点「保存工具」才会替换旧版。`, true);
+    return;
+  }
   tab.tbRunning = true;
   form.querySelector('.tbrun').disabled = true;
-  if (!form.closest('.tbkeep')) $('toolbox').hidden = true; // 工具页面里的表单留着（结果在下面的对话区）；草稿试运行收起工具箱看结果
+  if (!form.closest('.tbkeep')) $('toolbox').hidden = true; // 草稿试运行：收起工具箱看结果
+  else setFolded(form.closest('.tbkeep'), true); // 工具页面：点运行后表单自动收起成一行摘要，下面的对话区看结果（点「展开」还能再改）
   const label = t.title ? `${t.title}（${t.name}）` : t.name;
   add('note', t.draft ? `— 试运行草稿 ${esc(label)}（不经过对话） —` : `— 直接运行工具 ${esc(label)}（不经过对话，省 token） —`, true);
   const running = runningBar(label);
@@ -858,13 +979,23 @@ async function runToolArgs(t, args, form) {
     T = tab; // 跑的时候用户可能切到了别的标签：结果、按钮都放回发起运行的那个标签（finally 里切回来）
     running.done();
     add('msg ai', md(String(r)), true);
+    // 草稿试运行成功：就在对话里给一个「保存插件」按钮（跟横幅上的「完成制作 / 保存工具」一样），不用回头去找横幅
+    if (t.draft && tab.making) {
+      const verb = saveLabel(tab.making);
+      const d = add('note mksave', `试运行完成。效果满意的话 <button class="primary mksavebtn">${verb}</button>，不满意就在下面说哪里要改。`, true);
+      d.querySelector('.mksavebtn').addEventListener('click', (e) => {
+        if (!cur.making) { e.currentTarget.disabled = true; return; } // 已经保存或退出了
+        $('mk_done').click();
+      });
+    }
     // 跑完给一个入口：效果不满意就进入修改模式（会开新对话），把这次的参数和结果带过去，用户补一句哪里不好即可
     if (!t.draft && !t.market) {
       const d = add('note', `工具运行完毕，如果感觉效果不好，<button class="tbtweak">点击修改工具功能</button>`, true);
       d.querySelector('.tbtweak').addEventListener('click', async () => {
         const out = String(r);
         if (!(await beginMaking({ edit: t.name }))) return;
-        $('input').value = `刚才直接运行这个工具，参数：${JSON.stringify(args)}\n结果：\n${out.length > 1500 ? out.slice(0, 1500) + '\n…（后面省略）' : out}\n\n效果不好的地方：`;
+        // 不往发送框里塞一大段文字：这次运行的参数和结果悄悄记进过程记录（助手进入修改后会先读），用户只要说哪里不好
+        call('making:log', `修改前刚直接运行过一次：参数 ${JSON.stringify(args)}；结果：${out.length > 1500 ? out.slice(0, 1500) + '…（后面省略）' : out}`).catch(() => {});
         focusInput();
       });
     }
@@ -874,7 +1005,7 @@ async function runToolArgs(t, args, form) {
     if (isStopped(e)) { add('note', `■ 已手动停止 ${esc(label)}`, true); return; }
     // 直接运行不经过模型，失败了没人会自动修：正式工具直接打开「修改工具」（新对话 + 制作模式），把参数和报错交给助手诊断、改草稿；
     // 草稿试运行失败时本来就在修改中，留在当前对话里让助手接着改
-    if (t.market) { add('note err', `✗ ${esc(e.message)}<div class="muted" style="margin-top:4px">这是从工具市场安装的工具，有问题请联系作者，或在工具市场里更新到新版本</div>`, true); return; }
+    if (t.market) { add('note err', `✗ ${esc(e.message)}<div class="muted" style="margin-top:4px">这是从插件市场安装的工具，有问题请联系作者，或在插件市场里更新到新版本</div>`, true); return; }
     const d = add('note err', `✗ ${esc(e.message)}<div style="margin-top:6px"><button class="tbfix">${t.draft ? '让助手诊断并修复' : '打开修改工具'}</button></div>`, true);
     d.querySelector('.tbfix').addEventListener('click', async () => {
       if (t.draft) {
@@ -897,7 +1028,7 @@ async function runToolArgs(t, args, form) {
 
 async function deleteTool(t) {
   const label = t.title ? `${t.title}（${t.name}）` : t.name;
-  if (!(await askConfirm(`删除工具 ${label}？\n工具文件和它的制作记录会移到废纸篓，需要时可以从废纸篓恢复。已经发布到工具市场的版本不受影响。`))) return;
+  if (!(await askConfirm(`删除工具 ${label}？\n工具文件和它的制作记录会移到废纸篓，需要时可以从废纸篓恢复。已经发布到插件市场的版本不受影响。`))) return;
   try {
     await call('tools:delete', t.name);
     if (tbFavs.has(t.name)) toggleFav(t.name);
@@ -940,16 +1071,16 @@ function toolboxTip(text, name) {
   setTimeout(() => { tip.remove(); card?.classList.remove('tbflash'); }, 4600);
 }
 
-// 导入前的确认页：本地文件导入和工具市场安装共用（市场安装时 p.market 有值，确认 / 取消后回到市场列表）
+// 导入前的确认页：本地文件导入和插件市场安装共用（市场安装时 p.market 有值，确认 / 取消后回到市场列表）
 function showImportPreview(p) {
   const list = $('tb_list');
   const back = p.market ? renderMarket : renderToolboxList;
   const verb = p.market ? '安装' : '导入';
   const risky = p.risks.filter((r) => r.label !== '访问的网址');
-  list.innerHTML = `<button class="ghost tbback">← ${p.market ? '工具市场' : '全部工具'}</button>
+  list.innerHTML = `<button class="ghost tbback">← ${p.market ? '插件市场' : '全部工具'}</button>
     <div class="tbitem tbimp">
       <div class="tbhead"><span class="tbname">${verb}：${esc(p.title || p.name)}${p.title ? `<small class="tbid">${esc(p.name)}</small>` : ''}</span></div>${p.description ? `<div class="tbdesc">${esc(p.description)}</div>` : ''}
-      <p class="muted">${p.market ? `来自工具市场，版本 ${esc(p.market.version)}（已通过网站审核）` : `来自 ${esc(p.from)}`}（${Math.ceil(p.size / 1024)} KB）</p>
+      <p class="muted">${p.market ? `来自插件市场，版本 ${esc(p.market.version)}（已通过网站审核）` : `来自 ${esc(p.from)}`}（${Math.ceil(p.size / 1024)} KB）</p>
       <p class="tbimp-warn">⚠ 工具代码在 BrowserX 里运行，权限跟 BrowserX 一样：能读写你电脑上的文件、用右侧浏览器里已登录的账号操作。只导入你信任的人给的工具，导入前最好看一下源代码。</p>
       ${p.risks.length ? `<div class="tbimp-risks"><b>代码里用到的能力</b>${p.risks.map((r) => `<div class="${r.label === '访问的网址' ? '' : 'risk'}">· ${esc(r.label)}（第 ${r.lines.join('、')} 行${r.more ? ` 等 ${r.more + r.lines.length} 处` : ''}）</div>`).join('')}</div>` : '<p class="muted">没有发现执行命令、读写文件之类的敏感能力。</p>'}
       ${p.exists ? `<label class="tbimp-ow"><input type="checkbox" id="imp_ow"> 工具箱里已经有 ${esc(p.name)}，${p.market ? '用这个版本替换' : '覆盖它'}</label>` : ''}
@@ -965,7 +1096,7 @@ function showImportPreview(p) {
     if (p.exists && !$('imp_ow').checked) { err.hidden = false; err.textContent = `工具箱里已经有 ${p.name}：要${p.market ? '替换' : '覆盖'}请勾选上面的选项，不想${p.market ? '替换' : '覆盖'}就取消`; return; }
     try {
       await call('tools:importConfirm', { overwrite: p.exists });
-      // 市场安装成功：回到工具箱第 1 页（最新的排第 1，刚装的就在最上面）；清掉搜索 / 常用筛选，免得被筛掉看不到
+      // 市场安装成功：回到工具箱第 1 页（最新的排第 1，刚装的就在最上面）；清掉搜索 / 收藏筛选，免得被筛掉看不到
       if (p.market) {
         Object.assign(tbState, { page: 0, q: '', fav: false });
         await renderToolboxList();
@@ -978,7 +1109,7 @@ function showImportPreview(p) {
   });
 }
 
-// ---------------------------------------------------------------- 工具市场 / 发布（BrowserX 账号，见 main.js market:* 和 account.js）
+// ---------------------------------------------------------------- 插件市场 / 发布（BrowserX 账号，见 main.js market:* 和 account.js）
 
 // 没登录时市场 / 发布页显示的提示
 function loginPrompt(box, what) {
@@ -995,19 +1126,78 @@ document.addEventListener('click', (e) => {
   if (b) call('account:open', b.dataset.url).catch(() => {});
 });
 
-// 2026-10-29 这种日期（工具市场的发布 / 更新日期）
+// 2026-10-29 这种日期（插件市场的发布 / 更新日期）
 const ymd = (iso) => { if (!iso) return ''; const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const mkState = { q: '', category: '', page: 1 };
 let mkMeta = null;
+// ---------------------------------------------------------------- 定时运行（见 scheduler.js）
+const SCHED_MODES = { daily: '每天', weekdays: '工作日', interval: '每隔' };
+const schedRule = (x) => (x.mode === 'interval' ? `每隔 ${x.every} 分钟` : `${SCHED_MODES[x.mode]} ${x.time}`);
+
+// 「定时运行…」：用表单上现在填的内容做参数，选怎么定时
+async function scheduleDialog(t, args) {
+  const st = { mode: 'daily', time: '09:00', every: 60 };
+  const p = modal(`<div class="modal-msg"><b>定时运行：${esc(t.title || t.name)}</b><br><span class="muted">用表单上现在填的内容运行。BrowserX 开着时才会运行；打开软件时今天的时间已过、今天又还没跑过，会补跑一次。</span></div>
+    <div class="sc_form">
+      <div class="sc_modes">${Object.entries(SCHED_MODES).map(([k, v]) => `<button type="button" class="dynchip${k === st.mode ? ' on' : ''}" data-m="${k}">${v}</button>`).join('')}</div>
+      <label class="sc_time">时间 <input type="time" value="${st.time}"></label>
+      <label class="sc_every" hidden>间隔 <input type="number" min="5" max="1440" value="${st.every}"> 分钟</label>
+    </div>
+    <div class="modal-actions"><button class="ghost" data-a="cancel">取消</button><button class="primary" data-a="ok">保存</button></div>`);
+  const box = document.querySelector('.modal-overlay:last-child .modal-box');
+  for (const b of box.querySelectorAll('[data-m]')) b.addEventListener('click', () => {
+    st.mode = b.dataset.m;
+    for (const x of box.querySelectorAll('[data-m]')) x.classList.toggle('on', x === b);
+    box.querySelector('.sc_time').hidden = st.mode === 'interval';
+    box.querySelector('.sc_every').hidden = st.mode !== 'interval';
+  });
+  box.querySelector('.sc_time input').addEventListener('input', (e) => { st.time = e.target.value; });
+  box.querySelector('.sc_every input').addEventListener('input', (e) => { st.every = Number(e.target.value); });
+  if (!(await p)) return;
+  try {
+    const task = await call('schedules:add', { tool: t.name, title: t.title || t.name, args, mode: st.mode, time: st.time, every: st.mode === 'interval' ? st.every : undefined });
+    add('note', `已设定时运行：${esc(task.title)}，${esc(schedRule(task))}。在工具箱「定时任务」里可以暂停或删除。`, true);
+  } catch (e) { add('note err', `✗ 定时运行没设上：${esc(e.message)}`, true); }
+}
+
+async function renderSchedules() {
+  const list = $('tb_list');
+  list.innerHTML = `<button class="ghost tbback">← 我的工具</button>
+    <p class="hint sc_hint">定时任务在后台的「定时任务」对话里直接运行工具（不经过助手、不花 token），跑完发系统通知。只在 BrowserX 开着时运行。要新建，打开一个工具，填好表单后点「定时运行…」。</p>
+    <div class="sc_list"><div class="hempty">加载中…</div></div>`;
+  list.querySelector('.tbback').addEventListener('click', renderToolboxList);
+  drawSchedules(await call('schedules:list').catch(() => []));
+}
+function drawSchedules(items) {
+  const box = $('tb_list').querySelector('.sc_list');
+  if (!box) return; // 不在定时任务页面
+  const when = (ms) => (ms ? new Date(ms).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-');
+  box.innerHTML = items.length ? '' : '<div class="hempty">还没有定时任务</div>';
+  for (const x of items) {
+    const d = document.createElement('div');
+    d.className = `tbitem sc_item${x.enabled ? '' : ' off'}`;
+    const args = Object.entries(x.args || {}).filter(([k]) => k !== '_form').map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`).join('，');
+    d.innerHTML = `<div class="tbhead"><span class="tbname">${esc(x.title)}<small class="tbid">${esc(schedRule(x))}</small></span>
+        <span class="tbacts"><button class="ghost tbedit sc_toggle">${x.enabled ? '暂停' : '启用'}</button><button class="ghost tbedit sc_run"${x.running ? ' disabled' : ''}>${x.running ? '运行中…' : '立即运行'}</button><button class="ghost tbedit sc_del">删除</button></span></div>
+      <div class="tbdesc">${x.enabled ? `下次：${esc(when(x.next))}` : '已暂停'} · 上次：${x.lastRun ? `${esc(when(x.lastRun))} ${x.lastOk ? '✓' : '✗'}` : '还没运行过'}${args ? `<br>参数：${esc(args.slice(0, 200))}` : ''}${x.lastRun && x.lastText ? `<br><span class="${x.lastOk ? 'muted' : 'sc_err'}">${esc(x.lastText.slice(0, 160))}</span>` : ''}</div>`;
+    const err = (e) => add('note err', `✗ ${esc(e.message)}`, true);
+    d.querySelector('.sc_toggle').addEventListener('click', () => call('schedules:update', x.id, { enabled: !x.enabled }).catch(err));
+    d.querySelector('.sc_run').addEventListener('click', () => call('schedules:runNow', x.id).catch(err));
+    d.querySelector('.sc_del').addEventListener('click', async () => { if (await askConfirm(`删除定时任务「${x.title}」（${schedRule(x)}）？`)) call('schedules:remove', x.id).catch(err); });
+    box.appendChild(d);
+  }
+}
+api.on('schedules', drawSchedules);
+
 async function renderMarket() {
   const list = $('tb_list');
   list.innerHTML = `<button class="ghost tbback">← 我的工具</button>
-    <div class="tbtop mktop"><input class="tbsearch mk_q" type="search" placeholder="搜索工具市场" spellcheck="false"><select class="mk_cat"><option value="">全部行业</option></select></div>
+    <div class="tbtop mktop"><input class="tbsearch mk_q" type="search" placeholder="搜索插件市场" spellcheck="false"><select class="mk_cat"><option value="">全部行业</option></select></div>
     <div class="mkbody"><div class="hempty">加载中…</div></div>`;
   list.querySelector('.tbback').addEventListener('click', renderToolboxList);
   const body = list.querySelector('.mkbody');
-  if (!account.loggedIn) { loginPrompt(body, '浏览和安装工具市场里的工具'); return; }
-  try { mkMeta = mkMeta || await call('market:meta'); } catch (e) { if (e.needLogin) loginPrompt(body, '浏览工具市场'); else body.innerHTML = `<div class="tberr">${errWithLink(e)}</div>`; return; }
+  if (!account.loggedIn) { loginPrompt(body, '浏览和安装插件市场里的工具'); return; }
+  try { mkMeta = mkMeta || await call('market:meta'); } catch (e) { if (e.needLogin) loginPrompt(body, '浏览插件市场'); else body.innerHTML = `<div class="tberr">${errWithLink(e)}</div>`; return; }
   const q = list.querySelector('.mk_q'), cat = list.querySelector('.mk_cat');
   cat.innerHTML += Object.entries(mkMeta.categories).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join('');
   q.value = mkState.q; cat.value = mkState.category;
@@ -1020,8 +1210,8 @@ async function renderMarket() {
 async function loadMarket(body) {
   body.innerHTML = '<div class="hempty">加载中…</div>';
   let r;
-  try { r = await call('market:list', mkState); } catch (e) { if (e.needLogin) loginPrompt(body, '浏览工具市场'); else body.innerHTML = `<div class="tberr">${errWithLink(e)}</div>`; return; }
-  body.innerHTML = r.items.length ? '' : `<div class="hempty">${mkState.q || mkState.category ? '没有找到符合条件的工具' : '工具市场里还没有工具'}</div>`;
+  try { r = await call('market:list', mkState); } catch (e) { if (e.needLogin) loginPrompt(body, '浏览插件市场'); else body.innerHTML = `<div class="tberr">${errWithLink(e)}</div>`; return; }
+  body.innerHTML = r.items.length ? '' : `<div class="hempty">${mkState.q || mkState.category ? '没有找到符合条件的工具' : '插件市场里还没有工具'}</div>`;
   for (const t of r.items) {
     const d = document.createElement('div');
     d.className = 'tbitem mkitem';
@@ -1065,7 +1255,7 @@ async function startBuying(t) {
   add('note', `— 已在浏览器里打开「${esc(t.title)}」的付款页（${esc(t.price_label)}），付完款会自动打开安装确认 —`, true);
   const tick = async () => {
     if (!buying || buying.id !== t.id) return;
-    if (Date.now() > buying.until) { stopBuying(); add('note', `— 「${esc(t.title)}」等了 20 分钟没有收到付款，已停止等待；付过款的话在工具市场里点「安装」即可 —`, true); return; }
+    if (Date.now() > buying.until) { stopBuying(); add('note', `— 「${esc(t.title)}」等了 20 分钟没有收到付款，已停止等待；付过款的话在插件市场里点「安装」即可 —`, true); return; }
     try {
       const r = await call('market:purchase', t.id);
       if (r.can_download) {
@@ -1086,7 +1276,7 @@ function stopBuying() {
   buying = null;
 }
 
-// 发布到工具市场：网站上已有同名的自己的工具 → 上传新版本（只填版本号和说明）；否则新建（行业、价格、简介）。都要管理员审核后才上架
+// 发布到插件市场：网站上已有同名的自己的工具 → 上传新版本（只填版本号和说明）；否则新建（行业、价格、简介）。都要管理员审核后才上架
 const bumpVersion = (v) => (/^(\d+)\.(\d+)\.(\d+)$/.test(v || '') ? v.replace(/(\d+)$/, (n) => Number(n) + 1) : '1.0.0');
 async function showPublishForm(t) {
   const list = $('tb_list');
@@ -1110,8 +1300,8 @@ async function showPublishForm(t) {
   }
   const cats = Object.entries(info.meta.categories).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join('');
   box.innerHTML = `<div class="tbform">
-    <div class="tbhead"><span class="tbname">${rm ? '上传新版本' : '发布到工具市场'}：${esc(label)}</span></div>
-    <p class="hint">${rm ? `网站上已有这个工具（${esc(rm.status_label)}，${esc(rm.price_label)}，当前对外版本 ${esc(rm.current_version || '无')}）。新版本审核通过后替换旧版本；价格、简介在网站上改。` : `提交后进入审核，管理员通过后才会出现在工具市场。平台抽成 ${info.meta.commission_percent}%，其余归你。`}</p>
+    <div class="tbhead"><span class="tbname">${rm ? '上传新版本' : '发布到插件市场'}：${esc(label)}</span></div>
+    <p class="hint">${rm ? `网站上已有这个工具（${esc(rm.status_label)}，${esc(rm.price_label)}，当前对外版本 ${esc(rm.current_version || '无')}）。新版本审核通过后替换旧版本；价格、简介在网站上改。` : `提交后进入审核，管理员通过后才会出现在插件市场。平台抽成 ${info.meta.commission_percent}%，其余归你。`}</p>
     ${info.secrets.length ? `<p class="tbimp-warn">⚠ 代码里可能有不该公开的内容：${info.secrets.map((x) => `${esc(x.label)}（第 ${x.lines.join('、')} 行）`).join('；')}。建议先点「编辑」让助手改成运行时读取，再发布。</p>` : ''}
     <div class="tbf"><label for="pb_version">版本号 <span class="req">*</span></label><input id="pb_version" value="${esc(rm ? bumpVersion(rm.latest_version) : '1.0.0')}" spellcheck="false"></div>
     ${rm ? '' : `
@@ -1138,7 +1328,7 @@ async function showPublishForm(t) {
     try {
       const r = await call('market:publish', t.name, form);
       box.innerHTML = `<div class="tbhead"><span class="tbname">已提交：${esc(label)} ${esc(r.version)}</span></div>
-        <p class="muted">${r.created ? '新工具已提交' : '新版本已上传'}，等待管理员审核，通过后会出现在工具市场。</p>
+        <p class="muted">${r.created ? '新工具已提交' : '新版本已上传'}，等待管理员审核，通过后会出现在插件市场。</p>
         <div class="row"><button class="ghost ac_link" data-url="${esc(r.url)}">在网站上查看 / 修改</button><button class="ghost pb_back">回到工具箱</button></div>`;
       box.querySelector('.pb_back').addEventListener('click', renderToolboxList);
     } catch (e) {
@@ -1159,7 +1349,7 @@ function renderAccountBtn() {
     ? `<span class="acav" aria-hidden="true">${esc((u?.name || '?').slice(0, 1).toUpperCase())}</span><span class="acname">${esc(u?.name || '账号')}</span>`
     : `<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5.5" r="2.75"/><path d="M2.75 13.5c.6-2.6 2.75-4 5.25-4s4.65 1.4 5.25 4"/></svg><span class="acname">登录</span>`;
   b.classList.toggle('in', account.loggedIn);
-  b.title = account.loggedIn ? `${u?.name || ''} ${u?.email || ''}\n会员授权、工具市场、退出登录` : '登录 BrowserX 账号：会员授权、工具市场、发布工具';
+  b.title = account.loggedIn ? `${u?.name || ''} ${u?.email || ''}\n会员授权、插件市场、退出登录` : '登录 BrowserX 账号：会员授权、插件市场、发布工具';
 }
 function fmtDate(iso) { return iso ? new Date(iso).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }) : ''; }
 function renderAccount() {
@@ -1175,7 +1365,7 @@ function renderAccount() {
   }
   if (!account.loggedIn) {
     box.innerHTML = `<div class="ac_card"><h3>登录 BrowserX 账号</h3>
-      <p class="hint">登录后可以查看会员授权、在工具市场里直接安装工具、把自己做的工具一键发布到市场。</p>
+      <p class="hint">登录后可以查看会员授权、在插件市场里直接安装工具、把自己做的工具一键发布到市场。</p>
       <p class="hint">点下面的按钮会在系统浏览器里打开 ${esc(account.portal || '')}，在网站上登录（没有账号可以注册）并点「授权」。密码只在网站上输入，不经过本软件。</p>
       <div class="tberr" hidden></div>
       <div class="row"><button class="primary ac_login">在浏览器里登录</button></div></div>`;
@@ -1188,21 +1378,101 @@ function renderAccount() {
     return;
   }
   const lic = u?.license;
-  box.innerHTML = `<div class="ac_card">
-      <div class="ac_who"><span class="ac_avatar" aria-hidden="true">${esc((u?.name || '?').slice(0, 1).toUpperCase())}</span><div><b>${esc(u?.name || '')}</b><span>${esc(u?.email || '')}</span></div></div>
+  const wan = (n) => (n >= 10000 ? `${+(n / 10000).toFixed(n < 100000 ? 1 : 0)} 万` : n.toLocaleString()); // 大数字用「万」，一行放得下
+  // 会员状态：右上角一个标签 + 开通 / 续期按钮
+  const status = !u ? '<span class="ac_badge">读取中…</span>'
+    : u.is_admin ? '<span class="ac_badge ok">管理员</span>'
+    : lic ? `<span class="ac_badge ok" title="会员到期：${esc(fmtDate(lic.expires_at))}">会员 · ${esc(fmtDate(lic.expires_at))} 到期</span>`
+    : '<span class="ac_badge">未开通会员</span>';
+  const renew = u && !u.is_admin ? `<button class="${u.member ? 'ghost' : 'primary'} ac_link ac_small" data-url="${esc(u.urls.packages)}">${u.member ? '续期' : '开通会员'}</button>` : '';
+  // 今天的 Claude 用量（门户按天限额，见 browserx-portal ClaudeQuota）：一行字 + 一条细进度条
+  const c = u?.claude;
+  const usage = c?.limit ? (() => {
+    const pct = Math.min(100, Math.round(c.used * 100 / c.limit));
+    return `<div class="ac_usage" title="每天 0 点重置${c.exceeded && !u.member ? '；开通会员可以提高额度' : ''}">
+        <div class="ac_urow"><span>今日 Claude 用量</span><span><b>${wan(c.used)}</b> / ${wan(c.limit)}${c.exceeded ? ' · <em class="ac_over">已用完，明天 0 点恢复</em>' : ''}</span></div>
+        <div class="ac_meter"><i style="width:${pct}%" class="${c.exceeded ? 'full' : pct >= 80 ? 'hi' : ''}"></i></div>
+      </div>`;
+  })() : '';
+  box.innerHTML = `<div class="ac_card ac_main">
+      <div class="ac_head">
+        <div class="ac_who"><span class="ac_avatar" aria-hidden="true">${esc((u?.name || '?').slice(0, 1).toUpperCase())}</span><div><b>${esc(u?.name || '')}</b><span>${esc(u?.email || '')}</span></div></div>
+        <div class="ac_status">${status}${renew}</div>
+      </div>
+      ${usage}
+      ${u && !u.member && !u.is_admin ? '<p class="hint">开通会员后可以安装、发布插件市场里的工具，Claude 额度也更高。</p>' : ''}
     </div>
-    <div class="ac_card"><h3>会员授权</h3>
-      ${!u ? '<p class="hint">正在读取…</p>' : u.is_admin ? '<p><span class="ac_badge ok">管理员</span></p>' : lic ? `<p><span class="ac_badge ok">有效</span> 到期：${esc(fmtDate(lic.expires_at))}</p>` : '<p><span class="ac_badge">没有有效授权</span></p><p class="hint">开通会员后可以安装和发布工具市场里的工具。</p>'}
-      <div class="row">${u && !u.member ? `<button class="primary ac_link" data-url="${esc(u.urls.packages)}">开通 / 续期会员</button>` : u ? `<button class="ghost ac_link" data-url="${esc(u.urls.packages)}">续期</button>` : ''}</div>
-    </div>
-    <div class="ac_card"><h3>工具市场</h3>
-      <div class="row"><button class="ghost ac_market">在工具箱里打开工具市场</button>${u ? `<button class="ghost ac_link" data-url="${esc(u.urls.my_tools)}">我发布的工具</button>` : ''}</div>
-    </div>
-    <div class="row ac_foot">${u ? `<button class="ghost ac_link" data-url="${esc(u.urls.panel)}">打开会员中心</button>` : ''}<button class="ghost ac_refresh">刷新</button><button class="ghost ac_logout">退出登录</button></div>`;
+    ${u ? `<div class="ac_card ac_invite">
+      <div><b>邀约有礼</b><span>最高得 <em>${esc(u.max_per_invite ?? 650)} 积分</em>/人 · 我的积分 ${esc(u.points ?? 0)}</span></div>
+      <button class="primary ac_invite_go">去邀约</button>
+    </div>` : ''}
+    <div class="ac_links">
+      <button class="ghost ac_market">插件市场</button>${u ? `<button class="ghost ac_link" data-url="${esc(u.urls.my_tools)}">我发布的工具</button><button class="ghost ac_link" data-url="${esc(u.urls.panel)}">会员中心</button>` : ''}
+      <span class="ac_spacer"></span><button class="ghost ac_refresh" title="重新读取账号、会员和用量">刷新</button><button class="ghost ac_logout">退出登录</button>
+    </div>`;
   box.querySelector('.ac_market').addEventListener('click', () => { $('account').hidden = true; $('toolbox').hidden = false; renderMarket(); });
+  box.querySelector('.ac_invite_go')?.addEventListener('click', openInvite);
   box.querySelector('.ac_refresh').addEventListener('click', () => call('account:refresh').catch((e) => add('note err', `✗ ${esc(e.message)}`, true)));
   box.querySelector('.ac_logout').addEventListener('click', async () => {
     if (await askConfirm('退出 BrowserX 账号？工具箱里已经安装的工具不受影响。')) call('account:logout').catch(() => {});
+  });
+}
+// 邀约弹窗：二维码 + 链接（复制），奖励规则，邀请人数，积分兑换会员天数
+async function openInvite() {
+  let d;
+  try { d = await call('invite:get'); } catch (e) { add('note err', `✗ ${esc(e.message)}`, true); return; }
+  const rules = `好友通过你的链接或二维码注册，你得 ${d.signup_points} 积分；好友第一次买套餐，你再得 ${d.package_points.map((p) => `${esc(p.name)} ${p.points}`).join('、')} 积分。`;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `<div class="modal-box inv">
+    <div class="inv_head"><b>邀约有礼</b><span>最高得 <em>${d.max_per_invite} 积分</em>/人</span></div>
+    <div class="inv_main">
+      <img class="inv_qr" src="${esc(d.qr)}" alt="邀约二维码">
+      <div class="inv_side">
+        <p class="inv_rules">${rules}</p>
+        <p class="inv_rules">积分可以兑换会员天数：${d.points_per_day} 积分 = 1 天。</p>
+        <div class="inv_stats"><span><b>${d.invited}</b>已邀请</span><span><b>${d.purchased}</b>已购买</span><span><b class="inv_pts">${d.points}</b>我的积分</span></div>
+      </div>
+    </div>
+    <div class="inv_link"><input readonly value="${esc(d.url)}"><button class="primary inv_copy">复制链接</button></div>
+    <div class="inv_redeem"><span>兑换</span><input type="number" min="1" class="inv_days"><span>天会员</span><button class="ghost inv_go">兑换</button><span class="inv_msg"></span></div>
+    <div class="modal-actions"><button class="ghost inv_web">在网站上查看明细</button><button class="primary" data-a="cancel">关闭</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  call('view:cover', true).catch(() => {});
+  const q = (s) => overlay.querySelector(s);
+  const close = () => { overlay.remove(); call('view:cover', false).catch(() => {}); };
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  q('[data-a=cancel]').addEventListener('click', close);
+  q('.inv_web').addEventListener('click', () => call('account:open', account.user?.urls?.invite || d.url).catch(() => {}));
+  q('.inv_copy').addEventListener('click', async () => {
+    await call('invite:copy', d.url).catch(() => {});
+    q('.inv_copy').textContent = '已复制 ✓';
+    setTimeout(() => { if (q('.inv_copy')) q('.inv_copy').textContent = '复制链接'; }, 2000);
+  });
+  const days = q('.inv_days'), msg = q('.inv_msg');
+  const maxDays = () => Math.floor(d.points / d.points_per_day);
+  const syncRedeem = () => {
+    days.max = Math.max(1, maxDays());
+    if (!days.value) days.value = Math.max(1, maxDays());
+    q('.inv_go').disabled = maxDays() < 1;
+    if (maxDays() < 1) { msg.className = 'inv_msg'; msg.textContent = `满 ${d.points_per_day} 积分可兑换`; }
+  };
+  syncRedeem();
+  q('.inv_go').addEventListener('click', async () => {
+    const n = parseInt(days.value, 10);
+    if (!(n >= 1)) return;
+    q('.inv_go').disabled = true;
+    try {
+      const r = await call('invite:redeem', n);
+      d.points = r.points;
+      q('.inv_pts').textContent = r.points;
+      days.value = '';
+      msg.className = 'inv_msg ok';
+      msg.textContent = `✓ 已兑换 ${n} 天，到期 ${fmtDate(r.expires_at)}`;
+    } catch (e) { msg.className = 'inv_msg err'; msg.textContent = e.message; }
+    syncRedeem();
   });
 }
 function openAccount(show) {
@@ -1213,6 +1483,9 @@ function openAccount(show) {
   if (show) { renderAccount(); if (account.loggedIn) call('account:refresh').catch(() => {}); }
 }
 $('btnAccount').addEventListener('click', () => openAccount($('account').hidden));
+$('mk_ask').addEventListener('click', () => waitingCard(cur)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+// 状态栏「等你回答」：点一下滚到那张卡片
+$('status').addEventListener('click', () => waitingCard(cur)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
 api.on('account', (st) => {
   account = st;
   renderAccount();
@@ -1224,36 +1497,42 @@ call('account:state').then((st) => { account = st; renderAccount(); }).catch(() 
 // 正在制作工具的标签（同一时间最多一个，主进程也会拦）
 const makingTabState = () => [...tabState.values()].find((x) => x.making);
 
+// 新建工具：只问「想做个什么工具」，名字由助手起；写了就直接当第一条消息发给助手
+const NT_EXAMPLES = ['输入保单号，在保险公司网站上查保单状态和保费', '每天把续保名单导出成 Excel', '把表格里的客户资料逐条填进网页表单', '保存某个网站最新的一条新闻（文字和图片）'];
 function showNewToolForm() {
   const list = $('tb_list');
-  list.innerHTML = `<button class="ghost tbback">← 全部工具</button>
-    <div class="tbitem"><div class="tbhead"><span class="tbname">新建工具</span></div><div class="tbform tbdyn">
-      <div class="tbf" title="工具箱里显示的名字，例如「保单查询」"><label for="nt_title">中文名 <span class="req">*</span></label><input id="nt_title" spellcheck="false" maxlength="40" placeholder="保单查询" style="--w:12"></div>
-      <div class="tbf" title="字母、数字、下划线，例如 aes_policy；留空自动分配一个 12 位英文数字代码"><label for="nt_name">英文名</label><input id="nt_name" spellcheck="false" placeholder="留空自动分配" style="--w:14"></div>
-      <div class="tbf full" title="越具体越好：在哪个网站、输入什么、输出什么"><label for="nt_goal">要做什么</label><textarea id="nt_goal" placeholder="在哪个网站、输入什么、输出什么。例如：输入保单号，在保诚 AES 查保单详情，返回状况、保费、受保人"></textarea></div>
-      <div class="dynnote">会开一个新对话专门做这个工具（当前对话在「历史」里找得回）；代码先写在草稿里，试运行没问题点「完成」才放进工具箱。</div>
+  list.innerHTML = `<div class="tbitem tbnt"><div class="tbform tbdyn">
+      <div class="tbf full"><label for="nt_goal">想做个什么工具？</label><textarea id="nt_goal" placeholder="说清楚在哪个网站、输入什么、要得到什么结果，例如：输入保单号，在宏利网站查保单状态和保费"></textarea></div>
+      <div class="nt_examples">${NT_EXAMPLES.map((x) => `<button type="button" class="dynchip">${esc(x)}</button>`).join('')}</div>
+      <div class="dynnote">会开一个新对话专门做这个工具（当前对话在「历史」里找得回）。助手需要时会请你在网页上操作一遍，写好后自己测试，你点「保存到工具箱」就行。</div>
       <div class="tberr" hidden></div>
       <div class="row"><button class="primary nt_go">开始制作</button></div>
     </div></div>`;
-  list.querySelector('.tbback').addEventListener('click', renderToolboxList);
+  const goal = $('nt_goal');
+  for (const b of list.querySelectorAll('.nt_examples .dynchip')) b.addEventListener('click', () => { goal.value = b.textContent; goal.focus(); });
+  goal.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) list.querySelector('.nt_go').click(); });
   list.querySelector('.nt_go').addEventListener('click', async () => {
     const err = list.querySelector('.tberr');
-    const name = $('nt_name').value.trim(), title = $('nt_title').value.trim(), goal = $('nt_goal').value.trim();
     err.hidden = true;
-    if (!title) { err.hidden = false; err.textContent = '请填写工具名（中文）'; return; }
-    if (name && !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) { err.hidden = false; err.textContent = '工具名只能用字母、数字、下划线，不能以数字开头'; return; }
-    if (!(await beginMaking({ name, title, goal }))) return;
+    if (!goal.value.trim()) { err.hidden = false; err.textContent = '先说说想做个什么工具'; goal.focus(); return; }
+    const btn = list.querySelector('.nt_go');
+    if (btn.disabled) return; // 防止连点两次开两次
+    btn.disabled = true; btn.textContent = '正在开始…';
+    try { await beginMaking({ goal: goal.value.trim() }); } finally { btn.disabled = false; btn.textContent = '开始制作'; }
   });
-  $('nt_title').focus();
+  goal.focus();
 }
 
 // 开一个新对话进入制作模式；失败时把原因显示出来，返回是否成功
 async function beginMaking(opts) {
   const mk = makingTabState();
-  if (mk) { add('note err', `✗ ${mk === cur ? '' : '另一个标签'}正在制作工具 ${esc(mk.making.name)}，先${mk === cur ? '' : '切过去'}点横幅上的「完成」或「放弃」`, true); $('toolbox').hidden = true; return false; }
+  if (mk) { add('note err', `✗ ${mk === cur ? '' : '另一个标签'}正在制作工具「${esc(mk.making.title || '新工具')}」，先${mk === cur ? '' : '切过去'}点横幅上的「保存」或「不做了」`, true); $('toolbox').hidden = true; return false; }
   await clearChat();
   try {
     await call('making:start', opts);
+    $('toolbox').hidden = true;
+    if (opts.goal) await call('agent:send', opts.goal, cur.id); // 新建时写了要做什么：直接发出去，助手马上开始
+    else focusInput(); // 修改工具：等用户说要改什么
     return true;
   } catch (e) {
     add('note err', `✗ ${esc(e.message)}`, true);
@@ -1261,16 +1540,49 @@ async function beginMaking(opts) {
   }
 }
 
+const saveLabel = () => '保存'; // 横幅上的圆形按钮，跟 agent.js SAVE_LABEL 一致
+
+// 横幅上的进度：✓ 做完的、● 现在这步、○ 还没到的；没录制时「看你示范」显示成跳过
+function renderMakingSteps(m) {
+  const box = $('mk_steps');
+  const step = m.step || 0;
+  box.innerHTML = (m.steps || []).map((label, i) => {
+    const skipped = i === 2 && step > 2 && !m.recorded;
+    const state = skipped ? 'skip' : i < step ? 'done' : i === step ? 'now' : 'todo';
+    const text = i === 4 && m.testing ? '测试中' : i === 4 && m.testFails && step === 4 ? `测试（第 ${m.testFails + 1} 轮）` : label;
+    return `<span class="mks ${state}">${state === 'done' ? '✓' : state === 'skip' ? '–' : state === 'now' ? '●' : '○'} ${esc(text)}</span>`;
+  }).join('<span class="mksep">›</span>');
+}
+
+const INPUT_PH = $('input').placeholder;
 function renderMaking(m) {
   $('makingBar').hidden = !m;
+  $('mk_busy').hidden = !(m && cur?.running);
   document.body.classList.toggle('making', !!m);
+  // 制作工具时发送框提示先输入需求
+  $('input').placeholder = m ? (m.editing ? '说说要改什么、改成什么样…' : '描述这个工具要做什么：在哪个网站、输入什么、要得到什么结果…') : INPUT_PH;
   if (!m) return;
   $('mk_verb').textContent = m.editing ? '修改' : '制作';
-  $('mk_done').textContent = m.streamlining ? '精简中…' : m.editing ? '完成修改' : '完成制作';
+  $('mk_done').textContent = m.streamlining ? '优化并保存中' : saveLabel(m);
+  $('mk_done').classList.toggle('primary', m.step >= 5); // 自己测试通过了：保存按钮变成主按钮
+  renderMakingSteps(m);
   $('mk_done').disabled = !!m.streamlining;
-  $('mk_done').title = m.streamlined ? '检查草稿，通过后放进工具箱' : '先让助手把整个过程精简成最终工具，精简完再点一次放进工具箱';
-  $('mk_name').textContent = m.title ? `${m.title}（${m.name}）` : m.name;
+  $('mk_done').title = '让助手把整个过程精简成最终工具，精简完自动放进工具箱（要不要先试运行你自己决定）';
+  $('mk_name').textContent = m.title || '新工具'; // 只显示中文名（英文代码在悬停提示里；还没起名时助手写草稿会起）
+  $('mk_name').title = m.name;
+  document.querySelector('#makingBar .mk_kind').title = `${m.title || m.name}（${m.name}）`; // 横幅不显示工具名，悬停看
   $('mk_tested').textContent = m.tested ? '已试运行 ✓' : '';
+  // 横幅提示：现在在干什么 / 要用户做什么（要用户动手的黄底闪烁）
+  $('mk_hint').textContent = m.hint?.text || '';
+  $('mk_hint').hidden = !m.hint?.text;
+  $('mk_hint').classList.toggle('action', !!m.hint?.action);
+  if (m.hint?.action) $('mk_recask').hidden = true; // 已经有要用户做的事了，「要录制吗」不跟它挤在一起
+  // 要用户动手、而 BrowserX 不在最前面（用户在别的窗口等）：发一个系统通知，点了回到这里
+  const key = m.hint?.action ? m.hint.text : '';
+  if (key && key !== renderMaking.notified && !document.hasFocus() && 'Notification' in window) {
+    try { const n = new Notification('BrowserX 制作工具：需要你操作', { body: key, silent: false }); n.onclick = () => window.focus(); } catch { /* 通知被系统关掉了就算了 */ }
+  }
+  renderMaking.notified = key;
 }
 
 $('mk_rec').addEventListener('click', () => $('recBtn').click());
@@ -1282,8 +1594,10 @@ $('mk_try').addEventListener('click', async () => {
   $('history').hidden = true;
   $('settings').hidden = true;
   $('toolbox').hidden = false;
+  // 先切回列表区域：修改工具时这个标签里往往还开着那个工具（正式版）的页面，不切走的话用户看到、点的是旧版的表单，跑的不是草稿
+  showToolList();
   const list = $('tb_list');
-  list.innerHTML = `<button class="ghost tbback">← 返回对话</button>`;
+  list.innerHTML = `<button class="ghost tbback tbback-strong">← 返回对话</button>`; // 试运行页：显眼的返回按钮
   list.querySelector('.tbback').addEventListener('click', () => { $('toolbox').hidden = true; });
   const d = document.createElement('div');
   d.className = 'tbitem';
@@ -1293,7 +1607,7 @@ $('mk_try').addEventListener('click', async () => {
 });
 
 $('mk_done').addEventListener('click', async () => {
-  const opts = {};
+  const opts = { force: true }; // 要不要先试运行用户自己决定，不再问「还没试运行过」
   try {
     for (;;) {
       const r = await call('making:finish', opts);
@@ -1314,7 +1628,7 @@ $('mk_cancel').addEventListener('click', async () => {
   const label = making.title ? `${making.title}（${making.name}）` : making.name;
   const editing = making.editing;
   const verb = editing ? '修改' : '制作';
-  if (!(await askConfirm(`放弃${verb}工具 ${label}？草稿会被删除，当前对话也会清空${editing ? '；原来的工具不受影响' : ''}。`))) return;
+  // 不弹确认框，直接放弃（草稿移到废纸篓，误点了可以从废纸篓找回）
   try {
     await call('making:cancel');
   } catch (e) {
@@ -1323,7 +1637,7 @@ $('mk_cancel').addEventListener('click', async () => {
   }
   // 放弃后清空对话（结束当前会话，跟「新对话」一样），只留一条说明
   await clearChat();
-  add('note', `— 已放弃${verb}工具 ${esc(label)}${editing ? '，原工具没有改动' : ''} —`, true);
+  add('note', `— 已退出${verb}工具 ${esc(label)}${editing ? '，原工具没有改动' : ''}（草稿在废纸篓里） —`, true);
   focusInput();
 });
 
@@ -1411,7 +1725,7 @@ let navNow = {};
 function renderNav(n) {
   navNow = n;
   renderBmAdd();
-  if (document.activeElement !== $('url')) $('url').value = n.url || '';
+  if (document.activeElement !== $('url')) $('url').value = n.url === 'about:blank' ? '' : n.url || ''; // 空白页地址栏留空
   $('navBack').disabled = !n.canBack;
   $('navForward').disabled = !n.canForward;
   $('navReload').classList.toggle('loading', n.loading);
@@ -1420,6 +1734,25 @@ function renderNav(n) {
   renderNavError(n);
 }
 api.on('nav', renderNav);
+
+// 网页标签条（一个对话里的多个网页，见 main.js addPage）：两个以上才显示
+function renderPages(list) {
+  const bar = $('pagebar');
+  bar.hidden = list.length < 2;
+  bar.replaceChildren(...list.map((p) => {
+    const el = document.createElement('div');
+    el.className = `pg${p.active ? ' on' : ''}${p.loading ? ' loading' : ''}`;
+    el.title = `${p.title || '(无标题)'}\n${p.url}`;
+    el.innerHTML = `<span class="pgn">${p.index}</span><span class="pgt">${esc(p.url === 'about:blank' || !p.url ? '新标签页' : p.title || p.url)}</span><button class="pgx" title="关闭这个标签页" aria-label="关闭">×</button>`;
+    el.addEventListener('click', (e) => { if (!e.target.closest('.pgx') && !p.active) call('pages:switch', p.index).catch(() => {}); });
+    el.addEventListener('auxclick', (e) => { if (e.button === 1) call('pages:close', p.index).catch(() => {}); }); // 中键关闭
+    el.querySelector('.pgx').addEventListener('click', () => call('pages:close', p.index).catch((err) => add('note err', `✗ ${esc(err.message)}`, true)));
+    return el;
+  }));
+  bar.querySelector('.pg.on')?.scrollIntoView({ inline: 'nearest' });
+}
+api.on('pages', renderPages);
+$('pageNew').addEventListener('click', () => call('pages:new').then(() => { $('url').focus(); }).catch((e) => add('note err', `✗ ${esc(e.message)}`, true)));
 
 // 右侧页面加载失败时的说明（原生视图此时被主进程藏起来了，露出 #stage 里的这块）
 const NAV_ERRORS = {
@@ -1445,7 +1778,7 @@ function renderNavError(n) {
 }
 $('ne_back').addEventListener('click', () => call('nav:back'));
 $('ne_retry').addEventListener('click', () => call('nav:reload'));
-$('ne_home').addEventListener('click', () => call('nav:go', cfg.home || 'https://www.xingke888.com'));
+$('ne_home').addEventListener('click', () => call('nav:go', cfg.home || 'https://browserx.xingke888.com/'));
 $('urlForm').addEventListener('submit', (e) => { e.preventDefault(); call('nav:go', $('url').value).catch(() => {}); $('url').blur(); });
 $('url').addEventListener('focus', () => $('url').select());
 $('navBack').addEventListener('click', () => call('nav:back'));
@@ -1518,17 +1851,30 @@ $('brand').addEventListener('keydown', (e) => { if (e.key === 'Enter') call('nav
 // 按钮和对话里的 rec_start/rec_stop 工具共用同一个 Recorder，状态通过 agent 的 'rec' 事件同步
 
 let recTimer = null;
+// 制作时用户动了右侧网页：横幅上问一句要不要录，点「开始录制」才录；10 秒没点就收起
+let recAskTimer = null;
+function showRecAsk() {
+  if (!$('mk_hint').hidden && $('mk_hint').classList.contains('action')) return; // 横幅上正在提示用户做别的事（扫码、回答问题…），先不问
+  $('mk_recask').hidden = false;
+  clearTimeout(recAskTimer);
+  recAskTimer = setTimeout(() => { $('mk_recask').hidden = true; }, 10000);
+}
+$('mk_recask').querySelector('.mk_recgo').addEventListener('click', () => {
+  $('mk_recask').hidden = true;
+  $('mk_rec').click();
+});
 function renderRec(s) {
   const on = !!s?.recording;
+  if (on) $('mk_recask').hidden = true;
   $('recBtn').classList.toggle('on', on);
   $('recBtn').setAttribute('aria-label', on ? '停止录制' : '开始录制');
-  $('recText').textContent = on ? `停止 · ${s.requests ?? 0}` : '录制';
+  $('recText').textContent = on ? `停止录制 · ${s.requests ?? 0}` : '开始录制';
   $('recMark').hidden = !on;
-  $('mk_rec').textContent = on ? '停止录制' : '录制';
+  $('mk_rec').textContent = on ? '停止录制' : '开始录制'; // 圆形按钮里两字一行
   $('mk_rec').classList.toggle('on', on);
   if (!on) recMarkN = 0;
   clearInterval(recTimer);
-  recTimer = on ? setInterval(() => call('rec:status').then((x) => { if (x.recording) $('recText').textContent = `停止 · ${x.requests}`; }).catch(() => {}), 1000) : null;
+  recTimer = on ? setInterval(() => call('rec:status').then((x) => { if (x.recording) $('recText').textContent = `停止录制 · ${x.requests}`; }).catch(() => {}), 1000) : null;
 }
 
 $('recBtn').addEventListener('click', async () => {
@@ -1539,12 +1885,9 @@ $('recBtn').addEventListener('click', async () => {
       await call('rec:start', {});
       return;
     }
+    // 制作工具时：停录制、显示结果、交给助手都在 agent.finishMakingRec 里（跟「录制中在对话里发一句话」走同一条路）
+    if (cur.making) { await call('making:recStop', cur.id); return; }
     const r = await call('rec:stop');
-    if (cur.making) {
-      add('msg ai', md(`**录制结果**\n\`\`\`\n${r.summary}\n\`\`\``), true);
-      await call('agent:send', `我刚在右侧浏览器里手工操作并录下了接口，录制文件：${r.file}\n请读这个文件，分析每个接口的作用、token 从哪来、哪些只读哪些会改服务器数据，然后接着做工具 ${cur.making.name}（写到草稿里）。`, cur.id);
-      return;
-    }
     const d = add('msg ai', `${md(`**录制结果**\n\`\`\`\n${r.summary}\n\`\`\``)}<div style="margin-top:6px"><button class="ghost recuse">交给助手做成工具</button></div>`, true);
     d.querySelector('.recuse').addEventListener('click', () => {
       $('input').value = `我刚在右侧浏览器里手工操作并录下了接口，录制文件：${r.file}\n请读这个文件，分析每个接口的作用、token 从哪来、哪些是只读哪些会改服务器数据，然后告诉我能做成什么工具；我确认后再写进工具箱。`;
@@ -1760,8 +2103,8 @@ async function closeTab(id) {
 // 主进程推送各标签的网页标题 / 网址（没有对话标题时标签上显示网页标题）
 api.on('tabs', (list) => {
   for (const x of list) {
-    const t = tabState.get(x.id);
-    if (t) { t.pageTitle = x.title; t.url = x.url; }
+    const t = tabOf(x.id); // 主进程自己开的对话（比如定时任务）界面上也要有：没见过的就建起来
+    t.pageTitle = x.title; t.url = x.url;
   }
   renderTabs();
 });
@@ -1783,6 +2126,7 @@ function tabKey(e) {
 }
 
 call('cfg:get').then((c) => { cfg = c; renderCfg(); });
+call('app:showSettings').then((show) => { if (!show) $('btnSettings').style.display = 'none'; }); // 正式版不给客户看设置（见 main.js SHOW_SETTINGS）；button.icon 是 display:grid，hidden 属性藏不住
 // 界面刷新（⌘R）后主进程里的标签还在：照原样建回来（对话内容只在界面里，刷新后就没了，跟以前一样）
 call('tabs:list').then(async (list) => {
   for (const x of list) Object.assign(tabOf(x.id), { pageTitle: x.title, url: x.url });

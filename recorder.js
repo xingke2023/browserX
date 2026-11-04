@@ -16,6 +16,8 @@ const BODY_TYPES = new Set(['XHR', 'Fetch', 'EventSource']);
 const MAX_BODY = 20000;   // 每个响应体最多保存的字符数
 const MAX_POST = 20000;
 const MAX_ENTRIES = 3000; // 防止忘了停止时无限增长
+// 统计、广告、监控这类请求跟业务无关，不录（按域名判断；国内外常见的都在这里）
+const NOISE_HOST = /(^|\.)(google-analytics\.com|analytics\.google\.com|googletagmanager\.com|doubleclick\.net|googlesyndication\.com|googleadservices\.com|adservice\.google\.[a-z.]+|demdex\.net|omtrdc\.net|2o7\.net|adobedtm\.com|everesttech\.net|hotjar\.(com|io)|clarity\.ms|segment\.(com|io)|mixpanel\.com|amplitude\.com|fullstory\.com|sentry\.io|ingest\.sentry\.io|nr-data\.net|newrelic\.com|browser-intake-datadoghq\.[a-z]+|cloudflareinsights\.com|facebook\.net|connect\.facebook\.net|bat\.bing\.com|ads\.linkedin\.com|px\.ads\.linkedin\.com|scorecardresearch\.com|quantserve\.com|criteo\.(com|net)|taboola\.com|outbrain\.com|optimizely\.com|yandex\.ru\/metrika|mc\.yandex\.ru|hm\.baidu\.com|cnzz\.com|umeng\.com|umengcloud\.com|growingio\.com|sensorsdata\.cn|mmstat\.com|arms-retcode[a-z0-9.-]*\.aliyuncs\.com|bugly\.qq\.com|pingjs\.qq\.com|tajs\.qq\.com|mcs\.zijieapi\.com|mcs\.snssdk\.com|log-sdk\.ksapisrv\.com)$/i;
 
 const mask = (v) => `«已打码 长度${String(v).length}»`;
 const stamp = (d = new Date()) => d.toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
@@ -80,9 +82,10 @@ function maskHeaders(h, secrets, where) {
 }
 
 class Recorder {
-  // opts: { webContents, cdp(method, params), dir() -> 录制根目录, emit(text), onChange(status) }
+  // opts: { getWc() -> 当前网页, cdp(method, params, wc), dir() -> 录制根目录, emit(text, tone), onChange(status) }
+  // 一个对话可以有多个网页标签：录制从当前标签开始，录制期间新开的标签（网站弹出的登录窗口、新标签打开的报表等）由 addPage 接进来一起录
   constructor(opts) {
-    this.wc = opts.webContents;
+    this.getWc = opts.getWc;
     this.cdp = opts.cdp;
     this.dir = opts.dir;
     this.emit = opts.emit;
@@ -100,15 +103,17 @@ class Recorder {
     if (this.active) throw new Error('已经在录制中，先 rec_stop');
     let re = null;
     if (filter) { try { re = new RegExp(filter, 'i'); } catch (e) { throw new Error(`filter 不是合法的正则：${e.message}`); } }
+    const wc = this.getWc();
     try {
-      await this.cdp('Network.enable', { maxPostDataSize: MAX_POST });
+      await this.cdp('Network.enable', { maxPostDataSize: MAX_POST }, wc);
     } catch (e) {
       throw new Error(`打开网络监听失败（右侧浏览器的开发者工具开着时无法录制，请先关掉）：${e.message}`);
     }
     const a = this.active = {
+      pages: [],             // 接进来的网页标签：{ wc, n, onMessage, onDetach, onNav }
       label, all, re,
       startedAt: new Date().toISOString(),
-      startUrl: this.wc.getURL(),
+      startUrl: wc.getURL(),
       entries: [],
       byId: new Map(),       // requestId -> entry
       extra: new Map(),      // requestId -> 早于 requestWillBeSent 到达的 ExtraInfo
@@ -127,34 +132,69 @@ class Recorder {
     };
     a.add = add;
 
-    a.onMessage = (_ev, method, p) => {
-      try { this.handle(a, method, p); } catch (err) { /* 单条解析失败不影响整体录制 */ }
-    };
-    a.onNav = (_ev, url) => add({ kind: 'nav', url });
-    a.onDetach = (_ev, reason) => {
-      if (this.active !== a) return;
-      const file = this.save();
-      this.active = null;
-      this.emit(`网络录制被中断（${reason}），已保存到 ${file}`);
-      this.onChange(this.status());
-    };
-    this.wc.debugger.on('message', a.onMessage);
-    this.wc.debugger.on('detach', a.onDetach);
-    this.wc.on('did-navigate', a.onNav);
-    this.wc.on('did-navigate-in-page', a.onNav);
+    this.attach(a, wc);
     add({ kind: 'nav', url: a.startUrl, note: '录制开始时所在页面' });
-    this.emit(`开始网络录制${label ? `：${label}` : ''}。请在右侧浏览器里操作，完成后点「停止录制」或在对话里说「停止录制」`);
+    // 「开始录制」的提示由 agent.js 统一发一条（区分自动录制 / 手动开始），这里不再重复
     this.onChange(this.status());
     return `已开始录制（${all ? '所有请求' : '只录 XHR/fetch/页面跳转'}${re ? `，URL 过滤 ${filter}` : ''}）。当前页面：${a.startUrl}`;
   }
 
   keep(a, p) {
     if (/^(data|blob|chrome-extension|devtools):/.test(p.request.url)) return false;
+    if (!a.all) { try { if (NOISE_HOST.test(new URL(p.request.url).hostname)) { a.noise = (a.noise || 0) + 1; return false; } } catch {} }
     if (a.re && !a.re.test(p.request.url)) return false;
     return a.all || KEEP_TYPES.has(p.type);
   }
 
-  handle(a, method, p) {
+  // 把一个网页标签接进录制（开始时的当前标签，或录制期间新开的标签）
+  attach(a, wc) {
+    const pg = { wc, n: a.pages.length + 1 };
+    const cdp = (method, params) => this.cdp(method, params, wc);
+    const tab = () => (a.pages.length > 1 ? { tab: pg.n } : {}); // 只有一个标签时不标，录制文件跟以前一样
+    pg.onMessage = (_ev, method, p) => {
+      try { this.handle(a, method, p, cdp, tab()); } catch (err) { /* 单条解析失败不影响整体录制 */ }
+    };
+    pg.onNav = (_ev, url) => a.add({ kind: 'nav', url, ...tab() });
+    pg.onDetach = (_ev, reason) => {
+      if (this.active !== a) return;
+      this.unhook(pg);
+      a.pages = a.pages.filter((x) => x !== pg);
+      // 标签被关掉：只是少录一个标签，录制继续；开了开发者工具之类的打断（或所有标签都没了）：保存并结束
+      if (a.pages.length && (wc.isDestroyed() || /closed/i.test(String(reason)))) return;
+      this.detach(a);
+      const file = this.save();
+      this.active = null;
+      this.emit(`网络录制被中断（${reason}），已保存到 ${file}`, 'rec');
+      this.onChange(this.status());
+    };
+    wc.debugger.on('message', pg.onMessage);
+    wc.debugger.on('detach', pg.onDetach);
+    wc.on('did-navigate', pg.onNav);
+    wc.on('did-navigate-in-page', pg.onNav);
+    a.pages.push(pg);
+    return pg;
+  }
+
+  // 录制期间新开了网页标签：一起录（失败就算了，不影响原来的录制）
+  async addPage(wc) {
+    const a = this.active;
+    if (!a || a.pages.some((x) => x.wc === wc)) return;
+    try {
+      await this.cdp('Network.enable', { maxPostDataSize: MAX_POST }, wc);
+      const pg = this.attach(a, wc);
+      a.add({ kind: 'nav', url: wc.getURL() || '(新标签)', tab: pg.n, note: `录制期间打开了新标签 ${pg.n}` });
+    } catch { /* 新标签接不进来就只录原来的 */ }
+  }
+
+  unhook(pg) {
+    if (pg.wc.isDestroyed()) return;
+    pg.wc.debugger.removeListener('message', pg.onMessage);
+    pg.wc.debugger.removeListener('detach', pg.onDetach);
+    pg.wc.removeListener('did-navigate', pg.onNav);
+    pg.wc.removeListener('did-navigate-in-page', pg.onNav);
+  }
+
+  handle(a, method, p, cdp, tab = {}) {
     if (method === 'Network.requestWillBeSent') {
       const prev = a.byId.get(p.requestId);
       // 重定向：同一个 requestId 再发一次，先把上一跳的状态码补上
@@ -166,6 +206,7 @@ class Recorder {
       const where = `#${a.seq + 1}`;
       const e = a.add({
         kind: 'request',
+        ...tab,
         method: p.request.method,
         url: p.request.url,
         type: p.type,
@@ -180,7 +221,7 @@ class Recorder {
       if (ex) { Object.assign(e.reqHeaders, ex); a.extra.delete(p.requestId); }
       // 请求体太大时 requestWillBeSent 里不带，要单独取
       if (p.request.hasPostData && p.request.postData == null) {
-        const job = this.cdp('Network.getRequestPostData', { requestId: p.requestId })
+        const job = cdp('Network.getRequestPostData', { requestId: p.requestId })
           .then((r) => { e.postData = r.postData; }).catch(() => {}).finally(() => a.pending.delete(job));
         a.pending.add(job);
       }
@@ -202,7 +243,7 @@ class Recorder {
     } else if (method === 'Network.loadingFinished') {
       const e = a.byId.get(p.requestId);
       if (!e || !(a.all || BODY_TYPES.has(e.type))) return;
-      const job = this.cdp('Network.getResponseBody', { requestId: p.requestId })
+      const job = cdp('Network.getResponseBody', { requestId: p.requestId })
         .then((r) => {
           if (r.base64Encoded) { e.resBody = `«二进制，${Math.round(r.body.length * 0.75)} 字节»`; return; }
           a.rawBodies.push({ where: e._where, body: r.body });
@@ -226,7 +267,20 @@ class Recorder {
   // 打码 + 写文件（同步，退出应用时也能调）。返回文件路径
   save() {
     const a = this.active;
-    const entries = a.entries.map((e) => {
+    // 折叠重复请求：方法、地址、请求体、响应都一模一样的（定时刷新、心跳、重复点查询），只留第一次，记上重复了几次
+    const firstOf = new Map();
+    a.folded = 0;
+    const kept = a.entries.filter((e) => {
+      if (e.kind !== 'request') return true;
+      const key = `${e.method} ${e.url}\n${e.postData ?? ''}\n${e.status ?? ''}\n${e.resBody ?? ''}`;
+      const first = firstOf.get(key);
+      if (!first) { firstOf.set(key, e); return true; }
+      first.repeated = (first.repeated || 0) + 1;
+      first.lastSeq = e.seq;
+      a.folded++;
+      return false;
+    });
+    const entries = kept.map((e) => {
       if (e.kind !== 'request') return e;
       const { _where, ...r } = e;
       r.reqHeaders = maskHeaders(r.reqHeaders, a.secrets, _where);
@@ -242,7 +296,9 @@ class Recorder {
       startedAt: a.startedAt,
       stoppedAt: new Date().toISOString(),
       startUrl: a.startUrl,
-      note: '敏感值已打码；tokenSources 说明每个被打码的值最早出现在哪里（写工具时据此取 token）',
+      note: '敏感值已打码；tokenSources 说明每个被打码的值最早出现在哪里（写工具时据此取 token）。完全相同的重复请求只留第一次（repeated = 后面又重复了几次，lastSeq = 最后一次的序号）；统计 / 广告类请求没有录',
+      filteredNoise: a.noise || 0,
+      foldedRepeats: a.folded,
       tokenSources: this.tokenSources(a),
       storage: a.storage,
       entries,
@@ -286,7 +342,9 @@ class Recorder {
     await Promise.race([Promise.allSettled([...a.pending]), new Promise((r) => setTimeout(r, 5000))]);
     // storage 快照：只留 key 和长度给模型看，原值只在内存里用来匹配 token 来源
     try {
-      const raw = await this.wc.executeJavaScript(`(() => {
+      const cur = this.getWc();
+      const snap = (a.pages.find((x) => x.wc === cur) || a.pages[0]).wc; // 停止时所在的标签（没接进录制就用第一个）
+      const raw = await snap.executeJavaScript(`(() => {
         const o = {};
         try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); o['localStorage.' + k] = String(localStorage.getItem(k)); } } catch {}
         try { for (let i = 0; i < sessionStorage.length; i++) { const k = sessionStorage.key(i); o['sessionStorage.' + k] = String(sessionStorage.getItem(k)); } } catch {}
@@ -299,17 +357,16 @@ class Recorder {
     this.detach(a);
     const file = this.save();
     this.active = null;
-    this.emit(`网络录制已停止，保存到 ${file}`);
+    this.emit(`网络录制已停止，保存到 ${file}`, 'rec');
     this.onChange(this.status());
     return { file, summary: this.summary(a, file) };
   }
 
   detach(a) {
-    this.wc.debugger.removeListener('message', a.onMessage);
-    this.wc.debugger.removeListener('detach', a.onDetach);
-    this.wc.removeListener('did-navigate', a.onNav);
-    this.wc.removeListener('did-navigate-in-page', a.onNav);
-    this.cdp('Network.disable').catch(() => {});
+    for (const pg of a.pages) {
+      this.unhook(pg);
+      if (!pg.wc.isDestroyed()) this.cdp('Network.disable', {}, pg.wc).catch(() => {});
+    }
   }
 
   // 给模型的简报：按「方法 + 路径（数字/长 id 归一成 :id）」合并的接口清单，加上标记和 token 来源
@@ -333,7 +390,7 @@ class Recorder {
     const tokens = this.tokenSources(a).map((t) => `  长度${t.length}：来源 ${t.origin.join(' / ')}；用在 ${t.usedIn.slice(0, 3).join('、')}`);
     return [
       `录制文件：${file}`,
-      `共 ${a.entries.filter((e) => e.kind === 'request').length} 个请求，${groups.size} 个不同接口：`,
+      `共 ${a.entries.filter((e) => e.kind === 'request').length} 个请求，${groups.size} 个不同接口${a.folded ? `（其中 ${a.folded} 个是完全相同的重复请求，文件里已折叠）` : ''}${a.noise ? `；另外过滤掉 ${a.noise} 个统计 / 广告请求` : ''}：`,
       ...lines.slice(0, 80),
       ...(lines.length > 80 ? [`  …还有 ${lines.length - 80} 个，见文件`] : []),
       ...(timeline.length ? ['页面跳转与标记：', ...timeline.slice(0, 40)] : []),

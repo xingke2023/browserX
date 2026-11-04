@@ -2,7 +2,7 @@
   --bg:#f5f4ef;--panel:#fbfaf7;--card:#fff;--line:#e2dfd6;--line-strong:#cfcabd;--splitter:#5f5a51;--making-bg:#ffedd5;--making-line:#fdba74;
   --text:#2b2a26;--muted:#77736a;--accent:#c96442;--link:#2563eb;--red:#d93025;--btn-hi:rgba(255,255,255,.9);--btn-lo:#ecebe6;--btn-shadow:rgba(40,30,10,.14);--accent-weak:#f6e9e3;--accent-text:#fff;
   --user:#ece9e1;--code:#f1efe8;--ok:#4f8a5b;--err:#b5473a;--warn:#a86b12;--warn-weak:#fbf1de;
-  --side:440px;color-scheme:light;
+  --side:480px;color-scheme:light;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#1f1e1c;--panel:#262523;--card:#2e2d2a;--line:#3a3935;--line-strong:#4b4944;--splitter:#8f8b82;--making-bg:#43301f;--making-line:#8a5a2e;
@@ -165,7 +165,7 @@ body.vdragging iframe{pointer-events:none} /* 拖动经过表单（iframe）时�
 #tabs .tab+.tab::before{content:'';position:absolute;left:0;top:12px;bottom:12px;width:1px;background:var(--line-strong)}
 #tabs .tl{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #tabs .tdot{display:none;flex:none;border-radius:50%}
-#tabs .tab.run .tdot{display:block;width:10px;height:10px;border:2px solid var(--link);border-right-color:transparent;animation:tabspin .8s linear infinite}
+/* 标签上不再显示「运行中」的转圈（制作横幅上有 RUNNING） */
 #tabs .tab.attn .tdot{display:block;width:8px;height:8px;border:none;background:var(--warn);animation:tabpulse 1.4s ease-in-out infinite}
 #tabs .tab.mk .tl::before{content:'🔧 '}
 @keyframes tabspin{to{transform:rotate(360deg)}}
@@ -178,18 +178,60 @@ body.vdragging iframe{pointer-events:none} /* 拖动经过表单（iframe）时�
 #tabs .tnew:hover:not(:disabled){background:var(--user);color:var(--link)}
 @media (prefers-reduced-motion:reduce){#tabs .tab.run .tdot{animation:none;border-right-color:var(--link)}#tabs .tab.attn .tdot{animation:none}}
 
-#makingBar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px 14px;border-bottom:1px solid var(--making-line);background:var(--making-bg);border-left:5px solid var(--accent);box-shadow:inset 0 -1px 0 color-mix(in srgb,var(--accent) 15%,transparent)}
+/* 制作横幅：深蓝底白字。上面一行（有的时候才显示）：「已试运行」+ 右边 RUNNING；下面一排按钮（圆形录制按钮在最前）；
+   右下角贴边一个白底方形标签「工具制作模式」 */
+#makingBar{position:relative;display:flex;flex-direction:column;gap:8px;padding:10px 14px;color:#fff;
+  background:linear-gradient(135deg,#1e3a8a 0%,#1d4ed8 60%,#2563eb 100%);border-bottom:1px solid #1e3a8a;box-shadow:0 2px 6px rgba(15,23,42,.18)}
 #makingBar[hidden]{display:none}
-#makingBar .mk_title{font-size:14px;font-weight:600;min-width:0;overflow-wrap:anywhere;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-#makingBar .mk_title::before{content:'';flex:none;width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent);animation:pulse 1.2s ease-in-out infinite}
-#makingBar .mk_title b{color:var(--accent);font-size:15px}
-#makingBar #mk_tested{color:var(--ok);font-size:11.5px;font-weight:600;border:1px solid color-mix(in srgb,var(--ok) 45%,transparent);background:color-mix(in srgb,var(--ok) 12%,transparent);border-radius:10px;padding:1px 8px}
+#makingBar,#makingBar *{font-weight:400!important} /* 制作横幅：文字不要粗体…… */
+#makingBar button{font-weight:700!important} /* ……按钮上的字除外 */
+#makingBar .mk_title{order:1;display:flex;flex-direction:column;align-items:stretch;gap:6px;min-width:0} /* 提示、「要录制吗」、已试运行各占一整行，不挤在一起 */ /* 「已试运行」和 RUNNING 放在按钮下面一行 */
+#makingBar .mk_title:not(:has(#mk_tested:not(:empty))):not(:has(#mk_ask:not([hidden]))):not(:has(#mk_hint:not([hidden]))):not(:has(#mk_recask:not([hidden]))){display:none} /* 没有「请您回答」也没试运行过：这一行不占地方 */ /* 没试运行过、助手也没在干活：这一行不占地方 */
+#makingBar .mk_line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;flex:1}
+#makingBar #mk_name{display:none} /* 不显示工具名（名字在「工具制作模式」标签的悬停提示里） */
+#makingBar #mk_tested{color:#dcfce7;font-size:11.5px;border:1px solid rgba(220,252,231,.45);background:rgba(34,197,94,.22);border-radius:10px;padding:1px 8px}
 #makingBar #mk_tested:empty{display:none}
-#makingBar .mk_btns{display:flex;gap:6px;flex-wrap:wrap}
-#makingBar button{font-size:12px;height:28px;padding:0 12px;border:1px solid var(--line-strong);background:var(--card);color:var(--text);box-shadow:0 1px 2px var(--btn-shadow)} /* 四个按钮同一样式 */
-#makingBar button:hover:not(:disabled){border-color:var(--accent);color:var(--accent);background:var(--card)}
-#makingBar #mk_cancel:hover:not(:disabled){border-color:var(--err);color:var(--err)}
-#mk_rec.on{border-color:#d33;color:#d33}
+/* RUNNING：红色方块底，白色粗体字 + 白色转圈，放在第一行「工具制作模式」和「退出」之间（紧挨退出左边） */
+#mk_busy{position:absolute;top:3px;right:76px;height:25px;box-sizing:border-box;display:flex;align-items:center;gap:6px;padding:0 9px;border-radius:0;background:#d93025;font:12px/1 Menlo,ui-monospace,monospace;letter-spacing:.06em;color:#fff}
+#makingBar #mk_busy{font-weight:700!important} /* 白色粗体 */
+#mk_busy::before{content:'';width:10px;height:10px;border-radius:50%;border:2px solid #fff;border-right-color:transparent;animation:tabspin .8s linear infinite}
+#mk_busy[hidden]{display:none}
+/* 有问题等用户回答：按钮下面一行最左边，闪烁的黄底红字粗体提示，点了滚到问题卡片 */
+#makingBar #mk_ask{order:-1;flex:none;height:32px;padding:0 14px;border-radius:0;border:none;background:#facc15;color:var(--red);font-size:16px;font-weight:700!important;box-shadow:0 1px 3px rgba(0,0,0,.2);animation:askblink 1s steps(1,end) infinite}
+@keyframes askblink{50%{background:#fffbeb}} /* 黄底一闪一闪（字不变） */
+#makingBar #mk_ask[hidden]{display:none}
+/* 横幅提示：平时白字一句进度说明；要用户动手的（action）黄底红字粗体闪烁，跟「请您回答以下问题」一样 */
+#makingBar #mk_hint{order:-1;min-width:0;font-size:13px;line-height:1.45;color:#fff;overflow-wrap:anywhere}
+#makingBar #mk_hint[hidden]{display:none}
+/* 「要录制你接下来的操作吗？[开始录制]」：用户动了网页时出现，10 秒自动收起 */
+#makingBar #mk_recask{order:-1;display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;color:#fff;white-space:nowrap}
+#makingBar #mk_recask[hidden]{display:none}
+#makingBar #mk_recask .mk_recgo{height:26px;padding:0 12px;border-radius:0;background:#d93025;border-color:#d93025;color:#fff}
+#makingBar #mk_recask .mk_recgo:hover:not(:disabled){background:#b3261e;border-color:#b3261e;color:#fff}
+#makingBar #mk_hint.action{padding:6px 10px;background:#facc15;color:var(--red);font-size:13.5px;font-weight:700!important;animation:askblink 1s steps(1,end) infinite}
+#makingBar #mk_ask:hover:not(:disabled){background:#facc15;color:var(--red);animation:none}
+@media (prefers-reduced-motion:reduce){#mk_busy::before{animation:none;border-right-color:#fff}}
+/* 「工具制作模式」：红底白字的方形标签（直角），贴在横幅左上角（左、上都不留边） */
+#makingBar .mk_kind{order:-1;align-self:flex-start;margin:-10px 0 -2px -14px;padding:5px 12px;border-radius:0;font-size:14.5px;line-height:1.4;letter-spacing:.04em;color:#fff;background:#d93025}
+#makingBar .mk_btns{display:flex;align-items:center;gap:16px;flex-wrap:nowrap;min-width:0} /* 录制、完成、试运行、退出始终一行 */
+#makingBar .mk_btns button{flex:none}
+#makingBar #mk_cancel{position:absolute;top:3px;right:12px;height:25px!important} /* 退出：跟左上角「工具制作模式」同一行、靠右，跟其它按钮分开免得误点 */
+#makingBar button{font-size:12.5px;height:28px;padding:0 13px;border:1px solid #fff;background:#fff;color:#1e3a8a;border-radius:7px;box-shadow:0 1px 2px rgba(15,23,42,.25)}
+#makingBar button:hover:not(:disabled){background:#dbeafe;border-color:#dbeafe;color:#1e3a8a}
+#makingBar #mk_cancel{background:transparent;color:#fff;border-color:rgba(255,255,255,.6);box-shadow:none}
+#makingBar #mk_cancel:hover:not(:disabled){background:#dc2626;border-color:#dc2626;color:#fff}
+/* 录制：圆形按钮（白底红点「录制」；录制中红底白字「停止」+ 扩散光圈） */
+/* 录制、完成制作、试运行：一样大的圆形按钮（四个字的分两行） */
+#makingBar #mk_rec,#makingBar #mk_done,#makingBar #mk_try{width:50px;height:50px;padding:4px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:12px;line-height:1.15;white-space:normal;text-align:center;border:2px solid #fff}
+#makingBar #mk_done,#makingBar #mk_rec{padding:0 11px} /* 四个字正好两两一行：完成/制作、保存/修改 */
+#makingBar #mk_done:disabled{padding:0 5px;font-size:11px} /* 「优化并保存中」六个字：三个一行 */
+#makingBar #mk_rec.on::before{margin:0}
+/* 录制中：红底白字 + 向外扩散的红色光圈 + 闪烁的白点（横幅和浏览器工具栏的录制按钮一样） */
+@keyframes recglow{0%{box-shadow:0 0 0 0 rgba(217,48,37,.55)}70%{box-shadow:0 0 0 9px rgba(217,48,37,0)}100%{box-shadow:0 0 0 0 rgba(217,48,37,0)}}
+#mk_rec.on,#recBtn.on{background:#d93025!important;border-color:#d93025!important;color:#fff!important;animation:recglow 1.4s ease-out infinite}
+#mk_rec.on:hover:not(:disabled),#recBtn.on:hover:not(:disabled){background:#b3261e!important;border-color:#b3261e!important;color:#fff!important}
+#mk_rec.on::before{content:'';display:inline-block;width:8px;height:8px;margin-right:6px;border-radius:50%;background:#fff;vertical-align:1px;animation:pulse 1s infinite}
+@media (prefers-reduced-motion:reduce){#mk_rec.on,#recBtn.on,#mk_rec.on::before,#recBtn.on svg circle{animation:none}}
 .pager[hidden]{display:none}
 .pager button{font-size:12px;padding:3px 8px}
 .pager span{font-size:12px;margin:0 6px}
@@ -231,26 +273,45 @@ body.vdragging iframe{pointer-events:none} /* 拖动经过表单（iframe）时�
 .perm details summary{font-size:12px;color:var(--muted);cursor:pointer}
 .perm .pb{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .perm .pb button{font-size:12px;padding:4px 10px}
+.qcard .pb{gap:8px;padding-top:2px}
+.qcard .pb button{font-size:14px;height:34px;padding:0 22px;border-radius:8px} /* 提问卡片的「提交」「跳过」：大一点好点 */
+.qcard .pb .qskip{border:1px solid var(--line-strong);background:var(--card)}
 .perm .pr{font-size:12px;color:var(--muted)}
 .perm.done{opacity:.6;border-style:dashed}
-.qcard{gap:10px}
-.qq{display:flex;flex-direction:column;gap:6px}
-.qh{font-size:13px;font-weight:600;line-height:1.5}
+/* 提问卡片：没有外框、排得紧凑；标题「请您回答以下问题」红色粗体，问题按「问题一：」编号，每个选项一行按 1、2、3… 编号；选中的那行蓝色高亮 */
+.perm.qcard{gap:6px;padding:0;border:none;background:transparent}
+.perm.qcard .ph{font-size:15px;font-weight:700;color:var(--red)}
+.qq{display:flex;flex-direction:column;gap:1px;padding:6px 6px 4px;border-radius:8px;background:color-mix(in srgb,var(--link) 7%,var(--card));border:1px solid color-mix(in srgb,var(--link) 22%,transparent)} /* 每个问题连同选项一块淡蓝底色 */
+.qno{color:var(--text)}
+.qh{font-size:13px;font-weight:600;line-height:1.4;padding:0 6px 2px}
 .qchip{display:inline-block;font-size:11px;font-weight:600;color:var(--link);border:1px solid var(--link);border-radius:10px;padding:0 7px;margin-right:6px;vertical-align:1px}
 .qmulti{font-weight:400;font-size:12px;color:var(--muted);margin-left:4px}
-.qopts{display:flex;flex-direction:column;gap:4px}
-.qopt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:6px 10px;background:var(--card);border:1px solid var(--line);border-radius:8px;white-space:normal}
-.qopt b{font-size:13px;font-weight:600}
-.qopt small{font-size:12px;color:var(--muted);line-height:1.5}
-.qopt.sel{border-color:var(--link);box-shadow:inset 3px 0 0 var(--link)}
+.qopts{display:flex;flex-direction:column;gap:0}
+.qopt{display:flex;align-items:baseline;gap:6px;width:100%;text-align:left;padding:2px 6px;background:transparent;border:none;border-radius:6px;white-space:normal;min-width:0;box-shadow:none}
+.qopt:hover:not(:disabled){background:color-mix(in srgb,var(--link) 12%,var(--card));color:inherit}
+.qopt .qn{flex:none;min-width:16px;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.qopt .qt{min-width:0}
+.qopt b{font-size:13px;font-weight:600;line-height:1.4}
+.qopt small{font-size:12px;color:var(--muted);line-height:1.4;margin-left:8px}
+.qother-in{margin-left:30px;width:calc(100% - 30px)}
+.qopt.sel{background:color-mix(in srgb,var(--link) 18%,var(--card))}
+.qopt.sel .qn{color:var(--link);font-weight:600}
+.qopt.sel::after{content:'✅';flex:none;margin-left:auto;padding-left:6px;font-size:13px;line-height:1.4} /* 选中：行尾打勾 */
 .qopt.sel b{color:var(--link)}
 .qother-in{font-size:13px}
 .qother-in[hidden]{display:none}
 .qprev{margin:0;font:12px/1.5 Menlo,monospace;background:var(--card);padding:6px 8px;border-radius:6px;white-space:pre-wrap;max-height:220px;overflow:auto}
 .qprev[hidden]{display:none}
-.qcard.done .pr{color:var(--text)}
+.qcard.done{opacity:1}
+.qcard.done>:not(.pb){opacity:.55} /* 答完：问题和选项变淡，底下的答案保持清楚 */
+.qcard.done .pr{color:var(--link);font-size:14px;line-height:1.5} /* 「已回答 · …」：答了什么一眼看清 */
 
 .note{font-size:15px;line-height:1.55;color:var(--link);text-align:left;white-space:pre-wrap}
+.note.warn{color:var(--red)} /* ctx.warn：要用户马上处理的提示 */
+.note.rec{color:var(--red);font-weight:700} /* 录制开始 / 停止 / 中断：红色粗体，一眼看到录制状态变了 */
+.note.intro{color:var(--text)} /* 制作工具的流程说明：黑色（正文颜色），不用提示的蓝色 */
+.note.intro .nhd{font-size:22px;line-height:1.35;margin-bottom:8px} /* 第一行「开始制作工具《…》」 */
+.note.intro .nq{color:var(--red);font-weight:400;margin-top:12px} /* 最后那句「请问您想……？」：红色、不加粗 */
 .note.err{color:var(--err)}
 
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:100}
@@ -275,6 +336,9 @@ body.running #status{flex:1}
 #btnStop{height:28px;padding:0 12px;font-size:12px;border:1px solid var(--line-strong);border-radius:14px;color:var(--err);flex:none}
 #btnStop:hover:not(:disabled){border-color:var(--err);color:var(--err);background:transparent}
 body.running #status::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle;animation:pulse 1s infinite}
+/* 等用户回答 / 批准：橙色加粗，可点（滚到卡片），不显示「忙」的闪烁点 */
+body.waiting #status{color:var(--warn);font-weight:600;cursor:pointer}
+body.waiting #status::before{display:none}
 
 /* 分隔线只有 1px；拖动区域向左多出 5px（右边是原生浏览器视图，收不到鼠标事件） */
 #splitter{position:relative;z-index:2;cursor:col-resize;background:var(--splitter);transition:background .15s}
@@ -289,14 +353,26 @@ body.running #status::before{content:'';display:inline-block;width:6px;height:6p
 #navReload.loading svg{animation:spin 1s linear infinite}
 #recBtn{display:flex;align-items:center;gap:4px;white-space:nowrap}
 #recBtn svg{width:14px;height:14px}
-#recBtn.on{border-color:#d33;color:#d33}
-#recBtn.on svg circle{fill:#d33;stroke:#d33;animation:pulse 1s infinite}
+#recBtn.on svg circle{fill:#fff;stroke:#fff;animation:pulse 1s infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* 收藏夹栏：地址栏下面一行，横向滚动；按钮按下时工具栏图标高亮 */
 #navBookmarks.on{color:var(--link);background:var(--user)}
 #navBookmarks.on svg{fill:currentColor}
 #bookmarks{display:flex;align-items:center;gap:6px;padding:4px 10px;border-bottom:1px solid var(--line);background:var(--panel);min-width:0}
 #bookmarks[hidden]{display:none}
+/* 网页标签条：同一个对话里开了两个以上网页时显示在浏览器上方，点击切换，× 关闭 */
+#pagebar{display:flex;align-items:flex-end;gap:2px;padding:4px 8px 0;border-bottom:1px solid var(--line);background:var(--bg);min-width:0;overflow-x:auto;scrollbar-width:none}
+#pagebar[hidden]{display:none}
+#pagebar::-webkit-scrollbar{display:none}
+#pagebar .pg{flex:0 1 200px;min-width:90px;display:flex;align-items:center;gap:4px;height:28px;padding:0 4px 0 10px;border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;color:var(--muted);font-size:12px;cursor:pointer;user-select:none}
+#pagebar .pg:hover{background:var(--user)}
+#pagebar .pg.on{background:var(--panel);border-color:var(--line);color:var(--text);margin-bottom:-1px;height:29px}
+#pagebar .pgt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#pagebar .pgn{flex:none;font-variant-numeric:tabular-nums;opacity:.6}
+#pagebar .pg.loading .pgn{animation:pulse 1s infinite}
+#pagebar .pgx{flex:none;width:20px;height:20px;padding:0;display:grid;place-items:center;border:none;background:transparent;border-radius:5px;color:inherit;font-size:14px;line-height:1}
+#pagebar .pgx:hover:not(:disabled){background:var(--line);color:var(--text);border:none}
+#pageNew svg{fill:none}
 #bmAdd{flex:none;display:flex;align-items:center;gap:5px;height:26px;padding:0 10px 0 8px;font-size:12px;color:var(--muted)}
 #bmAdd svg{width:14px;height:14px}
 #bmAdd.saved{color:var(--warn)}
@@ -321,7 +397,7 @@ body.running #status::before{content:'';display:inline-block;width:6px;height:6p
 @media (max-width:900px){main{grid-template-columns:340px 1px minmax(0,1fr)}}
 
 #tb_list{display:flex;flex-direction:column;gap:10px}
-.tbtop{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tbtop{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:4px 2px 0} /* 上边留几像素：按钮悬停时上浮 1px + 阴影，#tb_list 是 overflow:hidden，不留就被切掉 */
 .tbtop .tbsearch{flex:1 1 140px;min-width:0;height:32px;padding:0 10px;font-size:13px;box-sizing:border-box}
 /* 聚焦：不用全局的外描边（父容器 overflow:hidden 会把它切掉一半），改成边框变蓝 + 内侧加粗，跟工具卡片悬停同色 */
 .tbtop .tbsearch{-webkit-appearance:none;appearance:none;transition:border-color .12s,box-shadow .12s}
@@ -336,7 +412,7 @@ body.running #status::before{content:'';display:inline-block;width:6px;height:6p
 .tbcards>.pager{position:sticky;bottom:-2px;margin-top:auto;padding:8px 0 4px;background:var(--panel);border-top:1px solid var(--line)}
 .tbitem mark{background:color-mix(in srgb,var(--link) 22%,transparent);color:inherit;border-radius:3px;padding:0 1px}
 .tbtop button{height:32px;padding:0 14px;font-size:13px}
-/* 新建工具 / 导入 / 常用：跟顶部三个按钮同一套立体样式（渐变 + 高光 + 投影，悬停浮起、按下下沉） */
+/* 新建工具 / 导入 / 收藏：跟顶部三个按钮同一套立体样式（渐变 + 高光 + 投影，悬停浮起、按下下沉） */
 .tbtop button{font-weight:500;color:var(--text);border:1px solid var(--line-strong);
   background:linear-gradient(to bottom,var(--card),var(--btn-lo));
   box-shadow:inset 0 1px 0 var(--btn-hi),0 1px 1px var(--btn-shadow),0 2px 5px var(--btn-shadow);
@@ -349,10 +425,13 @@ body.running #status::before{content:'';display:inline-block;width:6px;height:6p
   background:linear-gradient(to bottom,color-mix(in srgb,var(--link) 85%,#fff),var(--link))}
 .tbtop button.primary:hover:not(:disabled){filter:brightness(1.08)}
 .tbtop button.primary:active:not(:disabled){background:var(--link)}
-/* 常用打开时：黄色，表示正在筛选 */
+/* 收藏筛选打开时：黄色，表示正在筛选 */
 .tbtop .tbfavbtn.on,.tbtop .tbfavbtn.on:hover:not(:disabled){color:#c48a00;border-color:#e6a700;
   background:linear-gradient(to bottom,color-mix(in srgb,#e6a700 10%,var(--card)),color-mix(in srgb,#e6a700 18%,var(--btn-lo)))}
 .tbback{align-self:flex-start;height:30px;padding:0 10px;font-size:13px}
+/* 试运行页左上角「← 返回对话」：蓝色胶囊按钮，一眼能找到 */
+.tbback.tbback-strong{height:26px;padding:0 14px;font-size:13px;font-weight:600;color:var(--link);border:1px solid var(--link);border-radius:999px;background:color-mix(in srgb,var(--link) 8%,var(--card))}
+.tbback.tbback-strong:hover:not(:disabled){color:#fff;background:var(--link);border-color:var(--link)}
 .tbitem{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;cursor:pointer;transition:border-color .12s,box-shadow .12s}
 .tbitem:hover{border-color:var(--link);box-shadow:0 2px 8px var(--btn-shadow)}
 .tbitem:has(.tbform),.tbnew,.tbimp{cursor:default}
@@ -367,6 +446,7 @@ body.running #status::before{content:'';display:inline-block;width:6px;height:6p
 .tbitem .tbedit:hover:not(:disabled){border-color:var(--link);color:var(--link);background:var(--card)}
 .tbitem .tbfav.on{color:#e6a700;border-color:#e6a700}
 .tbitem .tbdesc{font-size:12.5px;line-height:1.6;color:var(--muted);overflow-wrap:anywhere}
+#tb_list .tbitem .tbdesc{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3;overflow:hidden} /* 列表里描述最多三行，完整内容鼠标悬停看 */
 /* 工具卡片：按钮（收藏 / 编辑 / 导出 / 发布）单独一行，放在名字和描述下面，名字不再被按钮挤窄 */
 .tbitem>.tbhead:has(>.tbacts){display:contents}
 .tbitem>.tbhead>.tbname{order:0}
@@ -374,7 +454,7 @@ body.running #status::before{content:'';display:inline-block;width:6px;height:6p
 .tbitem>.tbhead>.tbacts{order:2;flex-wrap:wrap}
 .tbitem>:not(.tbhead,.tbdesc){order:3}
 .tbform{display:flex;flex-direction:column;gap:12px;margin-top:6px;padding-top:12px;border-top:1px solid var(--line)}
-.tbnew .tbform{margin-top:0;padding-top:0;border-top:none}
+.tbnew .tbform,.tbnt>.tbform{margin-top:0;padding-top:0;border-top:none} /* 新建工具表单：上面没有标题，也不要分隔线 */
 .tbf{display:flex;flex-direction:column;gap:4px;min-width:0}
 .tbf label{font-size:13px;font-weight:600;color:var(--text)}
 .tbform .hint{margin:0 0 2px;font-size:12px;line-height:1.5;color:var(--muted)}
@@ -425,7 +505,7 @@ body.side-collapsed #side,body.side-collapsed #splitter{display:none}
 body.browser-collapsed main{grid-template-columns:minmax(0,1fr)}
 body.browser-collapsed #browser,body.browser-collapsed #splitter{display:none}
 
-/* ---------------------------------------------------------------- BrowserX 账号面板 / 工具市场 / 发布 */
+/* ---------------------------------------------------------------- BrowserX 账号面板 / 插件市场 / 发布 */
 /* 顶部「登录」按钮：登录后显示用户名，名字太长截断 */
 /* 顶部账号入口：不做成按钮，没登录是「人像 + 登录」灰字，登录后是「小头像 + 名字」；悬停变蓝 */
 #btnAccount{flex:none;display:flex;align-items:center;gap:6px;max-width:150px;height:30px;padding:0 4px;border:none;background:transparent;border-radius:6px;
@@ -442,8 +522,32 @@ body.browser-collapsed #browser,body.browser-collapsed #splitter{display:none}
 #side:has(#account:not([hidden])) #msgs,#side:has(#account:not([hidden])) .composer{display:none}
 #ac_body{display:flex;flex-direction:column;gap:12px}
 .ac_card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+/* 账号面板：一张主卡（头像 + 会员状态 + 今日用量）、一条邀约、一行小按钮 */
+#account{display:flex;flex-direction:column;gap:10px}
+.ac_main{gap:10px}
+.ac_head{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.ac_head .ac_who{flex:1}
+.ac_status{flex:none;display:flex;align-items:center;gap:6px}
+.ac_status .ac_badge{margin:0;white-space:nowrap}
+.ac_card button.ac_small{height:26px;padding:0 10px;font-size:12px;border:1px solid var(--line-strong);background:var(--card)}
+.ac_card button.ac_small.primary{background:var(--link);border-color:var(--link);color:#fff}
+.ac_usage{display:flex;flex-direction:column;gap:5px;padding-top:10px;border-top:1px solid var(--line)}
+.ac_urow{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted)}
+.ac_urow b{color:var(--text);font-variant-numeric:tabular-nums}
+.ac_over{font-style:normal;color:var(--err)}
+.ac_meter{height:4px}
+.ac_card.ac_invite{padding:8px 12px}
+.ac_card.ac_invite .primary{height:28px;padding:0 14px;font-size:13px}
+.ac_links{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.ac_links .ac_spacer{flex:1}
+.ac_links button.ghost{height:28px;padding:0 10px;font-size:12.5px;border:1px solid var(--line-strong);background:var(--card)}
+.ac_links button.ghost:hover:not(:disabled){border-color:var(--link);color:var(--link)}
 .ac_card h3{margin:0;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.5px}
 .ac_card p{margin:0;font-size:13px}
+.ac_meter{height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.ac_meter i{display:block;height:100%;background:var(--ok)}
+.ac_meter i.hi{background:var(--warn)}
+.ac_meter i.full{background:var(--err)}
 .ac_card .hint{font-size:12px;line-height:1.6;color:var(--muted)}
 .ac_card .row,.ac_foot{display:flex;flex-wrap:wrap;gap:8px}
 .ac_card .row:empty{display:none}
@@ -452,7 +556,7 @@ body.browser-collapsed #browser,body.browser-collapsed #splitter{display:none}
 .ac_who>div{display:flex;flex-direction:column;min-width:0}
 .ac_who b{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ac_who>div span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ac_avatar{flex:none;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--link);color:#fff;font-weight:600;font-size:17px}
+.ac_avatar{flex:none;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--link);color:#fff;font-weight:600;font-size:16px}
 .ac_badge{display:inline-block;padding:1px 8px;margin-right:6px;border-radius:999px;font-size:12px;background:var(--user);color:var(--muted)}
 .ac_badge.ok{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
 .ac_foot{justify-content:flex-end}
@@ -461,8 +565,36 @@ body.browser-collapsed #browser,body.browser-collapsed #splitter{display:none}
 .ac_card .row button.ghost:hover:not(:disabled),.ac_foot button.ghost:hover:not(:disabled),.mkact button.ghost:hover:not(:disabled),.tbpub .row button.ghost:hover:not(:disabled){border-color:var(--link);color:var(--link);background:var(--card)}
 .ac_card .row button.primary{height:30px;padding:0 14px;font-size:13px}
 .tberr .ac_link{margin-left:6px;font-size:12px;padding:2px 8px}
+/* 邀约有礼：账号面板里的横条 + 弹窗 */
+.ac_card.ac_invite{flex-direction:row;align-items:center;gap:12px;background:linear-gradient(120deg,#fff4e8,#ffe2c4);border-color:#f6c79a}
+.ac_invite>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ac_invite b{font-size:14px;color:#9a3d0e}
+.ac_invite span{font-size:12px;color:#7a5a40}
+.ac_invite em,.inv_head em{font-style:normal;font-weight:700;color:#e0581c}
+.ac_card.ac_invite .primary{flex:none;height:32px;padding:0 16px;background:#e0702c;border-color:#e0702c}
+.modal-box.inv{width:min(460px,92vw);gap:14px;padding:18px}
+.inv_head{display:flex;align-items:baseline;gap:10px}
+.inv_head b{font-size:17px}
+.inv_head span{font-size:13px;color:var(--muted)}
+.inv_main{display:flex;gap:16px;align-items:flex-start}
+.inv_qr{flex:none;width:150px;height:150px;border-radius:10px;border:1px solid var(--line);background:#fff;padding:4px}
+.inv_side{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.inv_rules{margin:0;font-size:12px;line-height:1.65;color:var(--muted)}
+.inv_stats{display:flex;gap:8px;margin-top:2px}
+.inv_stats span{flex:1;display:flex;flex-direction:column;align-items:center;padding:6px 0;border-radius:8px;background:var(--user);font-size:11px;color:var(--muted)}
+.inv_stats b{font-size:17px;color:var(--text)}
+.inv_link{display:flex;gap:8px}
+.inv_link input{flex:1;min-width:0;font:12px Menlo,monospace;color:var(--muted)}
+.inv_redeem{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;padding-top:10px;border-top:1px solid var(--line)}
+.inv_redeem .inv_days{width:72px;padding:4px 8px}
+.inv_redeem .ghost{border:1px solid var(--line-strong);height:30px;padding:0 14px}
+.inv_msg{font-size:12px;color:var(--muted);width:100%}
+.inv_msg.ok{color:var(--ok)}
+.inv_msg.err{color:var(--err)}
+:root[data-theme="dark"] .ac_card.ac_invite{background:linear-gradient(120deg,#3d2a1c,#4a3020);border-color:#7a4a28} :root[data-theme="dark"] .ac_invite b{color:#ffb27a} :root[data-theme="dark"] .ac_invite span{color:#d9b89a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .ac_card.ac_invite{background:linear-gradient(120deg,#3d2a1c,#4a3020);border-color:#7a4a28} :root:not([data-theme="light"]) .ac_invite b{color:#ffb27a} :root:not([data-theme="light"]) .ac_invite span{color:#d9b89a}}
 
-/* 工具市场列表 */
+/* 插件市场列表 */
 .mktop select{flex:0 1 140px;height:32px;padding:0 8px;font-size:13px}
 .mkbody{display:flex;flex-direction:column;gap:10px;min-height:0}
 .mkitem .tbhead{align-items:flex-start}
@@ -543,3 +675,41 @@ body.browser-collapsed #browser,body.browser-collapsed #splitter{display:none}
 #side:has(#toolbox.haspage:not(.folded):not([hidden]) .tbkeep:not([hidden]) .tbdyn):has(#msgs:not(:empty)) #toolbox{flex:0 1 auto;max-height:var(--formMax,50%)}
 #side:has(#toolbox.haspage:not(.folded):not([hidden]) .tbkeep:not([hidden]) .tbdyn) #msgs:not(:empty){flex:1 1 0!important}
 #side:has(#toolbox.haspage:not(.folded):not([hidden]) .tbkeep:not([hidden]) .tbdyn) #formSplit{cursor:default;pointer-events:none}
+
+/* 试运行完成后对话里的「保存插件」按钮 */
+#msgs .note .mksavebtn{margin:0 4px;font-weight:600;color:#fff;border-color:var(--link);background:var(--link)}
+#msgs .note .mksavebtn:hover:not(:disabled){color:#fff;border-color:var(--link);background:var(--link);filter:brightness(1.1)}
+
+/* 工具制作模式：顶部「新对话 / 历史 / 工具箱 / 设置 / 铺满」这一排隐藏，专心做工具（退出制作后恢复） */
+body.making .headtools{display:none}
+
+/* 新建工具表单：「工具中文名」标签大一点、粗体 */
+.tbnt label[for=nt_title]{font-size:16px;font-weight:700;color:var(--text)}
+.tbitem.tbnt{padding-top:6px} /* 表单顶上少留点空 */
+
+/* 逐字显示中的那段：末尾一个闪烁的光标 */
+#msgs .msg.ai.streaming>:last-child::after,#msgs .msg.ai.streaming:empty::after{content:'▍';margin-left:1px;color:var(--muted);animation:pulse 1s infinite}
+/* 定时运行（见 renderer.js scheduleDialog / renderSchedules） */
+.sc_form{display:flex;flex-direction:column;gap:10px;margin:12px 0 4px}
+.sc_modes{display:flex;gap:6px}
+.sc_form label{display:flex;align-items:center;gap:8px;font-size:13px}
+.sc_form label[hidden]{display:none}
+.sc_form input{width:auto}
+.sc_form input[type=number]{width:80px}
+.sc_hint{margin:6px 0 10px}
+.sc_item.off{opacity:.6}
+.sc_err{color:var(--err)}
+/* 制作工具：横幅进度、新建入口的例子、助手测试通过的卡片 */
+/* 横幅是蓝底：进度一律用白色，靠透明度区分 */
+#mk_steps{display:flex;flex-wrap:wrap;align-items:center;gap:3px 5px;font-size:12px;color:rgba(255,255,255,.55);margin-bottom:2px}
+#mk_steps .mks{white-space:nowrap}
+#mk_steps .mks.done{color:rgba(255,255,255,.85)}
+#mk_steps .mks.now{color:#fff;font-weight:700}
+#mk_steps .mks.skip{color:rgba(255,255,255,.4);text-decoration:line-through}
+#mk_steps .mksep{opacity:.5}
+.nt_examples{display:flex;flex-wrap:wrap;gap:6px}
+.nt_examples .dynchip{white-space:normal;text-align:left}
+.mktested .mkres{white-space:pre-wrap;font-size:12px;max-height:160px;overflow:auto;background:var(--code);border-radius:6px;padding:6px 8px;margin:6px 0}
+.mktested .row{align-items:center;gap:8px}
+/* 换工具时的会话分隔线（见 renderer.js freshChatForTool） */
+#msgs .note.sessionsep{text-align:center;color:var(--muted);font-size:12px;border-top:1px dashed var(--line-strong);padding-top:8px;margin-top:10px}

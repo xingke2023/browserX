@@ -11,7 +11,7 @@
   <section id="side">
     <header class="sidehead">
       <div class="brand" id="brand" role="link" tabindex="0" title="打开门户网站 www.xingke888.com"><strong>BrowserX</strong></div>
-      <button id="btnAccount" title="BrowserX 账号：会员授权、工具市场、发布工具"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5.5" r="2.75"/><path d="M2.75 13.5c.6-2.6 2.75-4 5.25-4s4.65 1.4 5.25 4"/></svg><span class="acname">登录</span></button>
+      <button id="btnAccount" title="BrowserX 账号：会员授权、插件市场、发布工具"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5.5" r="2.75"/><path d="M2.75 13.5c.6-2.6 2.75-4 5.25-4s4.65 1.4 5.25 4"/></svg><span class="acname">登录</span></button>
       <div class="headtools">
         <button id="btnNew" class="ghost" title="开始新对话">新对话</button>
         <button id="btnHistory" class="ghost" title="查看 / 继续历史对话">历史</button>
@@ -24,13 +24,16 @@
     <div id="tabs" role="tablist" aria-label="标签：每个标签是一个对话，对应右侧一个浏览器页面"></div>
 
     <div id="makingBar" hidden>
-      <div class="mk_title"><span>🔧 正在<span id="mk_verb">制作</span>工具：<b id="mk_name"></b></span><span id="mk_tested"></span></div>
+      <div id="mk_steps" aria-label="制作进度"></div>
+      <div class="mk_title"><span class="mk_line"><span id="mk_name"></span><span id="mk_tested"></span></span><button id="mk_ask" type="button" title="点一下滚到问题" hidden>请您回答以下问题</button><span id="mk_hint" hidden></span><span id="mk_recask" hidden>要录制你接下来的操作吗？<button type="button" class="mk_recgo">开始录制</button></span></div>
+      <span id="mk_busy" role="status" aria-label="助手工作中" title="助手工作中" hidden>RUNNING</span>
       <div class="mk_btns">
-        <button id="mk_rec" class="ghost" title="在右侧浏览器手工操作一遍，录下接口，停止后自动发给助手">录制</button>
-        <button id="mk_try" class="ghost" title="用草稿直接跑一次（不经过助手）">试运行</button>
-        <button id="mk_done" class="ghost" title="检查草稿，通过后放进工具箱">完成修改</button>
-        <button id="mk_cancel" class="ghost" title="删除草稿，退出制作">放弃</button>
+        <button id="mk_rec" class="ghost" title="在右侧网页上操作一遍给助手看（录下接口），做完点「停止录制」或在对话里说「好了」">开始录制</button>
+        <button id="mk_done" class="ghost" title="检查草稿，通过后放进工具箱">保存</button>
+        <button id="mk_try" class="ghost" title="换个参数用草稿跑一次（不经过助手）">试运行</button>
+        <button id="mk_cancel" class="ghost" title="不做这个工具了（草稿移到废纸篓）">不做了</button>
       </div>
+      <span class="mk_kind">工具<span id="mk_verb">制作</span>模式</span>
     </div>
 
     <div id="settings" hidden>
@@ -64,18 +67,18 @@
           <h3>API</h3>
           <div class="field">
             <label for="s_apiKey">ANTHROPIC_API_KEY</label>
-            <p class="hint">留空则使用本机已登录的账号</p>
+            <p class="hint">留空则使用 BrowserX 账号（登录后直接可用）</p>
             <input id="s_apiKey" type="password" autocomplete="off" spellcheck="false">
           </div>
           <div class="field">
             <label for="s_baseUrl">ANTHROPIC_BASE_URL</label>
-            <p class="hint">使用代理或兼容网关时填写，留空为官方地址</p>
+            <p class="hint">填了自己的 API Key 时才生效：使用代理或兼容网关时填写，留空为官方地址</p>
             <input id="s_baseUrl" placeholder="https://api.anthropic.com" spellcheck="false">
           </div>
           <div class="field">
             <label for="s_model">自定义模型 ID</label>
             <p class="hint">填写后会出现在上面的模型列表里</p>
-            <input id="s_model" placeholder="claude-sonnet-5" spellcheck="false">
+            <input id="s_model" placeholder="claude-opus-5-5" spellcheck="false">
           </div>
         </section>
 
@@ -84,7 +87,7 @@
           <div class="field inline">
             <label for="s_home">主页</label>
             <p class="hint">启动时右侧浏览器打开的网址</p>
-            <input id="s_home" placeholder="https://www.xingke888.com" spellcheck="false">
+            <input id="s_home" placeholder="https://browserx.xingke888.com/" spellcheck="false">
           </div>
         </section>
       </div>
@@ -128,6 +131,7 @@
       <form id="urlForm"><input id="url" spellcheck="false" placeholder="输入网址或搜索"></form>
       <button id="recMark" class="ghost" title="在录制里插入一个标记，方便把请求和操作步骤对上" hidden>标记</button>
       <button id="recBtn" class="ghost rec" title="录制网络请求：手工操作一遍，录下接口，交给助手做成工具" aria-label="开始录制"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="4.5"/></svg><span id="recText">录制</span></button>
+      <button id="pageNew" class="ghost icon" title="新开一个网页标签" aria-label="新开网页标签"><svg viewBox="0 0 16 16"><rect x="2" y="3.5" width="12" height="9" rx="1.8"/><path d="M8 6.2v3.6M6.2 8h3.6"/></svg></button>
       <button id="navBookmarks" class="ghost icon" title="显示收藏夹" aria-label="显示收藏夹" aria-pressed="false"><svg viewBox="0 0 16 16"><path d="M4 2.5h8v11L8 10.5l-4 3z"/></svg></button>
       <button id="winFull" class="ghost icon" title="全屏" aria-label="全屏"><svg viewBox="0 0 16 16"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button>
     </nav>
@@ -135,6 +139,7 @@
       <button id="bmAdd" class="ghost" title="把当前页面加入收藏夹"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8l1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.6l-3.8 2 .7-4.3-3.1-3 4.3-.6z"/></svg><span>收藏本页</span></button>
       <div id="bmList"></div>
     </div>
+    <div id="pagebar" hidden></div>
     <div id="stage">
       <div id="navError" hidden>
         <h3>页面没有打开</h3>

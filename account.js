@@ -97,10 +97,15 @@ class Account {
       headers.Authorization = `Bearer ${token}`;
     }
     let res;
-    try {
-      res = await fetch(PORTAL + path, { method, headers, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) });
-    } catch (e) {
-      throw new Error(`连不上 ${PORTAL}：${e.cause?.code || e.message}`);
+    // 连接被重置 / 超时这类网络问题：GET 请求自动重试一次（实测过偶发的 ECONNRESET 让整次模型调用失败）
+    for (let attempt = 0; ; attempt++) {
+      try {
+        res = await fetch(PORTAL + path, { method, headers, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) });
+        break;
+      } catch (e) {
+        if (method === 'GET' && attempt === 0) { await new Promise((r) => setTimeout(r, 800)); continue; }
+        throw Object.assign(new Error(`连不上 ${PORTAL}：${e.cause?.code || e.message}`), { network: true });
+      }
     }
     const data = await res.json().catch(() => ({}));
     if (res.status === 401 && auth) {

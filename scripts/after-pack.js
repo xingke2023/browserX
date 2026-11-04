@@ -1,5 +1,6 @@
 // electron-builder 的 afterPack 钩子：打包好 .app、做 dmg 之前执行。
-// 不用任何证书（不用公司 Developer ID），给整个 .app 做本机临时签名（ad-hoc）：
+// package.json 的 mac.identity 配了 Developer ID 证书时，签名和公证交给 electron-builder（它会连内嵌的 claude 一起签），这里什么都不做。
+// mac.identity 为 null 时（没有证书），给整个 .app 做本机临时签名（ad-hoc）：
 // Apple 芯片上没有有效签名的程序会被系统直接杀掉，electron-builder 本身不支持 ad-hoc（identity "-" 会被跳过并留下失效签名）。
 // 内嵌的助手运行程序（claude-agent-sdk 平台包）先单独签，再签整个 .app。
 const { execFileSync } = require('child_process');
@@ -8,6 +9,7 @@ const path = require('path');
 
 exports.default = async function afterPack(ctx) {
   if (ctx.electronPlatformName !== 'darwin') return;
+  if (ctx.packager.platformSpecificBuildOptions.identity) return;
   const app = path.join(ctx.appOutDir, `${ctx.packager.appInfo.productFilename}.app`);
   const unpacked = path.join(app, 'Contents', 'Resources', 'app.asar.unpacked');
   const bins = [];

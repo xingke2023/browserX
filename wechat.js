@@ -19,9 +19,11 @@ const PAGE_HELPERS = `
 class WeChat {
   constructor(host, log) {
     this.host = host;
-    this.wc = host.webContents;
     this.log = log || (() => {});
   }
+
+  // 一个对话可以有多个网页标签：每次都操作当前标签（host.webContents 是 getter）
+  get wc() { return this.host.webContents; }
 
   js(code) {
     return this.wc.executeJavaScript(`(()=>{${PAGE_HELPERS}\n${code}})()`, true);
@@ -43,14 +45,15 @@ class WeChat {
   }
 
   // 确保已登录；未登录则打开扫码页并等待（最多 5 分钟）
-  async ensureLogin() {
+  // quiet：调用方自己已经提示过用户扫码（比如工具箱的公众号发布用红字提示），这里不再发重复的提示
+  async ensureLogin({ quiet = false } = {}) {
     if (this.token()) return this.token();
     if (!this.wc.getURL().startsWith(HOME)) {
       await this.wc.loadURL(HOME);
       await sleep(1500);
     }
     if (!this.token()) {
-      this.log('请在右侧浏览器中用微信扫码登录公众号后台…');
+      if (!quiet) this.log('请在右侧浏览器中用微信扫码登录公众号后台…');
       await this.host.show();
     }
     const t = await this.waitFor(() => this.token(), 300000, 1000);
