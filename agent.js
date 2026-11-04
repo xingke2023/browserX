@@ -1703,7 +1703,7 @@ ${old || '（无）'}`);
     const c = state?.user?.claude;
     if (!c?.exceeded) return;
     // quota：界面按账号状态画统一的「额度用完」提示（renderer.js quotaHtml，带充值 / 用积分兑换按钮），这里的文字只是兜底
-    throw Object.assign(new Error('今天的 Claude 额度已用完，明天 0 点恢复。'), { quota: true });
+    throw Object.assign(new Error('今天的 Tokens 额度已用完，明天 0 点恢复。'), { quota: true });
   }
 
   // Claude 怎么登录：设置里填了 API Key 就用它；否则必须登录 BrowserX 账号，请求发到门户服务器，

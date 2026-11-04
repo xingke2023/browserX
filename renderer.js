@@ -1202,13 +1202,13 @@ function loginPrompt(box, what) {
 }
 
 // 网站返回「去购买 / 开通会员」之类的错误时，带一个打开网站的按钮
-// Claude 额度用完的统一提示（开始前检查到 / 对话中途被门户拦下都用这个），措辞跟门户 ClaudeQuota::exceededMessage 一样。
+// Tokens 额度用完的统一提示（开始前检查到 / 对话中途被门户拦下都用这个），措辞跟门户 ClaudeQuota::exceededMessage 一样。
 // 每句一个 <span>，界面翻译按句匹配；按钮：充值（开放了充值）、用积分兑换（积分能换额度）、开通会员（非会员）
 function quotaHtml() {
   const u = account?.user || {};
   const c = u.claude || {};
   const credit = u.urls?.credit, points = u.tokens_per_point > 0;
-  const s = [c.limit ? `今天的 Claude 额度已用完（${fmtBig(c.used || 0)} / ${fmtBig(c.limit)}），明天 0 点恢复。` : '今天的 Claude 额度已用完，明天 0 点恢复。'];
+  const s = [c.limit ? `今天的 Tokens 额度已用完（${fmtBig(c.used || 0)} / ${fmtBig(c.limit)}），明天 0 点恢复。` : '今天的 Tokens 额度已用完，明天 0 点恢复。'];
   if (credit && points) s.push('可以充值购买额度，或用邀约积分兑换额度，马上接着用。');
   else if (credit) s.push('可以充值购买额度，马上接着用。');
   else if (points) s.push('可以用邀约积分兑换额度，马上接着用。');
@@ -1562,7 +1562,7 @@ function renderAccount() {
     : lic ? `<span class="ac_badge ok" title="会员到期：${esc(fmtDate(lic.expires_at))}">会员 · ${esc(fmtDate(lic.expires_at))} 到期</span>`
     : '<span class="ac_badge">未开通会员</span>';
   const renew = u && !u.is_admin ? `<button class="${u.member ? 'ghost' : 'primary'} ac_link ac_small" data-url="${esc(u.urls.packages)}">${u.member ? '续期' : '开通会员'}</button>` : '';
-  // 今天的 Claude 用量（门户按天限额，见 browserx-portal ClaudeQuota）：一行字 + 一条细进度条
+  // 今天的 Tokens 用量（门户按天限额，见 browserx-portal ClaudeQuota）：一行字 + 一条细进度条
   const c = u?.claude;
   const usage = c?.limit ? (() => {
     const pct = Math.min(100, Math.round(c.used * 100 / c.limit));
@@ -1578,7 +1578,7 @@ function renderAccount() {
         <div class="ac_status">${status}${renew}</div>
       </div>
       ${usage}
-      ${u && !u.member && !u.is_admin ? '<p class="hint">开通会员后可以安装、发布插件市场里的工具，Claude 额度也更高。</p>' : ''}
+      ${u && !u.member && !u.is_admin ? '<p class="hint">开通会员后可以安装、发布插件市场里的工具，Tokens 额度也更高。</p>' : ''}
     </div>
     <div class="ac_links">
       <button class="ghost ac_market">插件市场</button>${u ? `<button class="ghost ac_link" data-url="${esc(u.urls.my_tools)}">我发布的工具</button><button class="ghost ac_link" data-url="${esc(u.urls.panel)}">会员中心</button>` : ''}
@@ -1587,7 +1587,7 @@ function renderAccount() {
     ${u ? `<div class="ac_card ac_invite">
       <div><b>邀约有礼</b><span>最高得 <em>${esc(u.max_per_invite ?? 650)} 积分</em>/人 · 我的积分 ${esc(u.points ?? 0)}</span>
         ${u.points_per_day ? `<span class="ac_inv_rule">积分可兑换会员天数（${esc(u.points_per_day)} 积分 = 1 天）</span>` : ''}
-        ${u.tokens_per_point ? `<span class="ac_inv_rule">也可兑换 Claude 额度（1 积分 = ${esc(fmtBig(u.tokens_per_point))}）</span>` : ''}</div>
+        ${u.tokens_per_point ? `<span class="ac_inv_rule">也可兑换 Tokens 额度（1 积分 = ${esc(fmtBig(u.tokens_per_point))}）</span>` : ''}</div>
       <button class="primary ac_invite_go">去邀约</button>
     </div>` : ''}`;
   box.querySelector('.ac_market').addEventListener('click', () => { $('account').hidden = true; $('toolbox').hidden = false; renderMarket(); });
@@ -1610,13 +1610,13 @@ async function openInvite() {
       <div class="inv_side">
         <p class="inv_rules">${rules}</p>
         <p class="inv_rules">积分可以兑换会员天数：${d.points_per_day} 积分 = 1 天。</p>
-        ${d.tokens_per_point ? `<p class="inv_rules">也可以兑换 Claude 额度：1 积分 = ${fmtBig(d.tokens_per_point)}，加进 Tokens 余额，不过期。</p>` : ''}
+        ${d.tokens_per_point ? `<p class="inv_rules">也可以兑换 Tokens 额度：1 积分 = ${fmtBig(d.tokens_per_point)}，加进 Tokens 余额，不过期。</p>` : ''}
         <div class="inv_stats"><span><b>${d.invited}</b>已邀请</span><span><b>${d.purchased}</b>已购买</span><span><b class="inv_pts">${d.points}</b>我的积分</span></div>
       </div>
     </div>
     <div class="inv_link"><input readonly value="${esc(d.url)}"><button class="primary inv_copy">复制链接</button></div>
     <div class="inv_redeem"><span>兑换</span><input type="number" min="1" class="inv_days"><span>天会员</span><button class="ghost inv_go">兑换</button><span class="inv_msg"></span></div>
-    ${d.tokens_per_point ? '<div class="inv_redeem"><span>用</span><input type="number" min="1" class="inv_cpts"><span>积分换 Claude 额度</span><button class="ghost inv_cgo">兑换</button><span class="inv_msg inv_cmsg"></span></div>' : ''}
+    ${d.tokens_per_point ? '<div class="inv_redeem"><span>用</span><input type="number" min="1" class="inv_cpts"><span>积分换 Tokens 额度</span><button class="ghost inv_cgo">兑换</button><span class="inv_msg inv_cmsg"></span></div>' : ''}
     <div class="modal-actions"><button class="ghost inv_web">在网站上查看明细</button><button class="primary" data-a="cancel">关闭</button></div>
   </div>`;
   document.body.appendChild(overlay);
@@ -1656,7 +1656,7 @@ async function openInvite() {
     syncRedeem();
     syncCredit();
   });
-  // 积分换 Claude 额度（门户后台设了比例才显示这一行）
+  // 积分换 Tokens 额度（门户后台设了比例才显示这一行）
   const cpts = q('.inv_cpts'), cmsg = q('.inv_cmsg');
   function syncCredit() {
     if (!cpts) return;
