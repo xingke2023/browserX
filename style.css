@@ -813,3 +813,15 @@ body.ui-latin #msgs .note.quota span+span::before{content:' '} /* 英文等：�
 .hlist .htop{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 2px 8px;font-size:12px;color:var(--muted)}
 .hlist .htop .hclear{height:26px;padding:0 12px;font-size:12.5px;border:1px solid var(--line-strong);border-radius:7px;background:var(--card);color:var(--text)}
 .hlist .htop .hclear:hover:not(:disabled){border-color:var(--err);color:var(--err);background:color-mix(in srgb,var(--err) 8%,var(--card))}
+/* 工具卡片的操作按钮：带边框的小按钮（悬停变蓝，删除悬停变红） */
+#tb_list .tbitem .tbacts .tbedit{border:1px solid var(--line-strong);background:var(--card);color:var(--text);height:26px;padding:0 9px;border-radius:6px}
+#tb_list .tbitem .tbacts .tbedit:hover:not(:disabled){border-color:var(--link);color:var(--link);background:var(--card)}
+#tb_list .tbitem .tbacts .tbdel:hover:not(:disabled){border-color:var(--err);color:var(--err);background:color-mix(in srgb,var(--err) 8%,var(--card))}
+#tb_list .tbitem .tbacts{gap:4px;margin-left:0}
+/* 「更新」按钮：在标题旁边，实心橙色、白字，一眼看得到 */
+#tb_list .tbitem .tbname .tbupdbtn,#tb_list .tbitem .tbname .tbupdbtn:hover:not(:disabled){height:24px;padding:0 12px;margin-left:6px;border:none;border-radius:999px;background:#e0702c;color:#fff;font-size:12px;font-weight:700;vertical-align:1px;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+#tb_list .tbitem .tbname .tbupdbtn:hover:not(:disabled){filter:brightness(1.08)}
+#tb_list .tbitem .tbname .tbupd{background:color-mix(in srgb,#e0702c 14%,transparent);color:#c2571b;border:1px solid color-mix(in srgb,#e0702c 40%,transparent)}
+/* 「更新」按钮在操作按钮最后（删除右边）：实心橙色白字 */
+#tb_list .tbitem .tbacts .tbupdbtn,#tb_list .tbitem .tbacts .tbupdbtn:hover:not(:disabled){border:1px solid #e0702c;background:#e0702c;color:#fff;font-weight:700;padding:0 12px}
+#tb_list .tbitem .tbacts .tbupdbtn:hover:not(:disabled){filter:brightness(1.08)}

@@ -394,13 +394,19 @@ class Agent {
     } catch { /* 首次运行还没有任何会话目录时 listSessions 可能失败，忽略 */ }
   }
 
-  // 清空历史：删掉所有 claude-browser 的会话，keep 里的（左边标签里正开着的对话）不删，返回删了几条
-  async clearHistory(keep = []) {
+  // 清空历史：所有 claude-browser 会话的记录文件移到废纸篓（误点了还能从废纸篓拿回来），返回移走了几条。
+  // trash(file) 由 main.js 给（shell.trashItem）；会话文件在 ~/.claude/projects/<cwd 换成 - >/<id>.jsonl
+  async clearHistory(trash) {
     const sdk = await import('@anthropic-ai/claude-agent-sdk');
     const dir = this.ctx.getCfg().cwd;
-    const list = (await sdk.listSessions({ dir, limit: 1000 }).catch(() => [])).filter((s) => s.tag === CB_TAG && !keep.includes(s.sessionId));
-    for (const s of list) await this.deleteHistory(s.sessionId);
-    return list.length;
+    const proj = path.join(os.homedir(), '.claude', 'projects', dir.replace(/[^a-zA-Z0-9]/g, '-'));
+    const list = (await sdk.listSessions({ dir, limit: 1000 }).catch(() => [])).filter((s) => s.tag === CB_TAG);
+    let n = 0;
+    for (const s of list) {
+      const f = path.join(proj, `${s.sessionId}.jsonl`);
+      if (fs.existsSync(f)) { await trash(f); n++; } else await this.deleteHistory(s.sessionId); // 找不到文件（目录规则变了）：照旧删
+    }
+    return n;
   }
 
   async renameHistory(sessionId, title) {

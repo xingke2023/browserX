@@ -698,8 +698,16 @@ handle('history:list', () => cur.agent.listHistory());
 handle('history:resume', (id, tab) => tabOf(tab).agent.resume(id));
 handle('history:rename', (id, title) => cur.agent.renameHistory(id, title));
 handle('history:delete', (id) => cur.agent.deleteHistory(id));
-// 清空历史：左边标签里正开着的对话（有 sessionId 的）保留，其它全删
-handle('history:clear', () => cur.agent.clearHistory([...tabs.values()].map((t) => t.agent.sessionId).filter(Boolean)));
+// 清空历史：全部删掉，包括左边正开着的对话。正开着的先结束会话（背后的 claude 进程还在写记录，不先关掉删了会被写回来），
+// 聊天内容留在界面上，下一条消息开始新对话。有对话正在回复 / 工具正在跑：不清，让用户等它结束
+handle('history:clear', async () => {
+  const busy = [...tabs.values()].filter((t) => t.agent.running || t.agent._toolRunning);
+  if (busy.length) throw new Error('有对话正在进行（助手在回复或工具在运行），等它结束再清空');
+  if (makingTab()) throw new Error('正在制作 / 修改工具，先保存或点「不做了」再清空');
+  for (const t of tabs.values()) if (t.agent.q || t.agent.sessionId) t.agent.reset();
+  await new Promise((r) => setTimeout(r, 800)); // 等 claude 进程把最后的记录写完退出
+  return cur.agent.clearHistory((f) => shell.trashItem(f));
+});
 handle('history:prune', () => cur.agent.pruneHistory()); // 打开历史时顺手把超过 30 条的旧记录删掉
 
 handle('tools:list', () => cur.agent.listCustomTools().map((t) => ({ ...t, market: isMarketTool(t.name) })));

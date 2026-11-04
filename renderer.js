@@ -532,7 +532,7 @@ function askConfirm(message) {
 }
 
 // ---------------------------------------------------------------- 历史对话
-// 对话本身由 claude 自动持久化到磁盘；这里只是保存/浏览/继续它（最多保留最近 100 个，见 agent.js pruneHistory）
+// 对话本身由 claude 自动持久化到磁盘；这里只是保存/浏览/继续它（最多保留最近 30 个，见 agent.js pruneHistory）
 
 function fmtTime(ms) {
   const d = new Date(ms), now = new Date();
@@ -550,10 +550,10 @@ async function renderHistoryList(keepPage) {
   let items;
   call('history:prune').catch(() => {});
   try { items = await call('history:list'); } catch (e) { list.innerHTML = `<div class="hempty">${esc(e.message)}</div>`; return; }
-  list.innerHTML = items.length ? `<div class="htop"><span>共 ${items.length} 条 · 最多保留 30 条，最新的在最上面</span><button class="ghost hclear" title="删除全部历史记录（左边正开着的对话保留）">清空</button></div>` : '<div class="hempty">还没有保存的对话</div>';
+  list.innerHTML = items.length ? `<div class="htop"><span>共 ${items.length} 条 · 最多保留 30 条，最新的在最上面</span><button class="ghost hclear" title="删除全部历史记录（包括正开着的对话）">清空</button></div>` : '<div class="hempty">还没有保存的对话</div>';
   list.querySelector('.hclear')?.addEventListener('click', async () => {
-    if (!(await askConfirm(`清空全部 ${items.length} 条历史记录？左边标签里正开着的对话会保留。此操作不可恢复。`))) return;
-    try { const n = await call('history:clear'); add('note', `已清空历史记录（删除 ${n} 条）`, true); renderHistoryList(); }
+    if (!(await askConfirm(`清空全部 ${items.length} 条历史记录（包括正开着的对话）？记录会移到废纸篓，需要的话可以从废纸篓拿回来。正开着的对话会结束，聊天内容还在界面上，下一条消息开始新对话。`))) return;
+    try { const n = await call('history:clear'); add('note', `已清空历史记录（${n} 条移到了废纸篓）`, true); renderHistoryList(); }
     catch (err) { add('note err', `✗ ${esc(err.message)}`, true); }
   });
   for (const it of items) {
@@ -753,8 +753,10 @@ function drawToolCards() {
     d.className = 'tbitem';
     d.dataset.tool = t.name;
     const upd = toolUpdates[t.name];
-    const updHtml = upd ? `<span class="tbupd" title="${esc(upd.changelog ? `更新内容：${upd.changelog}` : '作者发布了新版本')}">有新版本 ${esc(upd.version)}</span>${upd.can_install ? '<button class="primary tbedit tbupdbtn" title="更新到新版本">更新</button>' : `<span class="tbupdno" title="${esc(upd.reason || '')}">${esc(upd.reason || '暂时不能更新')}</span>`}` : '';
-    d.innerHTML = `<div class="tbhead"><span class="tbname">${i + 1}、${mark(t.title || t.name)}${t.title ? `<small class="tbid">${mark(t.name)}</small>` : ''}${updHtml}</span><span class="tbacts"><button class="ghost tbedit tbfav${tbFavs.has(t.name) ? ' on' : ''}" title="${tbFavs.has(t.name) ? '取消收藏' : '收藏'}">${tbFavs.has(t.name) ? '★' : '☆'}</button>${t.market ? '<span class="tbmk" title="从插件市场安装的别人的工具：不能编辑、导出、发布">市场</span>' : '<button class="ghost tbedit tbeditbtn" title="进入制作模式修改这个工具（改的是草稿，完成前不影响现在的版本）">编辑</button><button class="ghost tbedit tbexport" title="导出成一个 .js 文件，发给别人导入">导出</button><button class="ghost tbedit tbpublish" title="发布到 BrowserX 网站的插件市场（进入审核）">发布</button>'}<button class="ghost tbedit tbdel" title="从工具箱删除（文件移到废纸篓，可以恢复）">删除</button></span></div>
+    // 标题旁：「有新版本 x」（不能更新时附原因）；「更新」按钮放在操作按钮最后（删除的右边）
+    const updHtml = upd ? `<span class="tbupd" title="${esc(upd.changelog ? `更新内容：${upd.changelog}` : '作者发布了新版本')}">有新版本 ${esc(upd.version)}</span>${upd.can_install ? '' : `<span class="tbupdno" title="${esc(upd.reason || '')}">${esc(upd.reason || '暂时不能更新')}</span>`}` : '';
+    const updBtn = upd?.can_install ? '<button class="primary tbedit tbupdbtn" title="更新到新版本">更新</button>' : '';
+    d.innerHTML = `<div class="tbhead"><span class="tbname">${i + 1}、${mark(t.title || t.name)}${t.title ? `<small class="tbid">${mark(t.name)}</small>` : ''}${updHtml}</span><span class="tbacts"><button class="ghost tbedit tbfav${tbFavs.has(t.name) ? ' on' : ''}" title="${tbFavs.has(t.name) ? '取消收藏' : '收藏'}">${tbFavs.has(t.name) ? '★' : '☆'}</button>${t.market ? '<span class="tbmk" title="从插件市场安装的别人的工具：不能编辑、导出、发布">市场</span>' : '<button class="ghost tbedit tbeditbtn" title="进入制作模式修改这个工具（改的是草稿，完成前不影响现在的版本）">编辑</button><button class="ghost tbedit tbexport" title="导出成一个 .js 文件，发给别人导入">导出</button><button class="ghost tbedit tbpublish" title="发布到 BrowserX 网站的插件市场（进入审核）">发布</button>'}<button class="ghost tbedit tbdel" title="从工具箱删除（文件移到废纸篓，可以恢复）">删除</button>${updBtn}</span></div>
       ${t.description ? `<div class="tbdesc" title="${esc(t.description)}">${mark(t.description)}</div>` : ''}`;
     d.querySelector('.tbeditbtn')?.addEventListener('click', (e) => { e.stopPropagation(); beginMaking({ edit: t.name }); });
     d.querySelector('.tbfav').addEventListener('click', (e) => {
