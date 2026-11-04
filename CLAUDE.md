@@ -102,6 +102,8 @@ What is stored and shown:
 - Market `.bxt` tools can't be edited, so they stay analysis-only (`profileMsg`, 让 Claude 分析… labels): no code locations, and Claude is told not to look for the source.
 - Scheduled runs keep the profile on the history entry: `main.js` sets `task._profile`, and `scheduler.record()` moves it onto the entry. 执行情况 shows the categories and the same button.
 
+**「工具运行完毕…」stays last (`keepLast` in `renderer.js`):** after a toolbox run, a `MutationObserver` on the tab's chat moves that note back to the bottom whenever something lands after it. Examples: a plugin injecting its own DOM later (`fff`'s 下載保單詳情 button, added in a `setTimeout`), download notes, the ⏱ profile. It stops once the user sends a message or a new run / schedule starts. It checks `d.parentNode === tab.el`, not `isConnected`, because a background tab's chat isn't attached to the document.
+
 The 修复 button on every toolbox card (`repairTool`):
 - It calls `tools:repairInfo` → `toolRepairInfo()`, then `startRepair()` with the latest saved profile.
 - Without a profile, the repair message asks Claude to read the notes and the draft for likely failure points and slow waits, fix them, and test.

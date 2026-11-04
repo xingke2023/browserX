@@ -935,6 +935,22 @@ function runningBar(label) {
 }
 const isStopped = (e) => /已手动停止/.test(e?.message || '');
 
+// 「工具运行完毕…」要一直在这次运行的最下面：之后才出现的东西（插件自己插进对话区的按钮、下载提示、运行情况⏱）都排到它上面。
+// 用户发了下一条消息、或开始下一次运行，就固定在原位不再挪
+function keepLast(tab, d) {
+  tab.lastObs?.disconnect();
+  const obs = new MutationObserver(() => {
+    if (d.parentNode !== tab.el) { obs.disconnect(); return; } // 被清掉了（新对话等）；不用 isConnected：后台标签的对话区不挂在页面上
+    if (tab.el.lastElementChild === d) return;
+    const kids = [...tab.el.children];
+    const after = kids.slice(kids.indexOf(d) + 1);
+    if (after.some((x) => x.classList.contains('user') || /^— (直接运行|试运行|打开工具|定时任务)/.test(x.textContent.trim()))) { obs.disconnect(); return; }
+    tab.el.appendChild(d); // 挪到最下面（再触发一次时它已经是最后一个，直接返回）
+  });
+  obs.observe(tab.el, { childList: true });
+  tab.lastObs = obs;
+}
+
 // ---------------------------------------------------------------- 插件运行耗时分析（数据来自 agent.js profEnd）
 // 运行 ≥ 3 秒：结果下面一行「⏱ 用时 … · 各类耗时」，点开看分步耗时和最耗时的操作（带代码位置）；
 // ≥ 15 秒再给「让 Claude 分析为什么慢」：把耗时、插件说明（执行步骤）、代码位置一起发给 Claude，让它对照分析，先不改
@@ -1315,6 +1331,7 @@ async function runToolArgs(t, args, form, fields = []) {
     // 跑完给一个入口：效果不满意就进入修改模式（会开新对话），把这次的参数和结果带过去，用户补一句哪里不好即可
     if (!t.draft && !t.market) {
       const d = add('note', `工具运行完毕，如果感觉效果不好，<button class="tbtweak">点击修改工具功能</button>`, true);
+      keepLast(tab, d);
       d.querySelector('.tbtweak').addEventListener('click', async () => {
         const out = String(r);
         if (!(await beginMaking({ edit: t.name }))) return;
