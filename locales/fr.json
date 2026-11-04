@@ -318,7 +318,7 @@
  "定时任务不存在": "Tâche planifiée introuvable",
  "定时任务在后台的「定时任务」对话里直接运行工具（不经过助手、不花 token），跑完发系统通知。只在 BrowserX 开着时运行。要新建，打开一个工具，填好表单后点「定时运行…」。": "Les tâches planifiées exécutent directement les outils en arrière-plan, dans la conversation « Tâches planifiées » (sans passer par l'assistant ni consommer de tokens), puis envoient une notification système une fois terminées. Elles ne s'exécutent que lorsque BrowserX est ouvert. Pour en créer une, ouvrez un outil, remplissez le formulaire, puis cliquez sur « Planifier… ».",
  "定时方式不对": "Mode de planification incorrect",
- "定时运行…": "Planifier…",
+ "定时运行": "Exécution planifiée",
  "定时运行：{0}": "Planification : {0}",
  "实际大小": "Taille réelle",
  "对话中切换，当前对话会继续": "Changer en cours de conversation, la conversation actuelle se poursuit",

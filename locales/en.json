@@ -318,7 +318,7 @@
  "定时任务不存在": "Scheduled task not found",
  "定时任务在后台的「定时任务」对话里直接运行工具（不经过助手、不花 token），跑完发系统通知。只在 BrowserX 开着时运行。要新建，打开一个工具，填好表单后点「定时运行…」。": "Scheduled tasks run tools directly in the background “Scheduled Tasks” conversation (no assistant, no tokens used) and send a system notification when done. They only run while BrowserX is open. To create one, open a tool, fill in the form, and click “Schedule…”.",
  "定时方式不对": "Invalid schedule",
- "定时运行…": "Schedule…",
+ "定时运行": "Scheduled Run",
  "定时运行：{0}": "Schedule: {0}",
  "实际大小": "Actual Size",
  "对话中切换，当前对话会继续": "Switch mid-conversation; the current conversation will continue",

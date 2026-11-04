@@ -318,7 +318,7 @@
  "定时任务不存在": "La tarea programada no existe",
  "定时任务在后台的「定时任务」对话里直接运行工具（不经过助手、不花 token），跑完发系统通知。只在 BrowserX 开着时运行。要新建，打开一个工具，填好表单后点「定时运行…」。": "Las tareas programadas ejecutan la herramienta directamente en la conversación «Tareas programadas», en segundo plano (sin pasar por el asistente ni gastar tokens), y envían una notificación del sistema al terminar. Solo se ejecutan mientras BrowserX está abierto. Para crear una, abre una herramienta, rellena el formulario y haz clic en «Programar…».",
  "定时方式不对": "Tipo de programación no válido",
- "定时运行…": "Programar…",
+ "定时运行": "Ejecución programada",
  "定时运行：{0}": "Programar: {0}",
  "实际大小": "Tamaño real",
  "对话中切换，当前对话会继续": "Cambiar durante la conversación; la conversación actual continuará",

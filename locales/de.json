@@ -318,7 +318,7 @@
  "定时任务不存在": "Geplante Aufgabe nicht gefunden",
  "定时任务在后台的「定时任务」对话里直接运行工具（不经过助手、不花 token），跑完发系统通知。只在 BrowserX 开着时运行。要新建，打开一个工具，填好表单后点「定时运行…」。": "Geplante Aufgaben führen Tools im Hintergrund direkt in der Unterhaltung „Geplante Aufgaben“ aus (ohne Assistenten, ohne Tokenverbrauch) und senden nach Abschluss eine Systembenachrichtigung. Sie laufen nur, solange BrowserX geöffnet ist. Zum Erstellen ein Tool öffnen, das Formular ausfüllen und auf „Planen…“ klicken.",
  "定时方式不对": "Ungültiger Zeitplan",
- "定时运行…": "Planen…",
+ "定时运行": "Zeitgesteuert ausführen",
  "定时运行：{0}": "Geplant: {0}",
  "实际大小": "Originalgröße",
  "对话中切换，当前对话会继续": "Wechsel während der Unterhaltung – die aktuelle Unterhaltung läuft weiter",
