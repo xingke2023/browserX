@@ -1222,7 +1222,7 @@ function quotaHtml() {
   return `✗ ${s.map((x) => `<span>${esc(x)}</span>`).join('')}${btns ? `<div class="row q_btns">${btns}</div>` : ''}`;
 }
 function quotaNote(tab) {
-  // 先读一次最新的账号状态（用量、充值余额），再画提示
+  // 先读一次最新的账号状态（用量、Tokens 余额），再画提示
   call('account:refresh').catch(() => {}).finally(() => inTab(tab, () => add('note err quota', quotaHtml(), true)));
 }
 function errWithLink(e) {
@@ -1569,7 +1569,7 @@ function renderAccount() {
     return `<div class="ac_usage" title="每天 0 点重置${c.exceeded && !u.member ? '；开通会员可以提高额度' : ''}">
         <div class="ac_urow"><span>今日 Claude 用量</span><span><b>${wan(c.used)}</b> / ${wan(c.limit)}${c.exceeded ? ' · <em class="ac_over">已用完，明天 0 点恢复</em>' : ''}</span></div>
         <div class="ac_meter"><i style="width:${pct}%" class="${c.exceeded ? 'full' : pct >= 80 ? 'hi' : ''}"></i></div>
-        ${u.urls?.credit ? `<div class="ac_urow ac_credit"><span>充值余额 <b>${wan(c.credit || 0)}</b><small>（每天的额度用完后从这里扣）</small></span><button class="${c.exceeded || (c.used >= c.limit && !c.credit) ? 'primary' : 'ghost'} ac_link ac_small" data-url="${esc(u.urls.credit)}">充值</button></div>` : ''}
+        ${u.urls?.credit ? `<div class="ac_urow ac_credit"><span>Tokens 余额 <b>${wan(c.credit || 0)}</b><small>（每天的额度用完后从这里扣）</small></span><button class="${c.exceeded || (c.used >= c.limit && !c.credit) ? 'primary' : 'ghost'} ac_link ac_small" data-url="${esc(u.urls.credit)}">充值</button></div>` : ''}
       </div>`;
   })() : '';
   box.innerHTML = `<div class="ac_card ac_main">
@@ -1610,7 +1610,7 @@ async function openInvite() {
       <div class="inv_side">
         <p class="inv_rules">${rules}</p>
         <p class="inv_rules">积分可以兑换会员天数：${d.points_per_day} 积分 = 1 天。</p>
-        ${d.tokens_per_point ? `<p class="inv_rules">也可以兑换 Claude 额度：1 积分 = ${fmtBig(d.tokens_per_point)}，加进充值余额，不过期。</p>` : ''}
+        ${d.tokens_per_point ? `<p class="inv_rules">也可以兑换 Claude 额度：1 积分 = ${fmtBig(d.tokens_per_point)}，加进 Tokens 余额，不过期。</p>` : ''}
         <div class="inv_stats"><span><b>${d.invited}</b>已邀请</span><span><b>${d.purchased}</b>已购买</span><span><b class="inv_pts">${d.points}</b>我的积分</span></div>
       </div>
     </div>
@@ -1675,7 +1675,7 @@ async function openInvite() {
       d.points = r.points;
       q('.inv_pts').textContent = r.points;
       cmsg.className = 'inv_msg inv_cmsg ok';
-      cmsg.textContent = `✓ 已换 ${fmtBig(r.tokens)} 额度，充值余额 ${fmtBig(r.credit)}`;
+      cmsg.textContent = `✓ 已换 ${fmtBig(r.tokens)} 额度，Tokens 余额 ${fmtBig(r.credit)}`;
     } catch (e) { cmsg.className = 'inv_msg inv_cmsg err'; cmsg.textContent = e.message; }
     syncRedeem();
     syncCredit();

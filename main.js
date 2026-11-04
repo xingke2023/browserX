@@ -800,7 +800,7 @@ handle('invite:redeem', async (days) => {
 });
 handle('invite:redeemCredit', async (points) => {
   const r = await account.api('/invite/redeem-credit', { method: 'POST', body: { points } });
-  account.refresh().catch(() => {}); // 账号面板的充值余额跟着变
+  account.refresh().catch(() => {}); // 账号面板的 Tokens 余额跟着变
   return r;
 });
 handle('invite:copy', (text) => { clipboard.writeText(String(text)); });
