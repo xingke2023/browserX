@@ -791,3 +791,20 @@ body.ui-latin #msgs .note.quota span+span::before{content:' '} /* 英文等：�
 .tbitem:not(.tbnew)>.tbform.tbdyn>.row>.tbsched{order:1;height:28px;min-width:0;padding:0 10px;font-size:12.5px}
 .tbitem:not(.tbnew)>.tbform.tbdyn>.row>.tbrun{order:2;height:38px;min-width:0;padding:0 30px;font-size:15px}
 .tbname .tbopen,.tbname .tbupd{white-space:nowrap;display:inline-block}
+/* 修改定时任务：参数编辑区（两列，长内容占整行） */
+.sc_args{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px 10px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.sc_args .sc_argshd{grid-column:1/-1;font-size:12px;font-weight:600;color:var(--muted)}
+.sc_args .sc_arg{display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:600;color:var(--muted);min-width:0}
+.sc_args .sc_arg.full{grid-column:1/-1}
+.sc_args .sc_arg :is(input,select,textarea){width:100%;height:30px;padding:0 8px;font-size:13px;font-weight:400;border:1px solid var(--line-strong);border-radius:7px;background:var(--card);color:var(--text);box-sizing:border-box}
+.sc_args .sc_arg textarea{height:auto;min-height:48px;padding:6px 8px}
+.sc_args .sc_chk{flex-direction:row;align-items:center;gap:6px;height:30px;align-self:end;padding:0 10px;border:1px solid var(--line-strong);border-radius:7px;color:var(--text);font-weight:500}
+.sc_args .req{color:var(--err)}
+.modal-box .sc_err{margin-top:8px;color:var(--err);font-size:12.5px}
+.modal-box .sc_err[hidden]{display:none}
+/* 定时运行对话框：选中的定时方式要看得出来 */
+.sc_modes .dynchip{height:32px;padding:0 14px;border-radius:999px;border:1px solid var(--line-strong);background:var(--card);color:var(--text);font-size:13px}
+.sc_modes .dynchip:hover:not(:disabled){border-color:var(--link);color:var(--link)}
+.sc_modes .dynchip.on,.sc_modes .dynchip.on:hover:not(:disabled){background:var(--link);border-color:var(--link);color:#fff}
+/* 定时任务列表：卡片之间留 4px */
+.sc_list{display:flex;flex-direction:column;gap:4px}

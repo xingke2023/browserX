@@ -32,8 +32,10 @@ class Scheduler {
     this.opts.onChange?.(this.list());
   }
 
+  // 最新设置或修改过（时间 / 参数）的排最前面；暂停、启用、运行不算修改
   list() {
-    return this.tasks.map((t) => ({ ...t, running: this.busy.has(t.id), next: this.nextRun(t) }));
+    const at = (t) => t.changedAt || t.createdAt || 0;
+    return [...this.tasks].sort((a, b) => at(b) - at(a)).map((t) => ({ ...t, running: this.busy.has(t.id), next: this.nextRun(t) }));
   }
 
   start() {
@@ -63,6 +65,7 @@ class Scheduler {
     const t = this.tasks.find((x) => x.id === id);
     if (!t) throw new Error('定时任务不存在');
     const next = { ...t, ...patch, id: t.id };
+    if (['mode', 'time', 'every', 'args', 'tool'].some((k) => k in patch)) next.changedAt = Date.now();
     Scheduler.check(next);
     Object.assign(t, next);
     this.save();
