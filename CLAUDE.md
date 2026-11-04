@@ -97,15 +97,15 @@ What is stored and shown:
 - A `tool_profile` event is emitted when total ≥ 3 s, or when there is an error or an issue. In a toolbox run or a scheduled run, the renderer holds it (`pendingProfile`, `tbRunning` / `schedHold`) and draws it under the result.
 - `renderProfile()` shows a `<details>` line `⏱ 用时 … · categories`, opened when something went wrong, containing 报错, 警告, 分步耗时 and 最耗时的操作.
 - The button depends on the outcome: error → 让 Claude 分析出错原因; issues → 让 Claude 检查这些问题; total ≥ 15 s → 让 Claude 分析为什么慢.
-- `profileMsg()` sends Claude the run data, the notes and code paths, and instructions: map the problem to the notes' steps and to code lines; for errors, find the real cause (checking the live page with `mcp__browser__*`, not guessing); for slowness, name the waits that can be cut and estimate the savings. Claude is told to analyze only, then edit through making mode once the user agrees.
-- Market `.bxt` tools get no code locations, and the message tells Claude not to look for the source.
+- **Repair means Claude analyzes *and modifies* the plugin's source (user-defined).** `startRepair()` enters making mode for the tool (`beginMaking({edit})`, which copies the code to `_drafts/<name>.js`) and sends `repairMsg()`. That message holds the run data (`profSections`: params, error, warnings, categories, steps, slow code lines), the notes path and the draft path. It asks Claude to find the real cause against the notes' steps and the code lines (checking the live page with `mcp__browser__*` for errors, no guessing), edit the draft to fix errors and cut waits without changing the tool's behavior, params or output, verify with `making_test`, and report the cause, the changes and the speed-up. The original is replaced only when the user clicks 保存工具; 不做了 leaves it untouched. `_lib/` is write-protected in making mode, so a cause inside a library is reported, not edited. Causes on the website's side are reported, not forced.
+- Button labels: error → 让 Claude 修复错误; issues → 让 Claude 修复这些问题; total ≥ 15 s → 让 Claude 提速修复. A toolbox run that throws no longer shows the old 打开修改工具; the repair button below the error replaces it. Draft test-run failures keep 让助手诊断并修复.
+- Market `.bxt` tools can't be edited, so they stay analysis-only (`profileMsg`, 让 Claude 分析… labels): no code locations, and Claude is told not to look for the source.
 - Scheduled runs keep the profile on the history entry: `main.js` sets `task._profile`, and `scheduler.record()` moves it onto the entry. 执行情况 shows the categories and the same button.
 
 The 修复 button on every toolbox card (`repairTool`):
-- It calls `tools:repairInfo` → `toolRepairInfo()`.
-- With a saved profile, it sends `profileMsg` for that run.
-- Without one, it asks Claude to read the notes and code for likely failure points and slow waits.
-- A market tool with no run yet just gets a note: run it once first.
+- It calls `tools:repairInfo` → `toolRepairInfo()`, then `startRepair()` with the latest saved profile.
+- Without a profile, the repair message asks Claude to read the notes and the draft for likely failure points and slow waits, fix them, and test.
+- A market tool with no run yet just gets a note: run it once first. The 执行情况 button also goes through `startRepair()`.
 
 Verified with a temporary test tool through the toolbox UI in ok, warn and fail modes and through a scheduled run plus 执行情况, then removed. Two problems found and fixed while testing:
 - `clear()` used to wait for a warming `start()`. A tool click right after launch therefore stalled, and the late clear wiped that run's output. `clear()` now returns at once when no process exists yet.

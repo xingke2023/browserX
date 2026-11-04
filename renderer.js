@@ -948,9 +948,10 @@ function profLine(p) {
 }
 // 什么情况给分析按钮：出错 > 有警告 > 慢（≥ 15 秒）
 function profWhy(p) {
-  if (p.error) return '让 Claude 分析出错原因';
-  if (p.issues?.length) return '让 Claude 检查这些问题';
-  if (p.total >= 15000) return '让 Claude 分析为什么慢';
+  if (p.market) return p.error ? '让 Claude 分析出错原因' : p.issues?.length ? '让 Claude 检查这些问题' : p.total >= 15000 ? '让 Claude 分析为什么慢' : '';
+  if (p.error) return '让 Claude 修复错误';
+  if (p.issues?.length) return '让 Claude 修复这些问题';
+  if (p.total >= 15000) return '让 Claude 提速修复';
   return '';
 }
 function flushProfile(tab, args) {
@@ -965,30 +966,70 @@ function renderProfile(p, opts = {}) {
   const steps = p.steps?.length ? `<div class="tp_h">分步耗时（按插件的进度文字分段）</div>${p.steps.map((s) => `<div class="tp_r"><span class="tp_at">+${(s.at / 1000).toFixed(1)}s</span><span class="tp_t">${esc(s.text)}</span><span class="tp_ms">${secs(s.ms)}</span></div>`).join('')}` : '';
   const slow = p.slow?.length ? `<div class="tp_h">最耗时的操作</div>${p.slow.map((g) => `<div class="tp_r"><span class="tp_t">${esc(PROF_LABEL[g.cat] || g.cat)} · ${esc(g.desc)}${g.n > 1 ? ` ×${g.n}` : ''}${g.fails ? `（${g.fails} 次超时或失败）` : ''}${g.where ? ` <code>${esc(g.where)}</code>` : ''}</span><span class="tp_ms">${secs(g.ms)}</span></div>`).join('')}` : '';
   const d = add('note tprof', `<details${p.error || p.issues?.length ? ' open' : ''}><summary>⏱ ${esc(profLine(p))}</summary>${bad}${steps}${slow}</details>${why ? `<div class="tp_act"><button class="tpwhy">${esc(why)}</button></div>` : ''}`, true);
-  d.querySelector('.tpwhy')?.addEventListener('click', () => { $('input').value = profileMsg(p, opts.args); sendMsg(); });
+  d.querySelector('.tpwhy')?.addEventListener('click', () => startRepair({ name: p.name, title: p.title }, p, '', opts.args));
 }
 // 插件修复（工具箱卡片上的「修复」）：用 Claude 分析插件的代码，找运行出错或很慢的原因。
 // 有最近一次运行的记录就按它分析（报错、警告、各步耗时）；没有就只读说明和代码，找容易出错和白等的地方
 async function repairTool(t) {
   let info;
   try { info = await call('tools:repairInfo', t.name); } catch (e) { add('note err', `✗ ${esc(e.message)}`, true); return; }
-  const { profile: p, meta } = info;
-  const name = t.title ? `${t.title}（${t.name}）` : t.name;
-  if (!p && meta.market) { add('note', `「${esc(name)}」还没有运行记录。这是插件市场里加密的插件，读不到代码：先运行一次，出错或很慢时再点「修复」，Claude 会根据那次的报错和耗时分析。`, true); return; }
-  $('toolbox').hidden = true; // 回到对话区看分析
-  if (p) {
-    const when = new Date(p.at).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    $('input').value = profileMsg(p, null, `（最近一次运行，${when}）`);
-  } else {
-    $('input').value = [`请帮我检查插件「${name}」。它还没有运行记录，请先读插件说明和代码，找出：`,
-      '1. 容易出错的地方：选择器或接口写死、登录失效没处理、没检查结果就往下走、出错被吞掉没有提示；',
-      '2. 可能很慢的地方：固定 sleep、等满超时才往下走的 waitFor、每次都做的重复确认、可以并行却串行的请求、说明里没有的多余步骤；',
-      '每处说明是说明里的哪一步、代码哪一行、怎么改、大概能省多少时间。',
-      `插件说明（执行步骤）：${meta.notes || '（这个插件没有说明文件）'}`,
-      `插件代码：${meta.file}（同目录下 _lib/ 里是它用到的库）`,
-      '先只分析，不要改文件。我同意后，再进入这个插件的修改模式改草稿并试运行。'].join('\n');
+  const p = info.profile;
+  const when = p ? new Date(p.at).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  startRepair(t, p, p ? `（最近一次运行，${when}）` : '', null, info.meta);
+}
+
+// 修复：用 Claude 分析并修改插件源代码。进入这个插件的修改模式（代码先复制成草稿），把运行情况（报错、警告、耗时、慢的代码行）
+// 和插件说明、草稿位置交给 Claude，让它找出原因、直接改草稿、用 making_test 试运行；用户满意点「保存工具」才替换原插件。
+// 市场里加密的插件改不了代码：只让 Claude 根据运行情况分析
+async function startRepair(tgt, p, extra = '', args = null, meta = null) {
+  if (!meta) {
+    try { meta = (await call('tools:repairInfo', tgt.name)).meta; } catch (e) { add('note err', `✗ ${esc(e.message)}`, true); return; }
   }
+  const name = tgt.title || meta.title ? `${tgt.title || meta.title}（${tgt.name}）` : tgt.name;
+  if (meta.market) {
+    if (!p) { add('note', `「${esc(name)}」还没有运行记录。这是插件市场里加密的插件，读不到也改不了代码：先运行一次，出错或很慢时再点「修复」，Claude 会根据那次的报错和耗时分析。`, true); return; }
+    $('toolbox').hidden = true;
+    $('input').value = profileMsg(p, args, extra);
+    sendMsg();
+    return;
+  }
+  if (!(await beginMaking({ edit: tgt.name }))) return;
+  $('input').value = repairMsg(p, meta, name, extra, args);
   sendMsg();
+}
+function repairMsg(p, meta, name, extra, args) {
+  const draft = meta.file.replace(/[^/]+$/, `_drafts/${meta.name}.js`);
+  const L = [];
+  if (p) {
+    const took = `用了 ${secs(p.total)}${p.typical ? `，平时约 ${secs(p.typical)}` : ''}`;
+    L.push(p.error ? `请修复插件「${name}」${extra}：这次运行失败了（${took}）。`
+      : p.issues?.length ? `请修复插件「${name}」${extra}：这次运行完了（${took}），但过程中有 ${p.issues.length} 条警告，可能有步骤没做成。`
+      : `请给插件「${name}」${extra}提速：这次运行${took}，太慢了。`);
+    L.push(...profSections(p, args));
+  } else {
+    L.push(`请检查并修复插件「${name}」。它还没有运行记录。`);
+  }
+  L.push('', `插件说明（执行步骤）：${meta.notes || '（这个插件没有说明文件）'}`,
+    `插件代码已复制成草稿：${draft}（只改这个草稿）。上面的代码位置是原文件的，行号跟草稿一样；_lib/ 下的库在修改模式里不能改，问题在库里就先说明。`,
+    '请这样修：',
+    p ? '1. 先读插件说明和草稿代码，对照上面这次运行找出真实原因：是说明里的哪一步、代码哪一行。出错时需要的话用 mcp__browser__* 看右侧浏览器的页面确认，不要猜；'
+      : '1. 先读插件说明和草稿代码，找出容易出错的地方（选择器或接口写死、登录失效没处理、没检查结果就往下走、出错被吞掉没有提示）和白等的地方（固定 sleep、等满超时才往下走的 waitFor、每次都做的重复确认、可以并行却串行的请求）；',
+    '2. 直接改草稿修好：出错的修掉；慢的把白等去掉或缩短。不要改变插件的功能、参数和输出结果；',
+    '3. 改完用 making_test 试运行验证（会提交、付款、删除、发布的步骤先问我），没修好就接着改；',
+    '4. 告诉我：原因是什么、改了哪几处、试运行的结果、大概快了多少。我满意后点「保存工具」才会替换原插件；不满意可以点「不做了」，原插件不受影响。',
+    '如果原因在网站本身（网站慢、改版、要人工登录），插件修不了，就直接说明，不要硬改。');
+  return L.join('\n');
+}
+// 运行情况的几段（修复和分析共用）：参数、报错、警告、耗时分类、分步耗时、最耗时的操作
+function profSections(p, args) {
+  const L = [];
+  if (args) L.push(`参数：${args}`);
+  if (p.error) L.push('', `报错：${p.error}`);
+  if (p.issues?.length) { L.push('', '警告 / 可疑的进度文字：'); for (const x of p.issues) L.push(`+${(x.at / 1000).toFixed(1)}s ${x.text}`); }
+  L.push('', `耗时分类：${profCats(p, '；')}`, '（「插件自己的代码」是不经过浏览器的部分，比如读邮件、本机网络请求、数据处理；「页面脚本/接口请求」包括插件在网页里发的接口请求）');
+  if (p.steps?.length) { L.push('', '分步耗时（按插件的进度文字分段）：'); for (const s of p.steps) L.push(`+${(s.at / 1000).toFixed(1)}s ${s.text}（${secs(s.ms)}）`); }
+  if (p.slow?.length) { L.push('', '最耗时的操作（同一行代码的多次调用已合并）：'); for (const g of p.slow) L.push(`- ${g.where || '位置未知'}：${PROF_LABEL[g.cat] || g.cat} ${g.desc}${g.n > 1 ? `，${g.n} 次` : ''}${g.fails ? `（其中 ${g.fails} 次超时或失败）` : ''}，共 ${secs(g.ms)}`); }
+  return L;
 }
 
 // 发给 Claude 的分析请求：真实耗时 + 插件说明（执行步骤）+ 插件代码，让它对照着找慢的原因；先只分析不改
@@ -999,12 +1040,7 @@ function profileMsg(p, args, extra = '') {
   const L = [p.error ? `插件「${name}」${extra}这次运行失败了（${took}），请分析出错的真实原因${slowRun ? '，也看看为什么慢' : ''}。`
     : p.issues?.length ? `插件「${name}」${extra}这次运行完了（${took}），但过程中有 ${p.issues.length} 条警告，请检查是不是有步骤没做成${slowRun ? '，也看看为什么慢' : ''}。`
     : `插件「${name}」${extra}这次运行${took}，请分析为什么慢。`];
-  if (args) L.push(`参数：${args}`);
-  if (p.error) L.push('', `报错：${p.error}`);
-  if (p.issues?.length) { L.push('', '警告 / 可疑的进度文字：'); for (const x of p.issues) L.push(`+${(x.at / 1000).toFixed(1)}s ${x.text}`); }
-  L.push('', `耗时分类：${profCats(p, '；')}`, '（「插件自己的代码」是不经过浏览器的部分，比如读邮件、本机网络请求、数据处理；「页面脚本/接口请求」包括插件在网页里发的接口请求）');
-  if (p.steps?.length) { L.push('', '分步耗时（按插件的进度文字分段）：'); for (const s of p.steps) L.push(`+${(s.at / 1000).toFixed(1)}s ${s.text}（${secs(s.ms)}）`); }
-  if (p.slow?.length) { L.push('', '最耗时的操作（同一行代码的多次调用已合并）：'); for (const g of p.slow) L.push(`- ${g.where || '位置未知'}：${PROF_LABEL[g.cat] || g.cat} ${g.desc}${g.n > 1 ? `，${g.n} 次` : ''}${g.fails ? `（其中 ${g.fails} 次超时或失败）` : ''}，共 ${secs(g.ms)}`); }
+  L.push(...profSections(p, args));
   L.push('');
   if (p.market) {
     L.push(`这是从插件市场安装的加密插件，读不到说明和代码，也不要去找源代码。请只根据上面的${p.error || p.issues?.length ? '报错、警告和' : ''}耗时，说明问题出在哪一步、可能是什么原因（网站本身慢或改版、登录失效、参数不对、在等什么），以及我自己能做什么；插件本身的问题可以联系作者。`);
@@ -1294,7 +1330,8 @@ async function runToolArgs(t, args, form, fields = []) {
     // 直接运行不经过模型，失败了没人会自动修：正式工具直接打开「修改工具」（新对话 + 制作模式），把参数和报错交给助手诊断、改草稿；
     // 草稿试运行失败时本来就在修改中，留在当前对话里让助手接着改
     if (t.market) { add('note err', `✗ ${esc(e.message)}<div class="muted" style="margin-top:4px">这是从插件市场安装的工具，有问题请联系作者，或在插件市场里更新到新版本</div>`, true); return; }
-    const d = add('note err', `✗ ${esc(e.message)}<div style="margin-top:6px"><button class="tbfix">${t.draft ? '让助手诊断并修复' : '打开修改工具'}</button></div>`, true);
+    if (!t.draft) { add('note err', `✗ ${esc(e.message)}`, true); return; } // 修复按钮在下面的运行情况里（finally 里画）
+    const d = add('note err', `✗ ${esc(e.message)}<div style="margin-top:6px"><button class="tbfix">让助手诊断并修复</button></div>`, true);
     d.querySelector('.tbfix').addEventListener('click', async () => {
       if (t.draft) {
         $('input').value = `试运行草稿 ${t.name} 失败了。\n参数：${shown}\n错误：${e.message}\n请诊断真正原因（用 mcp__browser__* 实际查一下，不要猜），然后改草稿。`;
@@ -1589,9 +1626,7 @@ async function showSchedHistory(x) {
     b.addEventListener('click', () => {
       const r = rows[Number(b.dataset.i)];
       document.querySelector('.modal-overlay:last-child [data-a=ok]')?.click();
-      $('toolbox').hidden = true; // 回到对话区看分析
-      $('input').value = profileMsg(r.profile, null, `（定时任务「${x.title}」${when(r.at)} 的那次）`);
-      sendMsg();
+      startRepair({ name: r.profile.name, title: r.profile.title }, r.profile, `（定时任务「${x.title}」${when(r.at)} 的那次）`);
     });
   }
   await shown;
