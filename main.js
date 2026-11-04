@@ -689,6 +689,7 @@ handle('cwd:pick', async () => {
 handle('agent:send', (text, tab) => tabOf(tab).agent.userSend(text)); // 用户发的消息：制作工具期间会记进制作记录
 handle('agent:stop', (tab) => tabOf(tab).agent.stop());
 handle('agent:reset', (tab) => tabOf(tab).agent.reset());
+handle('agent:clear', (tab) => tabOf(tab).agent.clear());
 handle('agent:permit', (id, decision, tab) => tabOf(tab).agent.permit(id, decision));
 handle('agent:answer', (id, result, tab) => tabOf(tab).agent.answer(id, result));
 // 右侧浏览器是独立的 WebContentsView，原生输入焦点可能还停在它上面；

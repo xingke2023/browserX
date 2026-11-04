@@ -1778,6 +1778,17 @@ ${old || '（无）'}`);
       for await (const m of q) {
         if (q !== this.q) return;
         if (m.parent_tool_use_id) continue; // 子代理的过程不展示
+        if (m.type === 'conversation_reset') {
+          // /clear 生效：原生 claude 换了一个新会话文件，之后的打标签、历史都跟着新 id 走
+          this.sessionId = m.new_conversation_id || this.sessionId;
+          this.tagged = false;
+          continue;
+        }
+        if (this.clearing) {
+          // /clear 自己的输出（命令回显、本轮 result）不显示；它的 result 一到就算清完了
+          if (m.type === 'result') this.clearing = false;
+          if (m.type !== 'system') continue;
+        }
         if (m.type === 'system' && m.subtype === 'init') {
           this.sessionId = m.session_id;
           this.tagged = false;
@@ -1859,6 +1870,21 @@ ${old || '（无）'}`);
     this.inbox.push({ type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null });
   }
 
+  // 清空上下文、不关 claude 进程（相当于终端里的 /clear）：之前的对话不再随请求发给模型，下一条消息也不用等进程重新启动。
+  // claude 进程只在关标签（或登录 / 设置变了必须重开）时才关。还没开会话就本来是空的；助手正在回复就先停下再清
+  async clear() {
+    this.denyAll();
+    this.pageNotes = [];
+    if (!this.q || !this.inbox) return;
+    if (this.running) {
+      await this.stop();
+      for (let i = 0; i < 50 && this.running; i++) await new Promise((r) => setTimeout(r, 100));
+      if (this.running) { this.reset(); return; } // 停不下来：只好重开进程
+    }
+    this.clearing = true;
+    this.inbox.push({ type: 'user', message: { role: 'user', content: '/clear' }, parent_tool_use_id: null });
+  }
+
   async stop() {
     this.stopTool();
     this.denyAll();
@@ -1882,6 +1908,7 @@ ${old || '（无）'}`);
     this.inbox?.close();
     this.inbox = null;
     this.running = false;
+    this.clearing = false;
     try { q?.close(); } catch {}
     this.ctx.emit({ type: 'reset' });
   }

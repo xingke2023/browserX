@@ -421,8 +421,7 @@ function onAgentEvent(ev) {
     case 'error': add('note err', `✗ ${esc(ev.text)}`); break;
     case 'reset':
       setRunning(false);
-      if (T.quietReset) T.quietReset = false; // 换工具时开的新会话：freshChatForTool 自己加分隔线
-      else if (T.el.children.length) add('note', '— 对话已结束，下一条消息将开始新对话 —');
+      if (T.el.children.length) add('note', '— 对话已结束，下一条消息将开始新对话 —');
       break;
     case 'making':
       T.making = ev.making;
@@ -467,20 +466,19 @@ async function clearChat() {
   $('toolbox').hidden = true;
   $('account').hidden = true;
   const t = cur;
-  await call('agent:reset', t.id).catch(() => {});
+  await call('agent:clear', t.id).catch(() => {}); // 相当于 /clear：清上下文，claude 进程不关
   t.el.innerHTML = '';
   t.toolEls.clear(); t.permEls.clear();
   t.chatTitle = '';
   renderTabs();
 }
-// 从工具箱点开一个工具（换工具或回到同一个都算）：清空这个标签的对话记录，助手从新会话开始，
-// 之前的对话不再随每次请求发给 Claude（省 token；模型对话在「历史」里还能找回）。
+// 从工具箱点开一个工具（换工具或回到同一个都算）：清空这个标签的对话记录，相当于 /clear——
+// claude 进程不关，只是之前的对话不再随请求发给 Claude（省 token；模型对话在「历史」里还能找回）。
 // 助手还在回复、有工具在跑、在制作工具时不动（会打断正在做的事）
 async function freshChatForTool(tool) {
   const t = cur;
   if (t.running || t.tbRunning || t.making) return;
-  t.quietReset = true;
-  await call('agent:reset', t.id).catch(() => { t.quietReset = false; });
+  await call('agent:clear', t.id).catch(() => {});
   t.el.innerHTML = '';
   t.toolEls.clear(); t.permEls.clear();
   t.chatTitle = '';
