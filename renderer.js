@@ -810,7 +810,9 @@ function openToolPage(tool) {
   tab.tb.hidden = true;
   tab.pages.hidden = false;
   $('toolbox').classList.add('haspage');
-  $('toolbox').classList.toggle('folded', pg.classList.contains('folded'));
+  // 从工具箱点这个工具：它的页面之前被收起了（比如运行后自动收起）就展开，直接看到表单
+  if (pg.classList.contains('folded')) setFolded(pg, false);
+  else $('toolbox').classList.remove('folded');
 }
 
 // 收起 / 展开填表页面（每个标签每个工具各记各的）；收起时标题行显示摘要：动态表单里现在选的、填的
