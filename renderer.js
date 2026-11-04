@@ -1725,18 +1725,15 @@ call('account:state').then((st) => { account = st; renderAccount(); }).catch(() 
 const makingTabState = () => [...tabState.values()].find((x) => x.making);
 
 // 新建工具：只问「想做个什么工具」，名字由助手起；写了就直接当第一条消息发给助手
-const NT_EXAMPLES = ['输入保单号，在保险公司网站上查保单状态和保费', '每天把续保名单导出成 Excel', '把表格里的客户资料逐条填进网页表单', '保存某个网站最新的一条新闻（文字和图片）'];
 function showNewToolForm() {
   const list = $('tb_list');
   list.innerHTML = `<div class="tbitem tbnt"><div class="tbform tbdyn">
       <div class="tbf full"><label for="nt_goal">想做个什么工具？</label><textarea id="nt_goal" placeholder="说清楚在哪个网站、输入什么、要得到什么结果，例如：输入保单号，在宏利网站查保单状态和保费"></textarea></div>
-      <div class="nt_examples">${NT_EXAMPLES.map((x) => `<button type="button" class="dynchip">${esc(x)}</button>`).join('')}</div>
-      <div class="dynnote">会开一个新对话专门做这个工具（当前对话在「历史」里找得回）。助手需要时会请你在网页上操作一遍，写好后自己测试，你点「保存到工具箱」就行。</div>
+      <div class="dynnote">会开一个新对话专门做这个工具（当前对话在「历史」里找得回）。助手需要时会请你在网页上操作一遍，写好后自己测试，你点「保存工具」就行。</div>
       <div class="tberr" hidden></div>
       <div class="row"><button class="primary nt_go">开始制作</button></div>
     </div></div>`;
   const goal = $('nt_goal');
-  for (const b of list.querySelectorAll('.nt_examples .dynchip')) b.addEventListener('click', () => { goal.value = b.textContent; goal.focus(); });
   goal.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) list.querySelector('.nt_go').click(); });
   list.querySelector('.nt_go').addEventListener('click', async () => {
     const err = list.querySelector('.tberr');
