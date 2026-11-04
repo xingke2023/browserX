@@ -473,19 +473,18 @@ async function clearChat() {
   t.chatTitle = '';
   renderTabs();
 }
-// 从工具箱换一个工具：让助手从新会话开始（之前的对话不再每次请求都带上，省 token；旧会话在「历史」里），
-// 界面上的内容不删（直接运行工具的结果不在「历史」里，删了就找不回来），插一条分隔线；对话区只留最近 MAX_CHAT_ITEMS 条，长时间用也不卡。
+// 从工具箱点开一个工具（换工具或回到同一个都算）：清空这个标签的对话记录，助手从新会话开始，
+// 之前的对话不再随每次请求发给 Claude（省 token；模型对话在「历史」里还能找回）。
 // 助手还在回复、有工具在跑、在制作工具时不动（会打断正在做的事）
-const MAX_CHAT_ITEMS = 300;
 async function freshChatForTool(tool) {
   const t = cur;
   if (t.running || t.tbRunning || t.making) return;
   t.quietReset = true;
   await call('agent:reset', t.id).catch(() => { t.quietReset = false; });
-  t.toolEls.clear(); t.permEls.clear(); // 旧会话里的操作卡片不会再有结果回来
-  if (!t.el.children.length) return;
-  add('note sessionsep', `—— 新会话：${esc(tool.title || tool.name)}（之前的对话不再发给助手，省 token） ——`, true);
-  while (t.el.children.length > MAX_CHAT_ITEMS) t.el.firstElementChild.remove();
+  t.el.innerHTML = '';
+  t.toolEls.clear(); t.permEls.clear();
+  t.chatTitle = '';
+  renderTabs();
 }
 
 $('btnNew').addEventListener('click', async () => {
@@ -777,9 +776,8 @@ function drawToolCards() {
     // 点开一个工具只显示它自己（其它工具、搜索栏、分页栏藏起来），再点一次卡片或「全部工具」回到原来那一页
     d.addEventListener('click', (e) => {
       if (e.target.closest('button, .tbform')) return;
-      // 换一个工具：助手开新会话（省 token）；回到这个标签里已经开着的同一个工具页面不用
-      const reopen = [...cur.pages.children].some((x) => x.dataset.tool === t.name);
-      (reopen ? Promise.resolve() : freshChatForTool(t)).then(() => {
+      // 点开工具：先清空这个标签的对话、助手开新会话（省 token）
+      freshChatForTool(t).then(() => {
         if (t.launch) { launchTool(t); return; } // 自带界面的工具：点一下直接运行，不显示参数表单
         openToolPage(t); // 打开（或回到）这个标签里一直活着的工具页面：自带网页的显示网页，其它的显示标准表单（formSpec 或按 params 自动生成）
       });
