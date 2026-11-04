@@ -406,7 +406,7 @@ function onAgentEvent(ev) {
       const d = add('note', `${esc(ev.text)}<div style="margin-top:6px"><button class="ghost tbcont">继续修改</button></div>`, true);
       d.querySelector('.tbcont').addEventListener('click', () => {
         const mk = makingTabState();
-        if (mk) { add('note err', `✗ 正在制作工具「${esc(mk.making.title || '新工具')}」，先点横幅上的「保存」或「不做了」`, true); return; }
+        if (mk) { add('note err', `✗ 正在制作工具「${esc(mk.making.title || '新工具')}」，先点横幅上的「保存工具」或「不做了」`, true); return; }
         call('making:continue', ev.name).catch((e) => add('note err', `✗ ${esc(e.message)}`, true));
       });
       break;
@@ -1498,10 +1498,14 @@ async function showPublishForm(t) {
     return;
   }
   const cats = Object.entries(info.meta.categories).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join('');
+  // 写死的用户名 / 密码 / token 一类：不能发布（网站也会拒绝）；本机路径、内网地址之类只提醒
+  const BLOCKING = ['疑似写死的密码 / token / 密钥', '疑似写死的用户名 / 账号', '疑似写死的 Bearer token', '疑似 JWT', '疑似 API Key'];
+  const blocked = info.secrets.filter((x) => BLOCKING.includes(x.label)), warned = info.secrets.filter((x) => !BLOCKING.includes(x.label));
   box.innerHTML = `<div class="tbform">
     <div class="tbhead"><span class="tbname">${rm ? '上传新版本' : '发布到插件市场'}：${esc(label)}</span></div>
     <p class="hint">${rm ? `网站上已有这个工具（${esc(rm.status_label)}，${esc(rm.price_label)}，当前对外版本 ${esc(rm.current_version || '无')}）。新版本审核通过后替换旧版本；价格、简介在网站上改。` : `提交后进入审核，管理员通过后才会出现在插件市场。平台抽成 ${info.meta.commission_percent}%，其余归你。`}</p>
-    ${info.secrets.length ? `<p class="tbimp-warn">⚠ 代码里可能有不该公开的内容：${info.secrets.map((x) => `${esc(x.label)}（第 ${x.lines.join('、')} 行）`).join('；')}。建议先点「编辑」让助手改成运行时读取，再发布。</p>` : ''}
+    ${blocked.length ? `<p class="tbimp-block">✗ 代码里写死了账号信息，不能发布：${blocked.map((x) => `${esc(x.label)}（第 ${x.lines.join('、')} 行）`).join('；')}。用户名、密码、token 要在运行时读取（工具参数、本机设置文件，或让用户在右侧网页上登录）。点「编辑」让助手改好再发布。</p>` : ''}
+    ${warned.length ? `<p class="tbimp-warn">⚠ 代码里可能有不该公开的内容：${warned.map((x) => `${esc(x.label)}（第 ${x.lines.join('、')} 行）`).join('；')}。建议改掉再发布。</p>` : ''}
     <div class="tbf"><label for="pb_version">版本号 <span class="req">*</span></label><input id="pb_version" value="${esc(rm ? bumpVersion(rm.latest_version) : '1.0.0')}" spellcheck="false"></div>
     ${rm ? '' : `
     <div class="tbf"><label for="pb_title">中文名</label><input id="pb_title" value="${esc(t.title || '')}" maxlength="40"></div>
@@ -1511,7 +1515,7 @@ async function showPublishForm(t) {
     <div class="tbf"><label for="pb_desc">详细说明</label><p class="hint">写清楚用途、需要先登录哪个网站、参数怎么填（支持 Markdown）</p><textarea id="pb_desc" rows="5">${esc(t.description || '')}</textarea></div>`}
     <div class="tbf"><label for="pb_changelog">版本说明</label><textarea id="pb_changelog" rows="2" placeholder="${rm ? '这个版本改了什么' : '可不填'}"></textarea></div>
     <div class="tberr" hidden></div>
-    <div class="row"><button class="primary pb_go">${rm ? '上传新版本' : '提交审核'}</button><button class="ghost pb_cancel">取消</button></div></div>`;
+    <div class="row"><button class="primary pb_go"${blocked.length ? ' disabled title="代码里写死了账号信息，改好才能发布"' : ''}>${rm ? '上传新版本' : '提交审核'}</button><button class="ghost pb_cancel">取消</button></div></div>`;
   box.querySelector('.pb_cancel').addEventListener('click', renderToolboxList);
   box.querySelector('.pb_go').addEventListener('click', async (ev) => {
     const err = box.querySelector('.tberr');
@@ -1751,7 +1755,7 @@ function showNewToolForm() {
 // 开一个新对话进入制作模式；失败时把原因显示出来，返回是否成功
 async function beginMaking(opts) {
   const mk = makingTabState();
-  if (mk) { add('note err', `✗ ${mk === cur ? '' : '另一个标签'}正在制作工具「${esc(mk.making.title || '新工具')}」，先${mk === cur ? '' : '切过去'}点横幅上的「保存」或「不做了」`, true); $('toolbox').hidden = true; return false; }
+  if (mk) { add('note err', `✗ ${mk === cur ? '' : '另一个标签'}正在制作工具「${esc(mk.making.title || '新工具')}」，先${mk === cur ? '' : '切过去'}点横幅上的「保存工具」或「不做了」`, true); $('toolbox').hidden = true; return false; }
   await clearChat();
   try {
     await call('making:start', opts);

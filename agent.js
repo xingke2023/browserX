@@ -82,7 +82,7 @@ const TOOLBOX_PROMPT = (dir) => `
   - 标准表单做不到的界面（图表、大表格）才用 form: async (ctx) => 'http://127.0.0.1:端口/…'；工具自带界面时用 launch: true（点了直接运行）。
 - ctx：js(code)、screenshot()、pageInfo()、click({x,y} 或 {selector,text})、type(text)、press(key, modifiers)、scroll(dy,x,y)、navigate(url)、sleep(ms)、waitFor(fn, timeoutMs, step)（等元素用它，别用固定 sleep）、guard(what, text)（危险操作确认）、log(text)（进度）、warn(text)（要用户马上处理，比如扫码）、ask(prompt, {system, model})（让模型写一段纯文本）、wc（当前网页标签的原始 webContents）、wx（hover / rect / clickWhenVisible 等辅助方法）、tabs（网页标签：list() / open(url) / switch(i) / close(i) / waitForNew(ms)，点了会新开标签的链接后用 waitForNew 等它，返回编号并已切过去；其它 ctx 方法都操作当前标签）。
 - 真实网站有分支（弹窗不一定出现、数量不固定、要重试），照实际写判断，参考 wechat.js 的 WeChat.fill()。某一步失败但工具还能继续时，在返回结果里写一行「⚠ …」说明，不要悄悄吞掉。优先用选择器和文字匹配；截图坐标只对当前视窗大小有效，不要写进工具。
-- **工具调用失败时**（结果里有源文件路径）：先用 mcp__browser__* 手动把用户这次的事做完；再用 eval / page_info 查清真实原因，别凭报错猜；有把握才调 toolbox_edit 改草稿，改完先用 making_test 测，测通后说明改了什么，请用户点横幅上的「保存」；没把握就只报告诊断结果。`;
+- **工具调用失败时**（结果里有源文件路径）：先用 mcp__browser__* 手动把用户这次的事做完；再用 eval / page_info 查清真实原因，别凭报错猜；有把握才调 toolbox_edit 改草稿，改完先用 making_test 测，测通后说明改了什么，请用户点横幅上的「保存工具」；没把握就只报告诊断结果。`;
 
 // 制作模式：开始 / 结束都由界面按钮决定（startMaking / finishMaking / cancelMaking），这里只告诉模型目标和草稿位置
 const MAKING_PROMPT = (m) => `
@@ -116,7 +116,7 @@ const MAKING_PROMPT = (m) => `
 - 不要吞掉失败：可有可无的步骤（比如自动加话题）失败了也要在返回结果里单独写一行「⚠ 话题没加上：原因」，或者调 ctx.warn；不然测试会被当成通过。
 - 只能按坐标点的按钮（封闭的自定义组件里）：运行时用 ctx.js 取它外层元素的 getBoundingClientRect() 算出位置再点，不要把这次截图里的坐标写死。`;
 
-// 横幅上「保存」按钮的字（跟 renderer.js 一致）；「不做了」会丢掉草稿
+// 横幅上「保存工具」按钮的字（跟 renderer.js 一致）；「不做了」会丢掉草稿
 const SAVE_LABEL = () => '保存工具'; // 跟横幅上按钮的字一致（圆形按钮里分两行显示）
 // 横幅上的进度（makingStep 按助手的操作往前推；没录制就跳过「示范」）
 const MAKING_STEPS = ['需求', '打开网站', '示范', '写工具', '测试', '保存']; // 左栏窄，字要短才能一行放下
@@ -149,9 +149,12 @@ function describeCall(name, input = {}) {
 const stampNow = () => new Date().toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 
 // 导出前查代码里有没有写死的密码 / token / 内网地址，免得把自己的账号一起发出去
+// 发布到插件市场时直接拦下的（账号、密码、token 一类），其它只提醒；跟网站 ToolScanner::BLOCKING 一致
+const BLOCKING_SECRETS = new Set(['疑似写死的密码 / token / 密钥', '疑似写死的用户名 / 账号', '疑似写死的 Bearer token', '疑似 JWT', '疑似 API Key']);
 function scanSecrets(code) {
   const rules = [
-    [/(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|authorization)['"]?\s*[:=]\s*['"`][^'"`\s]{6,}['"`]/i, '疑似写死的密码 / token / 密钥'],
+    [/(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|authorization)['"]?\s*[:=]\s*['"`][^'"`\s${}]{6,}['"`]/i, '疑似写死的密码 / token / 密钥'], // 值里有 ${…}（运行时拼出来的）不算
+    [/\b(user(?:name)?|user_?id|login(?:_?id|_?name)?|account(?:_?id|_?name)?)['"]?\s*[:=]\s*['"`][^'"`\s${}]{3,}['"`]|(账号|用户名|帳號|用戶名)['"]?\s*[:：=]\s*['"`][^'"`\s${}]{3,}['"`]/iu, '疑似写死的用户名 / 账号'],
     [/Bearer\s+[A-Za-z0-9._~+/=-]{16,}/, '疑似写死的 Bearer token'],
     [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\./, '疑似 JWT'],
     [/\bsk-[A-Za-z0-9_-]{20,}/, '疑似 API Key'],
@@ -1296,7 +1299,7 @@ class Agent {
     if (warn || /失败|出错|错误|没加上|没找到|找不到|超时|⚠/.test(t)) this._testIssues.push(clip(t, 200));
   }
 
-  // 助手自己测试草稿（mcp__toolbox__making_test）：跟「试运行」一样直接跑草稿，结果返回给助手；测通了界面上出「保存」按钮
+  // 助手自己测试草稿（mcp__toolbox__making_test）：跟「试运行」一样直接跑草稿，结果返回给助手；测通了界面上出「保存工具」按钮
   async makingTest(argsJson) {
     const m = this.making;
     if (!m) throw new Error('当前没有在制作工具');
@@ -1388,10 +1391,10 @@ ${m.editing ? '请问您想改什么、改成什么样？' : '请问您想在哪
       catch (e) { return { content: [{ type: 'text', text: `失败：${e.message}` }], isError: true }; }
     };
     return [
-      tool('toolbox_new', '在当前对话里进入「制作工具」模式新建一个工具（不清空对话）：返回草稿路径和制作规则，之后只写草稿，自己用 making_test 测通后请用户点横幅上的「保存」，保存后才放进工具箱。',
+      tool('toolbox_new', '在当前对话里进入「制作工具」模式新建一个工具（不清空对话）：返回草稿路径和制作规则，之后只写草稿，自己用 making_test 测通后请用户点横幅上的「保存工具」，保存后才放进工具箱。',
         { name: z.string().describe('工具名：字母/数字/下划线，不能以数字开头'), title: z.string().optional().describe('给用户看的中文名，简短，例如「保单查询」'), goal: z.string().describe('这个工具要做什么') },
         wrap((a) => this.startMaking({ name: a.name, title: a.title, goal: a.goal, keepChat: true }))),
-      tool('toolbox_edit', '在当前对话里进入「制作工具」模式修改一个已有工具（不清空对话）：把现有代码复制成草稿并返回草稿路径和规则，之后只改草稿，自己用 making_test 测通后请用户点横幅上的「保存」，保存后才替换原工具。工具箱里的正式文件不能直接改。',
+      tool('toolbox_edit', '在当前对话里进入「制作工具」模式修改一个已有工具（不清空对话）：把现有代码复制成草稿并返回草稿路径和规则，之后只改草稿，自己用 making_test 测通后请用户点横幅上的「保存工具」，保存后才替换原工具。工具箱里的正式文件不能直接改。',
         { name: z.string().describe('要修改的工具名'), goal: z.string().optional().describe('要改什么') },
         wrap((a) => this.startMaking({ edit: a.name, goal: a.goal, keepChat: true }))),
       tool('making_test', '制作工具时，自己用草稿跑一次测试（跟用户点「试运行」一样，不经过模型直接执行草稿），返回结果或报错。写完 / 改完草稿后用它验证，不要让用户去试运行。',
@@ -1472,7 +1475,7 @@ ${m.editing ? '请问您想改什么、改成什么样？' : '请问您想在哪
     if (!m) throw new Error('当前没有在制作工具');
     if (m.streamlining) throw new Error('助手正在把整个过程精简成最终工具，等它回复完再点');
     if (optimize && (!m.streamlinedHash || m.streamlinedHash !== fileHash(m.draft))) {
-      if (this.running) throw new Error('助手还在回复，等它说完再点「保存」');
+      if (this.running) throw new Error('助手还在回复，等它说完再点「保存工具」');
       const verb = m.editing ? '修改' : '制作';
       m.streamlining = true;
       m.hashBefore = fileHash(m.draft);
@@ -1819,7 +1822,7 @@ ${old || '（无）'}`);
           // 助手停下来了、又没有更具体的提示：告诉用户轮到他了（问了问题 / 测通了等保存 / 其它）
           if (this.making && !this.making.hint && !this.rec.active && !m.is_error) {
             const last = String(this.lastText || '').trim();
-            if (this.making.step >= 5) this.setHint('工具测试通过了：满意就点「保存」，要改直接在下面说', true);
+            if (this.making.step >= 5) this.setHint(`工具测试通过了：满意就点「${SAVE_LABEL(this.making)}」，要改直接在下面说`, true);
             else if (/[？?]\s*$/.test(last) || /请(你|您)?(回答|告诉|确认|选择|回复)/.test(last)) this.setHint('助手在等你回答：请在下面的对话框回复', true);
           }
           this.ctx.emit({ type: 'done', error: m.is_error && !this.quotaHit ? (m.result || m.subtype) : null, quota: this.quotaHit, cost: m.total_cost_usd });
@@ -1827,7 +1830,7 @@ ${old || '（无）'}`);
           // 用户点「完成」→ 助手精简完：直接放进工具箱（点一次就完成；要不要试运行用户自己决定）。
           // 只有新建工具撞名这种会覆盖别的工具的情况，才停下来让用户再点一次确认
           if (autoFinish) this.finishMaking({ force: true }).then((r) => {
-            if (r?.confirm) this.ctx.emit({ type: 'note', text: `— 精简完成，但${r.confirm.replace(/？$/, '')}：确认的话再点一次「保存」 —` });
+            if (r?.confirm) this.ctx.emit({ type: 'note', text: `— 精简完成，但${r.confirm.replace(/？$/, '')}：确认的话再点一次「保存工具」 —` });
           }).catch((e) => this.ctx.emit({ type: 'error', text: `精简完成，但还不能放进工具箱：${e.message}` }));
           // 打标签+清理放在第一轮回复结束后：会话文件这时才稳定落盘，早了会因为原生进程还在写而失败
           if (!this.tagged) this.tagAndPrune().then(() => { this.tagged = true; }).catch(() => {});
@@ -1885,4 +1888,4 @@ ${old || '（无）'}`);
   }
 }
 
-module.exports = { Agent, CB_TAG, scanRisks };
+module.exports = { Agent, CB_TAG, scanRisks, BLOCKING_SECRETS };

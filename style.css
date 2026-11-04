@@ -851,3 +851,5 @@ p.tbimp-ow{display:block;margin:8px 0 0;padding:8px 10px;border-radius:8px;backg
 .sc_top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-bottom:4px}
 .sc_top .tbback{justify-self:start}
 .sc_top .sc_title{margin:0;font-size:16px;font-weight:700;color:var(--text);text-align:center}
+/* 发布页：写死账号信息、不能发布的红色提示 */
+.tbimp-block{margin:6px 0;padding:8px 10px;border-radius:8px;background:color-mix(in srgb,var(--err) 10%,var(--card));color:var(--err);font-size:12.5px;line-height:1.55}

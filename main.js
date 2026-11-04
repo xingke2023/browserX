@@ -2,7 +2,7 @@ const { app, BrowserWindow, WebContentsView, ipcMain, dialog, safeStorage, Menu,
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { Agent, CB_TAG, scanRisks } = require('./agent');
+const { Agent, CB_TAG, scanRisks, BLOCKING_SECRETS } = require('./agent');
 const { Account, PORTAL: ACCOUNT_PORTAL } = require('./account');
 const { Updater } = require('./updater');
 const { Scheduler } = require('./scheduler');
@@ -266,7 +266,7 @@ function closeTab(id) {
   const t = tabs.get(id);
   if (!t) return cur?.id;
   if (tabs.size === 1) throw new Error('至少要留一个标签');
-  if (t.agent.making) throw new Error(`这个标签正在制作工具「${t.agent.making.title || '新工具'}」，先点横幅上的「保存」或「不做了」`);
+  if (t.agent.making) throw new Error(`这个标签正在制作工具「${t.agent.making.title || '新工具'}」，先点横幅上的「保存工具」或「不做了」`);
   try { if (t.agent.rec.active) t.agent.rec.save(); } catch {}
   t.agent.stopTool();
   t.agent.reset();
@@ -950,7 +950,10 @@ handle('market:publishInfo', async (name) => {
   return { secrets, remote: mine.find((t) => t.name === name) || null, meta };
 });
 handle('market:publish', async (name, form) => {
-  const { code } = cur.agent.exportInfo(name);
+  const { code, secrets } = cur.agent.exportInfo(name);
+  // 写死了用户名 / 密码 / token：不发（网站那边也会拒绝），说清楚是哪几行
+  const bad = secrets.filter((x) => BLOCKING_SECRETS.has(x.label));
+  if (bad.length) throw new Error(`代码里不能写死用户名、密码、token 之类的账号信息：${bad.map((x) => `${x.label}（第 ${x.lines.join('、')} 行）`).join('；')}。先点「编辑」让助手改成运行时读取，再发布。`);
   return account.api('/my-tools', { method: 'POST', body: { ...form, code } });
 });
 
