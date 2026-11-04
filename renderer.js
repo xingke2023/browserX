@@ -12,7 +12,8 @@ const uiTranslator = BXI18N.domTranslator(() => TR, UI_SKIP);
 function setUiLang({ dict, lang }) {
   TR = BXI18N.makeT(dict).tr;
   UI_LANG = lang || 'zh-CN';
-  document.body.classList.toggle('ui-latin', !/^(zh|ja|ko)/.test(UI_LANG)); // 字母文字：横幅上的圆按钮放不下，改成椭圆
+  document.body.classList.toggle('ui-latin', !/^(zh|ja|ko)/.test(UI_LANG));
+  try { if (!localStorage.getItem('sideWidth')) setTimeout(() => fitSideToToolbar(), 0); } catch {} // 字母文字：横幅上的圆按钮放不下，改成椭圆
   // 空对话的提示写在 CSS ::before 里（不是网页文字，自动翻译管不到），按语言写进 CSS 变量
   document.documentElement.style.setProperty('--empty-hint', JSON.stringify(TR('试试输入：「打开 baidu.com 搜索 BrowserX」')));
   if (account?.loggedIn) renderAccount(); // 账号面板里的数字格式跟着换
@@ -2160,7 +2161,22 @@ function setSide(w) {
   document.documentElement.style.setProperty('--side', w + 'px');
   try { localStorage.setItem(SIDE_KEY, w); } catch {}
 }
-try { const w = +localStorage.getItem(SIDE_KEY); if (w) setSide(w); } catch {}
+// 默认宽度：还没拖过的话，刚好让工具箱顶部那一排按钮（新建工具 / 导入 / 插件市场 / 收藏 / 定时任务）放在一行。
+// 按当前界面语言量按钮的实际宽度（英文等语言按钮更宽），量的时候放在屏幕外、不显示
+function fitSideToToolbar() {
+  // 样品用同样的 .tbtop 样式（按钮 0 14px 内边距、13px 字，这一排左右各 2px 内边距），不换行地排开量总宽
+  const probe = document.createElement('div');
+  probe.className = 'tbtop';
+  probe.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden;flex-wrap:nowrap;width:max-content';
+  probe.innerHTML = ['新建工具', '导入', '插件市场', '收藏', '定时任务'].map((t) => `<button class="ghost" style="flex:none">${esc(TR(t))}</button>`).join('');
+  document.body.appendChild(probe);
+  const need = Math.ceil(probe.getBoundingClientRect().width) + 28 + 10; // 工具箱左右留白 14px×2，再留 10px 余量
+  probe.remove();
+  document.documentElement.style.setProperty('--side', `${Math.max(340, Math.min(window.innerWidth - 420, need))}px`);
+}
+let sideSaved = false;
+try { const w = +localStorage.getItem(SIDE_KEY); if (w) { setSide(w); sideSaved = true; } } catch {}
+if (!sideSaved) fitSideToToolbar();
 $('splitter').addEventListener('pointerdown', (e) => {
   e.preventDefault();
   dragging = true;
