@@ -154,7 +154,7 @@
  "交给助手做成工具": "Pedir al asistente que lo convierta en herramienta",
  "今天的 Claude 额度已用完（{0} / {1}），明天 0 点恢复。": "Has agotado tu cuota diaria de Claude ({0} / {1}). Se restablecerá mañana a las 0:00.",
  "今天的 Claude 额度已用完，明天 0 点恢复。": "Has agotado tu cuota diaria de Claude. Se restablecerá mañana a las 0:00.",
- "今日 Claude 用量": "Uso de Claude hoy",
+ "今日 Tokens 用量": "Uso de tokens de hoy",
  "从": "Desde",
  "从工具箱删除（文件移到废纸篓，可以恢复）": "Eliminar de la Caja de herramientas (el archivo se moverá a la Papelera y se podrá recuperar)",
  "从插件市场安装的别人的工具：不能编辑、导出、发布": "Herramientas de terceros instaladas desde el mercado de plugins: no se pueden editar, exportar ni publicar",

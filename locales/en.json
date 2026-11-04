@@ -154,7 +154,7 @@
  "交给助手做成工具": "Turn into a Tool",
  "今天的 Claude 额度已用完（{0} / {1}），明天 0 点恢复。": "You've used up today's Claude quota ({0} / {1}). It resets at midnight.",
  "今天的 Claude 额度已用完，明天 0 点恢复。": "You've used up today's Claude quota. It resets at midnight.",
- "今日 Claude 用量": "Today's Claude Usage",
+ "今日 Tokens 用量": "Today's Token Usage",
  "从": "From",
  "从工具箱删除（文件移到废纸篓，可以恢复）": "Remove from Toolbox (files moved to Trash, recoverable)",
  "从插件市场安装的别人的工具：不能编辑、导出、发布": "Tools installed from the plugin marketplace can't be edited, exported, or published",

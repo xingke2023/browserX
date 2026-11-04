@@ -1567,7 +1567,7 @@ function renderAccount() {
   const usage = c?.limit ? (() => {
     const pct = Math.min(100, Math.round(c.used * 100 / c.limit));
     return `<div class="ac_usage" title="每天 0 点重置${c.exceeded && !u.member ? '；开通会员可以提高额度' : ''}">
-        <div class="ac_urow"><span>今日 Claude 用量</span><span><b>${wan(c.used)}</b> / ${wan(c.limit)}${c.exceeded ? ' · <em class="ac_over">已用完，明天 0 点恢复</em>' : ''}</span></div>
+        <div class="ac_urow"><span>今日 Tokens 用量</span><span><b>${wan(c.used)}</b> / ${wan(c.limit)}${c.exceeded ? ' · <em class="ac_over">已用完，明天 0 点恢复</em>' : ''}</span></div>
         <div class="ac_meter"><i style="width:${pct}%" class="${c.exceeded ? 'full' : pct >= 80 ? 'hi' : ''}"></i></div>
         ${u.urls?.credit ? `<div class="ac_urow ac_credit"><span>Tokens 余额 <b>${wan(c.credit || 0)}</b><small>（每天的额度用完后从这里扣）</small></span><button class="${c.exceeded || (c.used >= c.limit && !c.credit) ? 'primary' : 'ghost'} ac_link ac_small" data-url="${esc(u.urls.credit)}">充值</button></div>` : ''}
       </div>`;

@@ -154,7 +154,7 @@
  "交给助手做成工具": "Vom Assistenten als Tool umsetzen lassen",
  "今天的 Claude 额度已用完（{0} / {1}），明天 0 点恢复。": "Ihr heutiges Claude-Kontingent ist aufgebraucht ({0} / {1}). Es wird morgen um 0:00 Uhr zurückgesetzt.",
  "今天的 Claude 额度已用完，明天 0 点恢复。": "Ihr heutiges Claude-Kontingent ist aufgebraucht. Es wird morgen um 0:00 Uhr zurückgesetzt.",
- "今日 Claude 用量": "Claude-Nutzung heute",
+ "今日 Tokens 用量": "Heutiger Token-Verbrauch",
  "从": "Von",
  "从工具箱删除（文件移到废纸篓，可以恢复）": "Aus der Toolbox löschen (Datei wird in den Papierkorb verschoben und kann wiederhergestellt werden)",
  "从插件市场安装的别人的工具：不能编辑、导出、发布": "Tools anderer Nutzer aus dem Plugin-Marktplatz: Bearbeiten, Exportieren und Veröffentlichen nicht möglich",
