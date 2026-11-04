@@ -745,7 +745,9 @@ handle('tools:importPick', async () => {
   if (r.canceled || !r.filePaths[0]) return null;
   importer = cur.agent; // 选文件和确认之间可能切了标签：确认时用同一个（待导入的内容存在它身上）
   marketPending = null;
-  return importer.importPreview(r.filePaths[0]);
+  // 不把源代码发给界面（导入页不提供查看源代码）；代码已读进 pendingImport，确认时用
+  const { code, ...preview } = importer.importPreview(r.filePaths[0]);
+  return preview;
 });
 let importer = null;
 handle('tools:importConfirm', (opts) => confirmImport(opts));

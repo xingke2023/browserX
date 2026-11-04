@@ -835,3 +835,5 @@ body.ui-latin #msgs .note.quota span+span::before{content:' '} /* 英文等：�
 .mkfeat{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 7px 1px 3px;border-radius:999px;background:rgba(245,158,11,.14);color:#d97706;font-size:11.5px;font-weight:700;line-height:17px;vertical-align:1px;white-space:nowrap}
 .mkfeat svg{width:14px;height:14px}
 .mkfeat svg path{fill:#f59e0b;stroke:#f59e0b;stroke-width:1.2;stroke-linejoin:round}
+/* 导入 / 安装确认页：工具 ID 相同会覆盖的提示 */
+p.tbimp-ow{display:block;margin:8px 0 0;padding:8px 10px;border-radius:8px;background:var(--warn-weak);color:var(--warn);font-size:12.5px;line-height:1.5}

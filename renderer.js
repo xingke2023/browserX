@@ -1165,19 +1165,19 @@ function showImportPreview(p, { update = false } = {}) { // update：从「更�
     <div class="tbitem tbimp">
       <div class="tbhead"><span class="tbname">${verb}：${esc(p.title || p.name)}${p.title ? `<small class="tbid">${esc(p.name)}</small>` : ''}</span></div>${p.description ? `<div class="tbdesc">${esc(p.description)}</div>` : ''}
       <p class="muted">${p.market ? `来自插件市场，版本 ${esc(p.market.version)}（已通过网站审核）` : `来自 ${esc(p.from)}`}（${Math.ceil(p.size / 1024)} KB）</p>
-      <p class="tbimp-warn">⚠ 工具代码在 BrowserX 里运行，权限跟 BrowserX 一样：能读写你电脑上的文件、用右侧浏览器里已登录的账号操作。只导入你信任的人给的工具，导入前最好看一下源代码。</p>
-      ${p.risks.length ? `<div class="tbimp-risks"><b>代码里用到的能力</b>${p.risks.map((r) => `<div class="${r.label === '访问的网址' ? '' : 'risk'}">· ${esc(r.label)}（第 ${r.lines.join('、')} 行${r.more ? ` 等 ${r.more + r.lines.length} 处` : ''}）</div>`).join('')}</div>` : '<p class="muted">没有发现执行命令、读写文件之类的敏感能力。</p>'}
-      ${p.exists ? `<label class="tbimp-ow"><input type="checkbox" id="imp_ow"${update ? ' checked' : ''}> 工具箱里已经有 ${esc(p.name)}，${p.market ? '用这个版本替换' : '覆盖它'}</label>` : ''}
-      ${p.market ? '' : `<details><summary>查看源代码</summary><pre class="tbimp-code">${esc(p.code)}</pre></details>`}
+      <p class="tbimp-warn">⚠ 工具代码在 BrowserX 里运行，权限跟 BrowserX 一样：能读写你电脑上的文件、用右侧浏览器里已登录的账号操作。只导入你信任的人给的工具。</p>
+      ${p.risks.length ? `<div class="tbimp-risks"><b>代码里用到的能力</b>${p.risks.map((r) => `<div class="${r.label === '访问的网址' ? '' : 'risk'}">· ${esc(r.label)}</div>`).join('')}</div>` : '<p class="muted">没有发现执行命令、读写文件之类的敏感能力。</p>'}
+      ${p.exists ? `<p class="tbimp-ow">⚠ 工具箱里已经有工具 ID 相同的工具「${esc(p.name)}」，${p.market ? '安装' : '导入'}会覆盖原来的工具。</p>` : ''}
       <div class="tberr" hidden></div>
-      <div class="row"><button class="primary imp_go">${risky.length ? `我已确认，${verb}` : verb}</button><button class="ghost imp_cancel">取消</button></div>
+      <div class="row"><button class="primary imp_go">${p.exists ? `覆盖并${verb}` : risky.length ? `我已确认，${verb}` : verb}</button><button class="ghost imp_cancel">取消</button></div>
     </div>`;
   list.querySelector('.tbback').addEventListener('click', back);
   list.querySelector('.imp_cancel').addEventListener('click', back);
   list.querySelector('.imp_go').addEventListener('click', async () => {
     const err = list.querySelector('.tberr');
     err.hidden = true;
-    if (p.exists && !$('imp_ow').checked) { err.hidden = false; err.textContent = `工具箱里已经有 ${p.name}：要${p.market ? '替换' : '覆盖'}请勾选上面的选项，不想${p.market ? '替换' : '覆盖'}就取消`; return; }
+    // 工具 ID（name）相同：覆盖原来的工具，先弹确认（从「更新」按钮进来的不用再问）
+    if (p.exists && !update && !(await askConfirm(`工具箱里已经有工具 ID 为「${p.name}」的工具，${verb}后会覆盖原来的工具（原来的文件不保留）。确定覆盖吗？`))) return;
     try {
       await call('tools:importConfirm', { overwrite: p.exists });
       // 市场安装成功：回到工具箱第 1 页（最新的排第 1，刚装的就在最上面）；清掉搜索 / 收藏筛选，免得被筛掉看不到
