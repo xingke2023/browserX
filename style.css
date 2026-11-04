@@ -739,3 +739,55 @@ body.ui-latin #msgs .note.quota span+span::before{content:' '} /* 英文等：�
 .tbupdbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px;padding:8px 12px;border-radius:9px;background:var(--making-bg, #ffedd5);border:1px solid var(--making-line, #fdba74);font-size:13px}
 .tbupdbar[hidden]{display:none}
 .tbupdbar button{height:28px;padding:0 12px;font-size:12.5px}
+
+/* ================================================================ 工具卡片 / 工具表单（重新整理的样式，覆盖上面的旧规则） */
+/* 工具卡片：深色标题（悬停变蓝）、英文名小灰标签、描述两行、操作按钮淡色文字 */
+#tb_list .tbitem{padding:14px 16px;border-radius:12px;gap:8px}
+#tb_list .tbitem:hover{border-color:var(--line-strong);box-shadow:0 2px 10px rgba(0,0,0,.05)}
+#tb_list .tbitem .tbname{font-size:15px;color:var(--text);line-height:1.45}
+#tb_list .tbitem:hover .tbname{color:var(--link)}
+#tb_list .tbitem .tbid{margin-left:8px;padding:1px 6px;border-radius:5px;background:var(--code);font-size:11px;color:var(--muted);vertical-align:1px}
+#tb_list .tbitem .tbdesc{font-size:13px;line-height:1.6;-webkit-line-clamp:2;line-clamp:2}
+#tb_list .tbitem .tbacts{gap:2px;margin-left:-6px}
+#tb_list .tbitem .tbacts .tbedit{height:26px;padding:0 8px;border:none;background:transparent;color:var(--muted);font-size:12.5px;border-radius:6px}
+#tb_list .tbitem .tbacts .tbedit:hover:not(:disabled){background:var(--code);color:var(--text)}
+#tb_list .tbitem .tbacts .tbdel:hover:not(:disabled){background:color-mix(in srgb,var(--err) 10%,transparent);color:var(--err)}
+#tb_list .tbitem .tbacts .tbfav.on{color:#e0a100}
+#tb_list .tbitem .tbacts .tbupdbtn{background:var(--link);color:#fff}
+#tb_list .tbitem .tbacts .tbupdbtn:hover:not(:disabled){background:var(--link);color:#fff;filter:brightness(1.08)}
+
+/* 工具表单：整齐的网格（两三列等宽，输入框填满格子），标签在上，底部一条分隔线 + 运行 / 定时运行 */
+.tbitem:not(.tbnew)>.tbform.tbdyn{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px 10px;align-items:end;align-content:start;padding-top:10px}
+.tbitem:not(.tbnew)>.tbform.tbdyn>*{grid-column:1/-1}
+.tbitem:not(.tbnew)>.tbform.tbdyn>.tbf{grid-column:auto;display:flex;flex-direction:column;gap:3px;min-width:0;max-width:none}
+.tbitem:not(.tbnew)>.tbform.tbdyn>.tbf.full{grid-column:1/-1}
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf:not(.full)>:is(label:not(.tbcheck),.hint){width:auto;min-width:0}
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf label{font-size:12px;font-weight:600;color:var(--muted);line-height:1.3}
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf :is(input:not([type=checkbox]),select){width:100%;height:30px;padding:0 8px;font-size:13px;border:1px solid var(--line-strong);border-radius:7px;background:var(--card);color:var(--text);transition:border-color .12s,box-shadow .12s}
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf textarea{width:100%;min-height:56px;padding:6px 8px;font-size:13px;border:1px solid var(--line-strong);border-radius:7px;background:var(--card)}
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf :is(input,select,textarea):focus{outline:none;border-color:var(--link);box-shadow:0 0 0 3px color-mix(in srgb,var(--link) 18%,transparent)}
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf :is(input,select,textarea):hover:not(:focus){border-color:color-mix(in srgb,var(--text) 30%,var(--line-strong))}
+/* 勾选项：做成跟输入框一样高的方块，整格可点 */
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf:has(>label.tbcheck){height:auto;justify-content:flex-end}
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf>label.tbcheck{height:30px;padding:0 10px;border:1px solid var(--line-strong);border-radius:7px;background:var(--card);color:var(--text);font-size:13px;font-weight:500;gap:6px}
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf>label.tbcheck:has(input:checked){border-color:var(--link);background:color-mix(in srgb,var(--link) 8%,var(--card))}
+.tbitem:not(.tbnew)>.tbform.tbdyn .tbf>label.tbcheck input{accent-color:var(--link)}
+.tbitem:not(.tbnew)>.tbform.tbdyn .hint{font-size:11.5px;line-height:1.4;color:var(--muted)}
+/* 底部按钮行 */
+.tbitem:not(.tbnew)>.tbform.tbdyn>.row{display:flex;justify-content:flex-start;align-items:center;gap:8px;margin-top:4px;padding-top:10px;border-top:1px solid var(--line)}
+.tbform.tbdyn .row .tbrun,.tbform.tbdyn .row .tbsched{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:34px;min-width:0;padding:0 16px;border-radius:8px;font-size:13.5px;font-weight:600}
+.tbform.tbdyn .row .tbrun{padding:0 20px;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.tbform.tbdyn .row .tbrun svg{width:14px;height:14px;fill:currentColor}
+.tbform.tbdyn .row .tbsched{border:1px solid var(--line-strong);background:var(--card);color:var(--text);font-weight:500}
+.tbform.tbdyn .row .tbsched svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tbform.tbdyn .row .tbsched:hover:not(:disabled){border-color:var(--link);color:var(--link);background:color-mix(in srgb,var(--link) 6%,var(--card))}
+/* 运行是主操作：大一些；定时运行是次要操作：小一些 */
+.tbform.tbdyn .row .tbrun{height:38px;padding:0 30px;font-size:15px;border-radius:9px}
+.tbform.tbdyn .row .tbrun svg{width:15px;height:15px}
+.tbform.tbdyn .row .tbsched{height:28px;padding:0 10px;font-size:12.5px;font-weight:500;border-radius:7px;color:var(--muted)}
+.tbform.tbdyn .row .tbsched svg{width:13px;height:13px}
+/* 两个按钮右对齐：定时运行（小）在左，运行（大）在最右 */
+.tbitem:not(.tbnew)>.tbform.tbdyn>.row{justify-content:flex-end}
+.tbitem:not(.tbnew)>.tbform.tbdyn>.row>.tbsched{order:1;height:28px;min-width:0;padding:0 10px;font-size:12.5px}
+.tbitem:not(.tbnew)>.tbform.tbdyn>.row>.tbrun{order:2;height:38px;min-width:0;padding:0 30px;font-size:15px}
+.tbname .tbopen,.tbname .tbupd{white-space:nowrap;display:inline-block}

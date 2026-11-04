@@ -971,7 +971,7 @@ function buildDynamicForm(t) {
       else control = `<input ${attrs}${f.kind === 'number' ? ` type="number"${f.min != null ? ` min="${f.min}"` : ''}${f.max != null ? ` max="${f.max}"` : ''}${f.step != null ? ` step="${f.step}"` : ''}` : ''} value="${esc(f.value ?? '')}">`;
       return `<div class="${cls}"${f.title ? ` title="${esc(f.title)}"` : ''}><label for="${id}">${esc(f.label || f.key)}${req}</label>${hint}${control}</div>`;
     }).join('');
-    form.innerHTML = `${html}<div class="tberr" hidden></div><div class="row"><button class="primary tbrun">${esc(submit)}</button>${t.draft ? '' : '<button class="ghost tbsched" title="按表单上现在填的内容，每天 / 工作日定时或每隔一段时间自动运行（BrowserX 开着时）">定时运行…</button>'}</div>`;
+    form.innerHTML = `${html}<div class="tberr" hidden></div><div class="row"><button class="primary tbrun"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"/></svg><span>${esc(submit)}</span></button>${t.draft ? '' : '<button class="ghost tbsched" title="按表单上现在填的内容，每天 / 工作日定时或每隔一段时间自动运行（BrowserX 开着时）"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>定时运行</span></button>'}</div>`;
     for (const f of fields) {
       if (!f.key || f.kind === 'note' || f.kind === 'section') continue;
       if (f.kind === 'hidden') { values[f.key] = f.value; continue; }
