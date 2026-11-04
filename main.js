@@ -633,6 +633,7 @@ handle('schedules:list', () => scheduler.list());
 handle('schedules:add', (task) => scheduler.add(task));
 handle('schedules:update', (id, patch) => scheduler.update(id, patch));
 handle('schedules:remove', (id) => scheduler.remove(id));
+handle('schedules:history', (id) => scheduler.history(id)); // 执行情况：最近 50 次运行
 handle('schedules:runNow', (id) => { const t = scheduler.tasks.find((x) => x.id === id); if (!t) throw new Error('定时任务不存在'); scheduler.runTask(t).catch(() => {}); });
 handle('downloads:show', (file) => { if (String(file).startsWith(DOWNLOAD_DIR() + path.sep)) shell.showItemInFolder(file); }); // 只能打开下载文件夹里的文件
 // 收藏夹：<userData>/bookmarks.json，[{ url, title, added }]，所有标签共用，新收藏放最前面

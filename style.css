@@ -837,3 +837,11 @@ body.ui-latin #msgs .note.quota span+span::before{content:' '} /* 英文等：�
 .mkfeat svg path{fill:#f59e0b;stroke:#f59e0b;stroke-width:1.2;stroke-linejoin:round}
 /* 导入 / 安装确认页：工具 ID 相同会覆盖的提示 */
 p.tbimp-ow{display:block;margin:8px 0 0;padding:8px 10px;border-radius:8px;background:var(--warn-weak);color:var(--warn);font-size:12.5px;line-height:1.5}
+/* 定时任务「执行情况」弹窗：每次运行一行（成功绿、失败红），结果文字可滚动 */
+.sch_list{display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow-y:auto;margin-top:10px;padding-right:2px}
+.sch_row{border:1px solid var(--line);border-left:3px solid var(--ok);border-radius:8px;padding:7px 10px;background:var(--card)}
+.sch_row.fail{border-left-color:var(--err)}
+.sch_hd{display:flex;gap:10px;align-items:center;font-size:12.5px;color:var(--muted);flex-wrap:wrap}
+.sch_row .sch_st{font-weight:700;color:var(--ok)}
+.sch_row.fail .sch_st{color:var(--err)}
+.sch_txt{margin-top:4px;font-size:12.5px;line-height:1.5;color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere;max-height:120px;overflow-y:auto}

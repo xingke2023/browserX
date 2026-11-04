@@ -1345,9 +1345,10 @@ function drawSchedules(items) {
     d.className = `tbitem sc_item${x.enabled ? '' : ' off'}`;
     const args = Object.entries(x.args || {}).filter(([k]) => k !== '_form').map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`).join('，');
     d.innerHTML = `<div class="tbhead"><span class="tbname">${esc(x.title)}<small class="tbid">${esc(schedRule(x))}</small></span>
-        <span class="tbacts"><button class="ghost tbedit sc_edit">修改</button>${x.mode === 'once' && x.lastRun ? '' : `<button class="ghost tbedit sc_toggle">${x.enabled ? '暂停' : '启用'}</button>`}<button class="ghost tbedit sc_run"${x.running ? ' disabled' : ''}>${x.running ? '运行中…' : '立即运行'}</button><button class="ghost tbedit sc_del">删除</button></span></div>
-      <div class="tbdesc">${x.mode === 'once' && x.lastRun ? '已完成（一次性，要再跑一次请点「修改」换个时间）' : x.enabled ? `下次：${esc(when(x.next))}` : '已暂停'} · 上次：${x.lastRun ? `${esc(when(x.lastRun))} ${x.lastOk ? '✓' : '✗'}` : '还没运行过'}${args ? `<br>参数：${esc(args.slice(0, 200))}` : ''}${x.lastRun && x.lastText ? `<br><span class="${x.lastOk ? 'muted' : 'sc_err'}">${esc(x.lastText.slice(0, 160))}</span>` : ''}</div>`;
+        <span class="tbacts"><button class="ghost tbedit sc_hist">执行情况</button><button class="ghost tbedit sc_edit">修改</button>${x.mode === 'once' && x.lastRun ? '' : `<button class="ghost tbedit sc_toggle">${x.enabled ? '暂停' : '启用'}</button>`}<button class="ghost tbedit sc_run"${x.running ? ' disabled' : ''}>${x.running ? '运行中…' : '立即运行'}</button><button class="ghost tbedit sc_del">删除</button></span></div>
+      <div class="tbdesc">${x.runs ? `共运行 ${x.runs} 次 · 成功 ${x.okRuns} 次${x.runs > x.okRuns ? ` · 失败 ${x.runs - x.okRuns} 次` : ''}<br>` : ''}${x.mode === 'once' && x.lastRun ? '已完成（一次性，要再跑一次请点「修改」换个时间）' : x.enabled ? `下次：${esc(when(x.next))}` : '已暂停'} · 上次：${x.lastRun ? `${esc(when(x.lastRun))} ${x.lastOk ? '✓' : '✗'}` : '还没运行过'}${args ? `<br>参数：${esc(args.slice(0, 200))}` : ''}${x.lastRun && x.lastText ? `<br><span class="${x.lastOk ? 'muted' : 'sc_err'}">${esc(x.lastText.slice(0, 160))}</span>` : ''}</div>`;
     const err = (e) => add('note err', `✗ ${esc(e.message)}`, true);
+    d.querySelector('.sc_hist').addEventListener('click', () => showSchedHistory(x));
     d.querySelector('.sc_edit').addEventListener('click', async () => {
       const tools = tbItems.length ? tbItems : await call('tools:list').catch(() => []);
       scheduleDialog(tools.find((y) => y.name === x.tool) || { name: x.tool, title: x.title }, x.args, x);
@@ -1359,6 +1360,22 @@ function drawSchedules(items) {
   }
 }
 api.on('schedules', drawSchedules);
+
+// 执行情况：这个定时任务最近 50 次运行（新的在前）——开始时间、成功 / 失败、用时、结果或报错
+async function showSchedHistory(x) {
+  let rows;
+  try { rows = await call('schedules:history', x.id); } catch (e) { add('note err', `✗ ${esc(e.message)}`, true); return; }
+  const when = (ms) => new Date(ms).toLocaleString([], { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const dur = (ms) => (ms < 1000 ? `${ms} 毫秒` : ms < 60000 ? `${(ms / 1000).toFixed(1)} 秒` : `${Math.floor(ms / 60000)} 分 ${Math.round((ms % 60000) / 1000)} 秒`);
+  const ok = rows.filter((r) => r.ok).length;
+  const list = rows.length ? rows.map((r) => `<div class="sch_row ${r.ok ? 'ok' : 'fail'}">
+      <div class="sch_hd"><span class="sch_st">${r.ok ? '✓ 成功' : '✗ 失败'}</span><span class="sch_at">${esc(when(r.at))}</span><span class="sch_ms">用时 ${esc(dur(r.ms || 0))}</span></div>
+      ${r.text ? `<div class="sch_txt">${esc(r.text)}</div>` : ''}</div>`).join('')
+    : '<div class="hempty">还没有运行过</div>';
+  await modal(`<div class="modal-msg"><b>执行情况：${esc(x.title)}</b><br><span class="muted">${esc(schedRule(x))} · ${rows.length ? `最近 ${rows.length} 次：成功 ${ok} 次${rows.length > ok ? `，失败 ${rows.length - ok} 次` : ''}` : '还没有运行过'}（最多保留最近 50 次）</span></div>
+    <div class="sch_list">${list}</div>
+    <div class="modal-actions"><button class="primary" data-a="ok">关闭</button></div>`);
+}
 
 async function renderMarket() {
   const list = $('tb_list');

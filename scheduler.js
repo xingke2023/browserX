@@ -5,6 +5,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 
 const TICK = 30 * 1000;
+const HISTORY = 50; // 每个任务记最近几次运行（执行情况）
 const MODES = ['daily', 'weekdays', 'interval', 'once'];
 // once：一次性任务，at = 本地时间 'YYYY-MM-DDTHH:mm'（跟 <input type=datetime-local> 一样），到点跑一次就结束（enabled 变 false）。
 // 软件当时没开：下次打开时补跑（还没跑过就跑）
@@ -38,7 +39,14 @@ class Scheduler {
   // 最新设置或修改过（时间 / 参数）的排最前面；暂停、启用、运行不算修改
   list() {
     const at = (t) => t.changedAt || t.createdAt || 0;
-    return [...this.tasks].sort((a, b) => at(b) - at(a)).map((t) => ({ ...t, running: this.busy.has(t.id), next: this.nextRun(t) }));
+    // 列表不带完整的执行记录（界面点「执行情况」再取），只带次数和成功次数
+    return [...this.tasks].sort((a, b) => at(b) - at(a)).map(({ history = [], ...t }) => ({ ...t, runs: history.length, okRuns: history.filter((h) => h.ok).length, running: this.busy.has(t.id), next: this.nextRun(t) }));
+  }
+
+  history(id) {
+    const t = this.tasks.find((x) => x.id === id);
+    if (!t) throw new Error('定时任务不存在');
+    return t.history || [];
   }
 
   start() {
@@ -122,14 +130,19 @@ class Scheduler {
     if (this.busy.has(t.id)) throw new Error('这个定时任务正在运行');
     this.busy.add(t.id);
     this.opts.onChange?.(this.list());
+    const started = Date.now();
+    // 执行情况：每次运行记一条 { at 开始时间, ms 用时, ok, text 结果 / 报错 }，新的在前，只留最近 HISTORY 条
+    const record = (ok, text) => { t.history = [{ at: started, ms: Date.now() - started, ok, text: String(text ?? '').slice(0, 2000) }, ...(t.history || [])].slice(0, HISTORY); };
     try {
       const text = await this.opts.run(t);
       Object.assign(t, { lastRun: Date.now(), lastOk: true, lastText: String(text ?? '').slice(0, 500) });
+      record(true, text);
       if (t.mode === 'once') t.enabled = false; // 一次性：跑完就结束
     } catch (e) {
       // 「对话忙 / 标签满」之类没真正跑起来的情况由 run() 抛 retry，不记成跑过，下一轮再试
       if (e.retry) { this.busy.delete(t.id); this.opts.onChange?.(this.list()); return; }
       Object.assign(t, { lastRun: Date.now(), lastOk: false, lastText: String(e.message).slice(0, 500) });
+      record(false, e.message);
       if (t.mode === 'once') t.enabled = false;
     } finally {
       this.busy.delete(t.id);
