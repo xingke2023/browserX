@@ -548,8 +548,14 @@ async function renderHistoryList(keepPage) {
   const list = $('h_list');
   list.innerHTML = '<div class="hempty">加载中…</div>';
   let items;
+  call('history:prune').catch(() => {});
   try { items = await call('history:list'); } catch (e) { list.innerHTML = `<div class="hempty">${esc(e.message)}</div>`; return; }
-  list.innerHTML = items.length ? '' : '<div class="hempty">还没有保存的对话</div>';
+  list.innerHTML = items.length ? `<div class="htop"><span>共 ${items.length} 条 · 最多保留 30 条，最新的在最上面</span><button class="ghost hclear" title="删除全部历史记录（左边正开着的对话保留）">清空</button></div>` : '<div class="hempty">还没有保存的对话</div>';
+  list.querySelector('.hclear')?.addEventListener('click', async () => {
+    if (!(await askConfirm(`清空全部 ${items.length} 条历史记录？左边标签里正开着的对话会保留。此操作不可恢复。`))) return;
+    try { const n = await call('history:clear'); add('note', `已清空历史记录（删除 ${n} 条）`, true); renderHistoryList(); }
+    catch (err) { add('note err', `✗ ${esc(err.message)}`, true); }
+  });
   for (const it of items) {
     const d = document.createElement('div');
     d.className = 'hitem' + (it.mine ? ' mine' : '');

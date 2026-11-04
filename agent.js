@@ -17,6 +17,7 @@ const TOOL_NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const BUILTIN_TOOLS = new Set(['screenshot', 'page_info', 'navigate', 'click', 'type', 'press', 'scroll', 'eval', 'cdp', 'rec_start', 'rec_mark', 'rec_stop', 'wx_fill', 'wx_save_draft', 'wx_publish', 'toolbox_new', 'toolbox_edit', 'tab_list', 'tab_new', 'tab_switch', 'tab_close', 'downloads', 'upload_file']);
 // Bash 里像是在写文件的命令（配合工具目录路径判断，见 protectToolFiles）
 const BASH_WRITE = /\btee\b|\bsed\s+(-\w*\s+)*-i|\bcp\b|\bmv\b|\brm\b|\bln\b|\btruncate\b|\bdd\b|\bperl\b|\bpython3?\b|\bnode\b|\bruby\b|\binstall\b|\brsync\b/;
+const HISTORY_MAX = 30; // 历史记录最多保留几条（最新的在前，多的自动删）
 const CB_TAG = 'claude-browser'; // 标记本应用创建的会话，历史列表/自动清理只认这个标签，不动用户在终端里的会话
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -372,7 +373,7 @@ class Agent {
     return list
       .filter((s) => s.tag === CB_TAG)
       .sort((a, b) => b.lastModified - a.lastModified)
-      .slice(0, 100)
+      .slice(0, HISTORY_MAX)
       .map((s) => ({
         id: s.sessionId,
         title: s.customTitle || s.summary || s.firstPrompt || '（未命名对话）',
@@ -381,7 +382,7 @@ class Agent {
       }));
   }
 
-  // 只保留最近 100 个「claude-browser 自己创建」的会话，多余的直接删除；不动其它 tag（含无 tag）的会话
+  // 只保留最近 HISTORY_MAX（30）个「claude-browser 自己创建」的会话，多余的直接删除；不动其它 tag（含无 tag）的会话
   async pruneHistory() {
     try {
       const sdk = await import('@anthropic-ai/claude-agent-sdk');
@@ -389,8 +390,17 @@ class Agent {
       const list = (await sdk.listSessions({ dir, limit: 1000 }))
         .filter((s) => s.tag === CB_TAG)
         .sort((a, b) => b.lastModified - a.lastModified);
-      for (const s of list.slice(100)) await sdk.deleteSession(s.sessionId, { dir }).catch(() => {});
+      for (const s of list.slice(HISTORY_MAX)) await sdk.deleteSession(s.sessionId, { dir }).catch(() => {});
     } catch { /* 首次运行还没有任何会话目录时 listSessions 可能失败，忽略 */ }
+  }
+
+  // 清空历史：删掉所有 claude-browser 的会话，keep 里的（左边标签里正开着的对话）不删，返回删了几条
+  async clearHistory(keep = []) {
+    const sdk = await import('@anthropic-ai/claude-agent-sdk');
+    const dir = this.ctx.getCfg().cwd;
+    const list = (await sdk.listSessions({ dir, limit: 1000 }).catch(() => [])).filter((s) => s.tag === CB_TAG && !keep.includes(s.sessionId));
+    for (const s of list) await this.deleteHistory(s.sessionId);
+    return list.length;
   }
 
   async renameHistory(sessionId, title) {

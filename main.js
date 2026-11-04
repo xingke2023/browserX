@@ -698,6 +698,9 @@ handle('history:list', () => cur.agent.listHistory());
 handle('history:resume', (id, tab) => tabOf(tab).agent.resume(id));
 handle('history:rename', (id, title) => cur.agent.renameHistory(id, title));
 handle('history:delete', (id) => cur.agent.deleteHistory(id));
+// 清空历史：左边标签里正开着的对话（有 sessionId 的）保留，其它全删
+handle('history:clear', () => cur.agent.clearHistory([...tabs.values()].map((t) => t.agent.sessionId).filter(Boolean)));
+handle('history:prune', () => cur.agent.pruneHistory()); // 打开历史时顺手把超过 30 条的旧记录删掉
 
 handle('tools:list', () => cur.agent.listCustomTools().map((t) => ({ ...t, market: isMarketTool(t.name) })));
 handle('tools:run', (name, args, tab) => tabOf(tab).agent.runCustomTool(name, args));
