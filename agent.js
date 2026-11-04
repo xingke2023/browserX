@@ -1215,9 +1215,11 @@ class Agent {
       goal = goal || `修改现有工具（${entry.def.description || '无描述'}），具体改什么问用户`;
     } else {
       name = String(name || '').trim();
-      // 没给英文名就自动分配：12 位小写字母+数字，首位是字母（工具名不能以数字开头），避开已有的工具
+      // 没给英文名就自动分配唯一的工具 ID：12 位小写字母+数字，首位是字母（工具名不能以数字开头），
+      // 避开工具箱里已有的工具、内置工具，以及草稿里没做完的（同名草稿会被当成「接着上次改」）
       if (!name) {
-        const taken = new Set(this.readCustomToolDefs().map((e) => e.def.name));
+        const drafts = fs.existsSync(this.draftsDir()) ? fs.readdirSync(this.draftsDir()).filter((f) => f.endsWith('.js')).map((f) => f.slice(0, -3)) : [];
+        const taken = new Set([...this.readCustomToolDefs().map((e) => e.def.name), ...drafts]);
         const pick = (chars) => chars[require('crypto').randomInt(chars.length)];
         const abc = 'abcdefghijklmnopqrstuvwxyz', alnum = abc + '0123456789';
         do name = pick(abc) + Array.from({ length: 11 }, () => pick(alnum)).join(''); while (taken.has(name) || BUILTIN_TOOLS.has(name));
