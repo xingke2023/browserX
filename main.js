@@ -102,7 +102,9 @@ async function checkAccount() {
     accountCheckedAt = Date.now();
     return st;
   } catch (e) {
-    if (e.network && account.user) return account.state();
+    // 连不上门户（网络 / 代理问题）：不拿旧数据拦用户（旧的「额度已用完」可能早就不对了，比如管理员清零、用户刚买了套餐），
+    // 标成 stale 放行，额度由中转在服务器上判断（真超额会回 402）
+    if (e.network) return { ...account.state(), stale: true };
     throw e;
   }
 }

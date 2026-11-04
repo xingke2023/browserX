@@ -1663,6 +1663,7 @@ ${old || '（无）'}`);
 
   // 门户按天限额：今天已经用完就别开会话了，直接告诉用户（对话中途用完时，中转会回 402，Claude Code 直接显示原因）
   checkQuota(state) {
+    if (state?.stale) return; // 这次没拿到最新的账号状态：不按旧数据拦，交给中转判断
     const c = state?.user?.claude;
     if (c?.exceeded) throw new Error(`今天的 Claude 额度已用完（${c.used.toLocaleString()} / ${c.limit.toLocaleString()}），明天 0 点恢复。${state.user.member ? '' : '开通会员可以提高额度。'}`);
   }
