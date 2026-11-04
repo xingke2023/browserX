@@ -166,8 +166,15 @@ function addPage(t, { view, url, activate = true } = {}) {
       outlivesOpener: true, // 关掉打开它的标签时不跟着关
       createWindow: (options) => {
         const child = new WebContentsView({ webContents: options.webContents, webPreferences: { ...options.webPreferences, backgroundThrottling: false } });
-        const np = addPage(t, { view: child });
-        t.agent.pageOpened({ index: t.pages.indexOf(np) + 1, url });
+        // 先不切过去：有些网站（永明登入页）一打开就 window.open 再马上 close 一个小窗口。立刻切过去的话，
+        // 工具 / 助手正在操作的就成了这个转眼关掉的页面（报 Object has been destroyed）。活过 400ms 才算真的新标签
+        const np = addPage(t, { view: child, activate: false });
+        np.opener = p; // 关掉时切回打开它的页面
+        setTimeout(() => {
+          if (!t.pages.includes(np) || child.webContents.isDestroyed()) return;
+          activatePage(t, np);
+          t.agent.pageOpened({ index: t.pages.indexOf(np) + 1, url });
+        }, 400);
         return child.webContents;
       },
     };
@@ -197,7 +204,7 @@ function removePage(t, p, closeIt = true) {
   try { win.contentView.removeChildView(p.view); } catch {}
   if (closeIt && !p.view.webContents.isDestroyed()) p.view.webContents.close();
   if (!t.pages.length) { if (tabs.has(t.id)) addPage(t, { url: 'about:blank' }); return; } // 最后一个网页自己关掉了：留一个空白页
-  if (t.page === p) activatePage(t, t.pages[i] || t.pages[i - 1]);
+  if (t.page === p) activatePage(t, (p.opener && t.pages.includes(p.opener) && p.opener) || t.pages[i] || t.pages[i - 1]);
   else sendPages(t);
 }
 

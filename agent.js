@@ -641,7 +641,13 @@ class Agent {
   // ms：最多等多久（页面还在加载、弹出了 alert / confirm、或者卡死时，executeJavaScript 会一直不返回）。
   // 不给就不限时——工具里的 ctx.js 可能在页面里跑很久的请求（比如宏利试算），不能替它掐断
   js(code, ms) {
-    const run = this.wc.executeJavaScript(code, true);
+    // 执行时页面刚好被网站关掉（弹出窗口自己 close）：换到现在的当前页面再试一次
+    const wc = this.wc;
+    const run = Promise.resolve().then(() => wc.executeJavaScript(code, true)).catch((e) => {
+      const now = this.wc;
+      if (/destroyed/i.test(e.message) && now && now !== wc && !now.isDestroyed()) return now.executeJavaScript(code, true);
+      throw e;
+    });
     if (!ms) return run;
     let timer;
     const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`页面 ${Math.round(ms / 1000)} 秒没有响应（可能还在加载、弹出了对话框，或者卡住了）。先截图看看页面现在什么样，必要时刷新或换个做法`)), ms); });
