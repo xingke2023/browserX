@@ -694,7 +694,7 @@ async function renderToolboxList() {
   autoUpdateTools = (await call('cfg:get').catch(() => ({}))).autoUpdateTools !== false;
   refreshToolTitles(tbItems);
   list.innerHTML = `<div class="tbtop">
-      <button class="primary tbnewbtn">新建工具</button>
+      <button class="ghost tbnewbtn">新建工具</button>
       <button class="ghost tbimport" title="导入别人做好的工具（一个 .js 文件）">导入</button>
       <button class="ghost tbmarketbtn" title="在 BrowserX 网站的插件市场里找工具、直接安装">插件市场</button>
       <button class="ghost tbfavbtn" title="只显示收藏的工具（在工具卡片上点 ☆ 收藏）">收藏</button>
