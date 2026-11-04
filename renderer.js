@@ -1161,7 +1161,7 @@ function showImportPreview(p, { update = false } = {}) { // update：从「更�
   const back = p.market ? renderMarket : renderToolboxList;
   const verb = p.market ? '安装' : '导入';
   const risky = p.risks.filter((r) => r.label !== '访问的网址');
-  list.innerHTML = `<button class="ghost tbback">← ${p.market ? '插件市场' : '全部工具'}</button>
+  list.innerHTML = `<button class="ghost tbback">← ${p.market ? '插件市场' : '工具箱'}</button>
     <div class="tbitem tbimp">
       <div class="tbhead"><span class="tbname">${verb}：${esc(p.title || p.name)}${p.title ? `<small class="tbid">${esc(p.name)}</small>` : ''}</span></div>${p.description ? `<div class="tbdesc">${esc(p.description)}</div>` : ''}
       <p class="muted">${p.market ? `来自插件市场，版本 ${esc(p.market.version)}（已通过网站审核）` : `来自 ${esc(p.from)}`}（${Math.ceil(p.size / 1024)} KB）</p>
@@ -1329,7 +1329,7 @@ async function scheduleDialog(t, args, task = null) {
 
 async function renderSchedules() {
   const list = $('tb_list');
-  list.innerHTML = `<div class="sc_top"><button class="ghost tbback">← 我的工具</button><h2 class="sc_title">定时任务</h2><span></span></div>
+  list.innerHTML = `<div class="sc_top"><button class="ghost tbback">← 工具箱</button><h2 class="sc_title">定时任务</h2><span></span></div>
     <p class="hint sc_hint">定时任务在后台的「定时任务」对话里直接运行工具（不经过助手、不花 token），跑完发系统通知。只在 BrowserX 开着时运行。要新建，打开一个工具，填好表单后点「定时运行」。最新设置或修改的排在最上面。</p>
     <div class="sc_list"><div class="hempty">加载中…</div></div>`;
   list.querySelector('.tbback').addEventListener('click', renderToolboxList);
@@ -1383,7 +1383,7 @@ async function showSchedHistory(x) {
 
 async function renderMarket() {
   const list = $('tb_list');
-  list.innerHTML = `<button class="ghost tbback">← 我的工具</button>
+  list.innerHTML = `<button class="ghost tbback">← 工具箱</button>
     <div class="tbtop mktop"><input class="tbsearch mk_q" type="search" placeholder="搜索插件市场" spellcheck="false"><select class="mk_cat"><option value="">全部行业</option></select></div>
     <div class="mkbody"><div class="hempty">加载中…</div></div>`;
   list.querySelector('.tbback').addEventListener('click', renderToolboxList);
@@ -1478,7 +1478,7 @@ function stopBuying() {
 const bumpVersion = (v) => (/^(\d+)\.(\d+)\.(\d+)$/.test(v || '') ? v.replace(/(\d+)$/, (n) => Number(n) + 1) : '1.0.0');
 async function showPublishForm(t) {
   const list = $('tb_list');
-  list.innerHTML = `<button class="ghost tbback">← 全部工具</button><div class="tbitem tbpub"><div class="hempty">加载中…</div></div>`;
+  list.innerHTML = `<button class="ghost tbback">← 工具箱</button><div class="tbitem tbpub"><div class="hempty">加载中…</div></div>`;
   list.querySelector('.tbback').addEventListener('click', renderToolboxList);
   const box = list.querySelector('.tbpub');
   if (!account.loggedIn) { loginPrompt(box, '发布工具'); return; }
