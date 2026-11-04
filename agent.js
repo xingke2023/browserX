@@ -432,6 +432,7 @@ class Agent {
 
   // 把旧会话的文字/工具记录还原成界面事件，再用 resume 接上原会话继续对话
   async resume(sessionId) {
+    await this.settle();
     const sdk = await import('@anthropic-ai/claude-agent-sdk');
     const dir = this.ctx.getCfg().cwd;
     const raw = await sdk.getSessionMessages(sessionId, { dir });
@@ -461,7 +462,7 @@ class Agent {
         }
       }
     }
-    if (this.q) { const q = this.q; this.q = null; this.denyAll(); this.inbox?.close(); this.inbox = null; this.running = false; try { q.close(); } catch {} }
+    if (this.q) this.closeSession();
     // resume 默认不 fork，恢复后仍是同一个 session_id：提前赋值，不等 loop() 收到新会话的 init 消息才更新，
     // 否则 resume() 一返回，用户马上点"新对话"起名保存时 this.sessionId 还是旧值（甚至是 null），会误判成"没在对话"
     this.sessionId = sessionId;
@@ -1251,6 +1252,7 @@ class Agent {
       this.introMaking();
       return `${MAKING_PROMPT(this.making)}${resumed ? `\n草稿里有上次没做完的版本，先读一下再接着做。` : ''}`;
     }
+    await this.settle();
     if (this.q) this.reset(); // 每个工具单独一个对话，上下文干净
     // 新建工具：右侧浏览器也清空成空白页（连前进后退记录一起清掉），从用户给的网址重新开始；修改现有工具不动页面
     if (!source) { this.ctx.pages.reset(); this.wc.loadURL('about:blank').then(() => this.wc.navigationHistory.clear()).catch(() => {}); }
@@ -1729,7 +1731,17 @@ ${old || '（无）'}`);
     return env;
   }
 
+  // 提前把 claude 进程开起来（软件启动时的第一个标签、登录后）：用户发第一条消息时不用再等进程启动。
+  // 没登录 / 额度用完 / 出错就算了，不提示，等用户发消息时 start() 再正常报错
+  warm() {
+    if (this.q || this.starting) return this.starting;
+    this.starting = this.start().catch(() => {}).finally(() => { this.starting = null; });
+    return this.starting;
+  }
+  async settle() { if (this.starting) await this.starting; }
+
   async start(runOpts = {}) {
+    const gen = this.gen || 0;
     const sdk = await import('@anthropic-ai/claude-agent-sdk');
     this.sdk = sdk;
     const cfg = this.ctx.getCfg();
@@ -1742,6 +1754,7 @@ ${old || '（无）'}`);
     const env = this.claudeEnv();
     // 走门户中转时先确认账号还有效：token 失效后 Claude Code 会一直重试 401，用户只会看到一直在转
     if (env.ANTHROPIC_AUTH_TOKEN) this.checkQuota(await this.ctx.checkAccount?.());
+    if ((this.gen || 0) !== gen || this.q) return; // 等账号确认的时候会话被关掉了（登录变了、关标签…）或者已经开好了：不再开
     this.stderr = '';
     // 对话链：用来「改之前发的消息」。截断恢复时链尾就是截到的那条；全新会话链是空的；普通恢复历史的链尾要等收到第一条消息才知道
     this.lastChainUuid = runOpts.resumeSessionAt || null;
@@ -1863,6 +1876,7 @@ ${old || '（无）'}`);
   async send(text, shown = text) {
     if (!text?.trim()) return;
     if (this.making?.hint) this.setHint(null); // 用户回话了：之前的提示（要用户做什么）就过时了，助手需要的话再设新的
+    if (!this.q) await this.settle();
     if (!this.q) await this.start();
     this.pageNotes = [];
     this.running = true;
@@ -1887,7 +1901,9 @@ ${old || '（无）'}`);
   async clear() {
     this.denyAll();
     this.pageNotes = [];
+    await this.settle();
     if (!this.q || !this.inbox) return;
+    if (this.chainFresh && !this.turns?.length) return; // 进程开着但还没聊过（提前启动的）：没东西可清
     if (this.running) {
       await this.stop();
       for (let i = 0; i < 50 && this.running; i++) await new Promise((r) => setTimeout(r, 100));
@@ -1903,6 +1919,7 @@ ${old || '（无）'}`);
   async edit(i, text) {
     if (!text?.trim()) return;
     if (this.making) throw new Error('制作工具时不能改之前的消息');
+    await this.settle();
     const turn = this.turns?.[i];
     if (!turn || !(turn.at || turn.fresh)) throw new Error('这条消息改不了了（对话已经重新开始过），直接在下面发新消息吧');
     if (this.running) {
@@ -1981,6 +1998,7 @@ ${old || '（无）'}`);
 
   // 关掉当前 claude 进程（不发 reset 事件，界面不提示「对话已结束」）
   closeSession() {
+    this.gen = (this.gen || 0) + 1; // 正在提前启动的那次作废
     const q = this.q;
     this.q = null;
     this.sessionId = null;

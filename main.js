@@ -332,7 +332,10 @@ function createWindow() {
   win.on('closed', () => app.quit());
   for (const ev of ['enter-full-screen', 'leave-full-screen']) win.on(ev, () => send('fullscreen', win.isFullScreen()));
 
-  switchTab(createTab().id);
+  // 第一个标签的 claude 进程跟着软件一起启动（界面先出来再开），用户发第一条消息时不用等
+  const first = createTab();
+  switchTab(first.id);
+  setTimeout(() => { if (tabs.has(first.id)) first.agent.warm(); }, 1500);
 }
 
 // 退出时还在录制：把已录到的内容存下来，别丢
@@ -670,8 +673,9 @@ handle('cfg:set', (c) => {
   for (const { agent } of tabs.values()) {
     if ('permissionMode' in c) agent.setPermissionMode(cfg.permissionMode);
     if (modelChanged && !restart) agent.setModel(cfg.model);
-    if (restart && agent.q) agent.reset();
+    if (restart && (agent.q || agent.starting)) agent.reset();
   }
+  if (restart) setTimeout(() => cur?.agent.warm(), 500); // 设置改了要重开：当前标签用新设置马上开起来
   return cfg;
 });
 handle('cwd:pick', async () => {
@@ -784,7 +788,10 @@ const account = new Account({
     accountCheckedAt = 0; // 换了账号：下次重新确认
     saveCfg();
     // 登录 / 退出 / token 失效：没填自己 API Key 的对话要换新 token 重开（下一条消息自动重开）
-    if (changed && !cfg.apiKey) for (const { agent } of tabs.values()) if (agent.q) agent.reset();
+    if (changed && !cfg.apiKey) {
+      for (const { agent } of tabs.values()) if (agent.q || agent.starting) agent.reset();
+      if (accountToken) setTimeout(() => cur?.agent.warm(), 500); // 刚登录：当前标签马上把 claude 开起来
+    }
   },
   open: (url) => shell.openExternal(url),
   focus: () => { if (win) { if (win.isMinimized()) win.restore(); win.show(); app.focus({ steal: true }); } },
