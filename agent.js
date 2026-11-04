@@ -148,7 +148,7 @@ function describeCall(name, input = {}) {
 }
 const stampNow = () => new Date().toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 
-// 导出前查代码里有没有写死的密码 / token / 内网地址，免得把自己的账号一起发出去
+// 导出 / 发布前查代码里有没有写死的账号、密码、token（内网 IP 不提示），免得把自己的账号一起发出去
 // 发布到插件市场时直接拦下的（账号、密码、token 一类），其它只提醒；跟网站 ToolScanner::BLOCKING 一致
 const BLOCKING_SECRETS = new Set(['疑似写死的密码 / token / 密钥', '疑似写死的用户名 / 账号', '疑似写死的 Bearer token', '疑似 JWT', '疑似 API Key']);
 function scanSecrets(code) {
@@ -158,7 +158,6 @@ function scanSecrets(code) {
     [/Bearer\s+[A-Za-z0-9._~+/=-]{16,}/, '疑似写死的 Bearer token'],
     [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\./, '疑似 JWT'],
     [/\bsk-[A-Za-z0-9_-]{20,}/, '疑似 API Key'],
-    [/\b(10|127|172\.(1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}\b/, '内网 IP 地址'],
     [/\/Users\/[^/'"`\s]+\//, '本机用户目录路径（别人电脑上不存在）'],
   ];
   return findLines(code, rules);
