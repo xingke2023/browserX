@@ -872,3 +872,20 @@ p.tbimp-ow{display:block;margin:8px 0 0;padding:8px 10px;border-radius:8px;backg
 .tbitem:not(.tbnew)>.tbform.tbdyn>.tbf.cred_row{flex-direction:row;justify-content:flex-start;align-items:center;gap:10px}
 /* 上面那条被「勾选项靠右」的旧规则（.tbf:has(>label.tbcheck)）压住了：加上同样的 :has 提高优先级 */
 .tbitem:not(.tbnew)>.tbform.tbdyn>.tbf.cred_row:has(>label.cred_rem){flex-direction:row;justify-content:flex-start;align-items:center;gap:10px}
+
+/* 插件运行耗时（renderer renderProfile）：进度文字前的时间、结果下面的汇总 */
+#msgs .tl_at{font:11px Menlo,monospace;color:var(--muted);margin-right:2px}
+#msgs .note.tprof{color:var(--muted);font-size:12px}
+#msgs .note.tprof summary{cursor:pointer;list-style:none}
+#msgs .note.tprof summary::-webkit-details-marker{display:none}
+#msgs .note.tprof details[open] summary{margin-bottom:4px}
+#msgs .tp_h{margin:6px 0 2px;font-weight:600;color:var(--text)}
+#msgs .tp_r{display:flex;gap:8px;align-items:baseline;padding:1px 0}
+#msgs .tp_at{font:11px Menlo,monospace;min-width:52px}
+#msgs .tp_t{flex:1;min-width:0;overflow-wrap:anywhere;color:var(--text)}
+#msgs .tp_t code{font:11px Menlo,monospace;background:var(--code);padding:0 4px;border-radius:4px}
+#msgs .tp_ms{font:11px Menlo,monospace;white-space:nowrap}
+#msgs .tp_act{margin-top:6px}
+.sch_prof{font-size:12px;color:var(--muted);margin-top:2px}
+.sch_prof .sch_why{margin-left:6px;padding:1px 8px;font-size:12px}
+#msgs .tp_err .tp_t{color:var(--red)}

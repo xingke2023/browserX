@@ -132,7 +132,12 @@ class Scheduler {
     this.opts.onChange?.(this.list());
     const started = Date.now();
     // 执行情况：每次运行记一条 { at 开始时间, ms 用时, ok, text 结果 / 报错 }，新的在前，只留最近 HISTORY 条
-    const record = (ok, text) => { t.history = [{ at: started, ms: Date.now() - started, ok, text: String(text ?? '').slice(0, 2000) }, ...(t.history || [])].slice(0, HISTORY); };
+    // profile：这次的耗时分析（main.js runScheduled 放在 t._profile 上，取走后删掉，不存进任务本身）
+    const record = (ok, text) => {
+      const profile = t._profile || null;
+      delete t._profile;
+      t.history = [{ at: started, ms: Date.now() - started, ok, text: String(text ?? '').slice(0, 2000), ...(profile ? { profile } : {}) }, ...(t.history || [])].slice(0, HISTORY);
+    };
     try {
       const text = await this.opts.run(t);
       Object.assign(t, { lastRun: Date.now(), lastOk: true, lastText: String(text ?? '').slice(0, 500) });

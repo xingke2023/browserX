@@ -2,6 +2,24 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { AsyncLocalStorage } = require('async_hooks');
+
+// 插件运行耗时分析（见 Agent.profOp）：ctx 的方法分到这几类；嵌套在另一笔操作里的调用（waitFor 的检查函数里调 js）用它标记，不重复算
+const PROF_ALS = new AsyncLocalStorage();
+// 进度文字里像出了问题的（跟制作模式自测 noteTestIssue 同一套词，加上繁体写法）
+const ISSUE_RE = /失败|失敗|出错|出錯|错误|錯誤|没加上|没找到|沒找到|找不到|超时|超時|⚠/;
+const PROF_CATS = { sleep: 'sleep', waitFor: 'wait', navigate: 'nav', js: 'js', click: 'act', type: 'act', press: 'act', scroll: 'act', upload: 'act', ask: 'ask' };
+// 给 Claude 看的操作描述：不带具体值（js 代码、键入的文字可能含密码），只说是什么操作；网址去掉查询参数
+function profDesc(k, a) {
+  try {
+    if (k === 'sleep') return `sleep(${Number(a[0]) || 0})`;
+    if (k === 'waitFor') return `waitFor(${String(a[0]).replace(/\s+/g, ' ').slice(0, 70)}${a[1] ? `, 超时 ${a[1]}` : ''})`;
+    if (k === 'navigate') return `navigate(${String(a[0]).split('?')[0].slice(0, 90)})`;
+    if (k === 'click') return `click(${JSON.stringify(a[0]?.selector || a[0]?.text || '').slice(0, 50)})`;
+    if (k === 'type') return `type(${String(a[0] ?? '').length} 字)`;
+  } catch {}
+  return k;
+}
 const { z } = require('zod');
 const { WeChat } = require('./wechat');
 const { THEMES, textToArticle, renderBlocks } = require('./article');
@@ -307,8 +325,8 @@ class Agent {
       },
       upload: (files, opts) => this.uploadFiles(files, opts),
       article: { textToArticle, renderBlocks, THEMES }, // 跟内置 wx_fill 工具用的是同一套 Markdown 风格 -> 公众号 HTML 的转换
-      log: (text) => { this.noteTestIssue(text); this.ctx.emit({ type: 'note', text }); },
-      warn: (text) => { this.noteTestIssue(text, true); this.ctx.emit({ type: 'note', tone: 'warn', text }); }, // 需要用户马上处理的提示（红字），比如要扫码登录
+      log: (text, at) => { this.noteTestIssue(text); this.ctx.emit({ type: 'note', text, ...(at != null ? { at } : {}) }); }, // at：从开始运行算起的毫秒数（耗时分析给的）
+      warn: (text, at) => { this.noteTestIssue(text, true); this.ctx.emit({ type: 'note', tone: 'warn', text, ...(at != null ? { at } : {}) }); }, // 需要用户马上处理的提示（红字），比如要扫码登录
       withSignal: (signal) => this.stoppableCtx(signal), // 工具自己管停止时用（比如自带填表页面的工具）
       ask: (prompt, opts) => this.askModel(prompt, opts), // 让模型写一段文字（不带任何工具），返回纯文本
     };
@@ -1021,7 +1039,7 @@ class Agent {
     return this.readCustomToolDefs().map(({ file, def }) =>
       tool(def.name, `${def.title ? `【${def.title}】` : ''}${def.description || def.name}`, def.params || {},
         wrap(async (a) => {
-          const r = await this.runStoppable(def, a);
+          const r = await this.runStoppable(def, a, this.toolMeta(file, def));
           return (r && typeof r === 'object' && Array.isArray(r.content)) ? r : ok(r);
         }, file)));
   }
@@ -1066,7 +1084,10 @@ class Agent {
     const entry = this.readCustomToolDefs().find((e) => e.def.name === name);
     if (!entry) throw new Error(`没有名为 "${name}" 的工具`);
     if (typeof entry.def.form !== 'function') throw new Error(`${name} 没有自带填表页面`);
-    const url = String(await entry.def.form(this.toolCtx));
+    const fctx = Object.defineProperties({}, Object.getOwnPropertyDescriptors(this.toolCtx));
+    const meta = this.toolMeta(entry.file, entry.def);
+    fctx.withSignal = (signal) => this.stoppableCtx(signal, meta); // 填表页上每次执行都计耗时（停下 3 秒算一次运行结束）
+    const url = String(await entry.def.form(fctx));
     if (!/^http:\/\/127\.0\.0\.1:\d+\//.test(url)) throw new Error(`填表页面只能是本机地址（http://127.0.0.1:端口/），收到 ${url}`);
     return url;
   }
@@ -1105,15 +1126,15 @@ class Agent {
   async runCustomTool(name, args) {
     const entry = this.readCustomToolDefs().find((e) => e.def.name === name);
     if (!entry) throw new Error(`没有名为 "${name}" 的工具`);
-    return this.runDef(entry.def, args);
+    return this.runDef(entry.def, args, this.toolMeta(entry.file, entry.def));
   }
 
-  async runDef(def, args) {
+  async runDef(def, args, meta = null) {
     if (this._toolRunning) throw new Error('已经有一个工具在执行，等它跑完再试');
     this._toolRunning = true;
     try {
       await this.ctx.show();
-      const r = await this.runStoppable(def, args);
+      const r = await this.runStoppable(def, args, meta);
       return typeof r === 'string' ? r : JSON.stringify(r, null, 1).slice(0, 8000);
     } finally {
       this._toolRunning = false;
@@ -1124,7 +1145,10 @@ class Agent {
   // JS 没法强行杀掉一个正在跑的 async 函数，所以是「协作式」停止：工具拿到的 ctx 里每个方法（js / navigate / click / waitFor…）
   // 调用前先看有没有被停止，正在等的也立刻放弃；整个 run 也跟停止信号赛跑——点「停止」后工具马上返回「已手动停止」，
   // 工具里后续再碰浏览器都会直接抛错，不会接着往下做。右侧浏览器正在加载的页面也一起停掉。
-  stoppableCtx(signal) {
+  stoppableCtx(signal, meta = null, sess0 = null) {
+    // 耗时记录：runStoppable 给一份（跑完就结束）；没给（填表页上的执行）就第一次调用时开一份，停下 3 秒算结束
+    let sess = sess0;
+    const S = () => { if (!sess || sess.ended) sess = this.profBegin(meta, true); return sess; };
     const stopped = () => Object.assign(new Error('已手动停止'), { stopped: true });
     const onAbort = new Promise((_, reject) => {
       if (signal.aborted) reject(stopped());
@@ -1136,26 +1160,154 @@ class Agent {
       if (typeof v !== 'function' || k === 'log' || k === 'warn' || k === 'withSignal') { out[k] = v; continue; }
       out[k] = (...a) => {
         if (signal.aborted) return Promise.reject(stopped());
-        return Promise.race([Promise.resolve().then(() => v(...a)), onAbort]);
+        return Promise.race([this.profOp(S, k, a, () => v(...a)), onAbort]);
       };
     }
-    out.log = (text) => { if (!signal.aborted) this.toolCtx.log(text); };
-    out.warn = (text) => { if (!signal.aborted) this.toolCtx.warn(text); };
+    out.log = (text) => { if (!signal.aborted) this.toolCtx.log(text, this.profLog(S, text)); };
+    out.warn = (text) => { if (!signal.aborted) this.toolCtx.warn(text, this.profLog(S, text, true)); };
+    out.withSignal = (s) => this.stoppableCtx(s, meta);
     return out;
   }
 
-  async runStoppable(def, args) {
+  // ------------------------------------------------------------ 插件运行耗时分析
+  // 插件拿到的 ctx 每个方法都记一笔：分类、用时、调用它的代码位置（插件目录里的 文件:行）。ctx.log 的进度文字当步骤分界。
+  // 不经过 ctx 的（插件自己读邮件、发本机请求、算数据）算「插件自己的代码」= 总用时 − 各类之和。
+  // 运行 ≥ 3 秒时界面显示汇总，≥ 15 秒给「让 Claude 分析为什么慢」：把耗时 + 插件说明 + 代码位置交给 Claude 对照分析
+  toolMeta(file, def) {
+    if (!file || !def) return null;
+    const market = file.endsWith('.bxt');
+    const notes = file.replace(/\.(js|bxt)$/, '.notes.md');
+    return { name: def.name, title: def.title || '', file: market ? null : file, notes: !market && fs.existsSync(notes) ? notes : null, market, dir: path.dirname(file) };
+  }
+  profBegin(meta, idle = false) {
+    return { meta, idle, t0: Date.now(), last: Date.now(), ops: [], cats: {}, logs: [], issues: [], error: null, pending: 0, ended: false, timer: null };
+  }
+  // 调用栈里第一处插件目录里的代码：插件文件（或它用的 _lib/ 文件）:行号。市场插件是加密的，不给位置
+  profWhere(meta) {
+    if (!meta?.dir || meta.market) return null;
+    for (const l of String(new Error().stack || '').split('\n').slice(2)) {
+      const m = l.match(/\(?((?:file:\/\/)?\/[^()]+?):(\d+):\d+\)?\s*$/);
+      if (!m) continue;
+      let f = m[1].replace(/^file:\/\//, '');
+      try { f = decodeURIComponent(f); } catch {}
+      if (f.startsWith(meta.dir + path.sep) && !f.endsWith('.bxt')) return `${path.relative(meta.dir, f)}:${m[2]}`;
+    }
+    return null;
+  }
+  profOp(S, k, a, fn) {
+    if (PROF_ALS.getStore()) return Promise.resolve().then(fn); // 嵌套在另一笔操作里：算在外层那笔里
+    const sess = S();
+    const cat = PROF_CATS[k] || 'other';
+    const where = this.profWhere(sess.meta);
+    const desc = profDesc(k, a);
+    const start = Date.now();
+    sess.pending++;
+    if (sess.timer) { clearTimeout(sess.timer); sess.timer = null; }
+    let failed = false; // 这笔操作抛错了（waitFor 等满超时、页面脚本报错…）：插件自己 catch 掉的也记下，常是「白等」的地方
+    return PROF_ALS.run(true, () => Promise.resolve().then(fn)).catch((e) => { failed = !e?.stopped; throw e; }).finally(() => {
+      const ms = Date.now() - start;
+      if (k === 'waitFor' && Number(a[1]) > 0 && ms >= Number(a[1]) - 150) failed = true; // waitFor 超时不一定抛错（有的返回空）：用满了超时就算等满超时
+      sess.pending--;
+      sess.last = Date.now();
+      sess.cats[cat] = (sess.cats[cat] || 0) + ms;
+      if (sess.ops.length < 3000) sess.ops.push({ k, cat, at: start - sess.t0, ms, where, desc, failed });
+      if (sess.idle && !sess.pending && !sess.ended) sess.timer = setTimeout(() => this.profIdleEnd(sess), 3000);
+    });
+  }
+  profLog(S, text, warn = false) {
+    const sess = S();
+    const at = Date.now() - sess.t0;
+    const t = String(text ?? '').replace(/\s+/g, ' ');
+    if (sess.logs.length < 500) sess.logs.push({ at, text: t.slice(0, 120) });
+    if ((warn || ISSUE_RE.test(t)) && sess.issues.length < 10) sess.issues.push({ at, text: t.slice(0, 200), warn });
+    sess.last = Date.now();
+    if (sess.idle && !sess.pending && !sess.ended) { clearTimeout(sess.timer); sess.timer = setTimeout(() => this.profIdleEnd(sess), 3000); }
+    return at;
+  }
+  profIdleEnd(sess) {
+    if (sess.pending || sess.ended) return;
+    const p = this.profEnd(sess);
+    if (p && (p.total >= 3000 || p.issues.length)) { this.lastProfile = p; this.ctx.emit({ type: 'tool_profile', profile: p }); }
+  }
+  profEnd(sess) {
+    if (!sess || sess.ended) return null;
+    sess.ended = true;
+    clearTimeout(sess.timer);
+    if (!sess.meta) return null;
+    const total = Math.max(0, (sess.idle ? sess.last : Date.now()) - sess.t0);
+    const counted = Object.values(sess.cats).reduce((x, y) => x + y, 0);
+    const cats = { ...sess.cats, own: Math.max(0, total - counted) };
+    // 步骤：每条进度文字到下一条（或结束）之间
+    const steps = sess.logs.map((l, i) => ({ at: l.at, ms: (i + 1 < sess.logs.length ? sess.logs[i + 1].at : total) - l.at, text: l.text }));
+    if (steps.length && steps[0].at >= 500) steps.unshift({ at: 0, ms: steps[0].at, text: '（第一条进度文字之前）' });
+    // 同一行代码的操作合在一起（轮询会调很多次），按总用时排
+    const by = new Map();
+    for (const o of sess.ops) {
+      const key = `${o.where || '?'}|${o.k}`;
+      const g = by.get(key) || { where: o.where, k: o.k, cat: o.cat, desc: o.desc, n: 0, ms: 0, at: o.at, fails: 0 };
+      g.n++; g.ms += o.ms; if (o.failed) g.fails++;
+      by.set(key, g);
+    }
+    const slow = [...by.values()].filter((g) => g.ms >= 200).sort((x, y) => y.ms - x.ms).slice(0, 12);
+    const typical = this.toolStatsAdd(sess.meta.name, total);
+    const { name, title, file, notes, market } = sess.meta;
+    const p = { name, title, file, notes, market, at: sess.t0, total, cats, steps: steps.slice(0, 60), slow, typical, issues: sess.issues, error: sess.error };
+    this.toolProfileSave(p);
+    return p;
+  }
+  // 插件修复（工具箱卡片上的「修复」）：每个插件存最近一次运行的分析，<userData>/tool-profiles.json
+  toolProfilesFile() { return path.join(path.dirname(this.ctx.getToolsDir()), 'tool-profiles.json'); }
+  toolProfileSave(p) {
+    if (!p?.name || p.total < 300) return; // 几乎没做事的（比如只打开填表页）不算一次运行
+    let all = {};
+    try { all = JSON.parse(fs.readFileSync(this.toolProfilesFile(), 'utf8')); } catch {}
+    all[p.name] = p;
+    try { fs.writeFileSync(this.toolProfilesFile(), JSON.stringify(all)); } catch {}
+  }
+  // 「修复」要的材料：最近一次运行的分析（没有就 null）+ 插件说明、代码的位置
+  toolRepairInfo(name) {
+    const entry = this.readCustomToolDefs().find((e) => e.def.name === name);
+    if (!entry) throw new Error(`没有名为 "${name}" 的工具`);
+    let all = {};
+    try { all = JSON.parse(fs.readFileSync(this.toolProfilesFile(), 'utf8')); } catch {}
+    return { profile: all[name] || null, meta: this.toolMeta(entry.file, entry.def) };
+  }
+  // 每个插件最近 10 次的用时（<userData>/tool-stats.json），给出「平时约 N 秒」：之前至少 3 次才算
+  toolStatsAdd(name, ms) {
+    const f = path.join(path.dirname(this.ctx.getToolsDir()), 'tool-stats.json');
+    let all = {};
+    try { all = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+    const prev = Array.isArray(all[name]) ? all[name] : [];
+    const sorted = [...prev].sort((x, y) => x - y);
+    const typical = sorted.length >= 3 ? sorted[Math.floor(sorted.length / 2)] : null;
+    all[name] = [ms, ...prev].slice(0, 10);
+    try { fs.writeFileSync(f, JSON.stringify(all)); } catch {}
+    return typical;
+  }
+
+  async runStoppable(def, args, meta = null) {
     const ac = new AbortController();
     this.toolAbort = ac;
+    const sess = this.profBegin(meta);
     try {
-      const ctx = this.stoppableCtx(ac.signal);
+      const ctx = this.stoppableCtx(ac.signal, meta, sess);
       const run = Promise.resolve().then(() => def.run(args, ctx));
       run.catch(() => {}); // 停止后它可能晚一点才失败，别变成未处理的 rejection
-      return await Promise.race([run, new Promise((_, reject) => {
+      const r = await Promise.race([run, new Promise((_, reject) => {
         ac.signal.addEventListener('abort', () => reject(Object.assign(new Error('已手动停止'), { stopped: true })), { once: true });
       })]);
+      // 结果里以 ⚠ 开头的行：插件自己报告的问题（按约定，失败的步骤要返回 ⚠ 行）
+      if (typeof r === 'string') for (const l of r.split('\n')) if (/^\s*⚠/.test(l) && sess.issues.length < 10) sess.issues.push({ at: Date.now() - sess.t0, text: l.trim().slice(0, 200), result: true });
+      return r;
+    } catch (e) {
+      if (!e?.stopped) sess.error = String(e?.message || e).slice(0, 600); // 出错也做一份分析（手动停止不算）
+      throw e;
     } finally {
       if (this.toolAbort === ac) this.toolAbort = null;
+      // 耗时汇总：≥ 3 秒才显示（界面上工具箱直接运行时等结果显示完再画，见 renderer tool_profile）；定时任务从 lastProfile 拿
+      const p = this.profEnd(sess);
+      this.lastProfile = p;
+      if (p && (p.total >= 3000 || p.error || p.issues.length)) this.ctx.emit({ type: 'tool_profile', profile: p });
     }
   }
 
@@ -1901,7 +2053,7 @@ ${old || '（无）'}`);
   async clear() {
     this.denyAll();
     this.pageNotes = [];
-    await this.settle();
+    // 进程还在启动（提前启动的）或没开：还没聊过，没东西可清，不用等它启动完（不然刚开软件时点工具要卡几秒，清空还会晚到）
     if (!this.q || !this.inbox) return;
     if (this.chainFresh && !this.turns?.length) return; // 进程开着但还没聊过（提前启动的）：没东西可清
     if (this.running) {

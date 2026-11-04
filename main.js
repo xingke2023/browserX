@@ -566,8 +566,12 @@ async function runScheduled(task) {
   const emit = (ev) => send('agent', { ...ev, tab: t.id });
   emit({ type: 'sched', phase: 'start', title: task.title });
   let ok = true, text;
+  t.agent.lastProfile = null;
   try { text = await t.agent.runCustomTool(task.tool, task.args || {}); }
   catch (e) { ok = false; text = e.message; }
+  // 执行情况里记下这次的耗时分析（scheduler 记录时取走；只留 ≥ 3 秒的，步骤截短，省得 schedules.json 太大）
+  const p = t.agent.lastProfile;
+  task._profile = p && (p.total >= 3000 || p.error || p.issues.length) ? { ...p, steps: p.steps.slice(0, 30) } : null;
   emit({ type: 'sched', phase: 'done', title: task.title, ok, text });
   if (Notification.isSupported()) {
     const n = new Notification({ title: `定时任务${ok ? '完成' : '失败'}：${task.title}`, body: String(text).replace(/\s+/g, ' ').slice(0, 120), silent: ok });
@@ -720,6 +724,7 @@ handle('history:prune', () => cur.agent.pruneHistory()); // 打开历史时顺�
 // fromMarket：从插件市场下载安装的（包括自己发布后又装回来的），工具箱里不显示「发布」
 handle('tools:list', () => { const inst = readInstalled(); return cur.agent.listCustomTools().map((t) => ({ ...t, market: isMarketTool(t.name), fromMarket: !!inst[t.name] })); });
 handle('tools:run', (name, args, tab) => tabOf(tab).agent.runCustomTool(name, args));
+handle('tools:repairInfo', (name) => cur.agent.toolRepairInfo(name)); // 插件修复：最近一次运行的分析 + 说明 / 代码位置
 handle('tools:form', (name) => cur.agent.toolFormUrl(name));
 handle('tools:formSpec', (name, values, tab) => tabOf(tab).agent.toolFormSpec(name, values));
 handle('tools:stop', (tab) => tabOf(tab).agent.stopTool());
