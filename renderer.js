@@ -1393,7 +1393,9 @@ async function loadMarket(body) {
       : t.can_download ? `<button class="primary mk_inst">${t.local.version === t.version ? '重新安装' : t.local.version ? `更新到 ${esc(t.version)}` : '安装'}</button>`
       : account.user?.member ? (buying?.id === t.id ? '<span class="mkwait">等待付款…</span>' : `<button class="primary mk_buy">购买 ${esc(t.price_label)}</button>`)
       : `<button class="ghost ac_link" data-url="${esc(account.user?.urls?.packages || t.url)}">开通会员后购买</button>`;
-    d.innerHTML = `<div class="tbhead"><span class="tbname">${esc(t.title)}<small class="tbid">${esc(t.name)}</small></span><span class="mkprice${t.price ? ' paid' : ''}">${esc(t.price_label)}</span></div>
+    // 官方插件（网站后台蓝 V 认证）：标题旁蓝色对勾「官方」
+    const official = t.official ? '<span class="mkoff" title="官方插件：BrowserX 官方发布并认证"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11"/><path d="M7 12.5l3.2 3.2L17 9"/></svg>官方</span>' : '';
+    d.innerHTML = `<div class="tbhead"><span class="tbname">${esc(t.title)}${official}<small class="tbid">${esc(t.name)}</small></span><span class="mkprice${t.price ? ' paid' : ''}">${esc(t.price_label)}</span></div>
       <div class="tbdesc">${esc(t.summary)}</div>
       <div class="mkmeta"><span>${esc(t.category_label)}</span><span>${esc(t.author || '')}${t.mine ? '（我）' : ''}</span>${t.version ? `<span class="mkver">版本 ${esc(t.version)}</span>` : ''}${t.listed_at ? `<span>发布 ${ymd(t.listed_at)}</span>` : ''}${t.version_at && ymd(t.version_at) !== ymd(t.listed_at) ? `<span>更新 ${ymd(t.version_at)}</span>` : ''}<span>${t.downloads} 次安装</span>${local ? `<span class="mklocal">${local}</span>` : ''}</div>
       <div class="row mkact">${action}<button class="ghost ac_link" data-url="${esc(t.url)}">详情</button></div><div class="tberr" hidden></div>`;
