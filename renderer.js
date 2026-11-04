@@ -1383,7 +1383,7 @@ async function showSchedHistory(x) {
 
 async function renderMarket() {
   const list = $('tb_list');
-  list.innerHTML = `<button class="ghost tbback">← 工具箱</button>
+  list.innerHTML = `<div class="sc_top"><button class="ghost tbback">← 工具箱</button><h2 class="sc_title">插件市场</h2><span></span></div>
     <div class="tbtop mktop"><input class="tbsearch mk_q" type="search" placeholder="搜索插件市场" spellcheck="false"><select class="mk_cat"><option value="">全部行业</option></select></div>
     <div class="mkbody"><div class="hempty">加载中…</div></div>`;
   list.querySelector('.tbback').addEventListener('click', renderToolboxList);
