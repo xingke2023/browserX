@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>Guía de uso de BrowserX</title>
+<style>
+:root{--bg:#f5f4ef;--card:#fff;--text:#2b2a26;--muted:#77736a;--line:#e2dfd6;--link:#2563eb;--accent:#c96442;--code:#f1efe8}
+@media (prefers-color-scheme:dark){:root{--bg:#1f1e1c;--card:#2e2d2a;--text:#ecebe6;--muted:#a19d93;--line:#3a3935;--link:#6ea8fe;--accent:#d97757;--code:#1b1a18}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:28px 24px 48px}
+header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+header h1{margin:0;font-family:Optima,"Segoe UI",sans-serif;font-size:30px;font-weight:700;letter-spacing:-.2px}
+header span{color:var(--muted)}
+header .ver{font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:10px;padding:0 8px;line-height:20px}
+header .ver:empty{display:none}
+nav{display:flex;gap:8px;margin:14px 0 22px;flex-wrap:wrap}
+nav a{padding:5px 14px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--text);text-decoration:none;font-size:13px}
+nav a:hover{border-color:var(--link);color:var(--link)}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 22px 18px;margin-bottom:18px;scroll-margin-top:16px}
+h2{font-size:18px;margin:16px 0 4px;color:var(--link)}
+h3{font-size:15px;margin:18px 0 4px}
+p{margin:6px 0}
+ul,ol{margin:6px 0;padding-left:22px}
+li{margin:3px 0}
+b{font-weight:600}
+kbd,code{font:12px Menlo,ui-monospace,monospace;background:var(--code);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.feat{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:12px}
+.feat div{border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.feat b{display:block;color:var(--accent);margin-bottom:2px}
+.feat p{margin:0;font-size:13px;color:var(--muted)}
+.tip{border-left:3px solid var(--accent);padding:4px 12px;margin:10px 0;color:var(--muted);font-size:13px}
+footer{text-align:center;color:var(--muted);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>BrowserX</h1><span class="ver" id="ver"></span><span>A la izquierda, el asistente inteligente; a la derecha, el navegador</span></header>
+  <nav><a href="#features">Características</a><a href="#guide">Guía de uso</a><a href="#toolbox">Caja de herramientas</a><a href="#tips">Preguntas frecuentes</a></nav>
+
+  <section id="features">
+    <h2>Características</h2>
+    <p>BrowserX reúne el asistente inteligente y el navegador en una misma ventana: le dices con tus propias palabras qué quieres hacer y el asistente hace clic, rellena y busca por ti directamente en el navegador de la derecha, mientras tú lo ves todo en todo momento.</p>
+    <div class="feat">
+      <div><b>Maneja páginas web hablando</b><p>Abrir sitios, buscar, hacer clic, rellenar formularios, leer el contenido de una página: basta una frase para encargárselo al asistente.</p></div>
+      <div><b>La sesión se mantiene iniciada</b><p>El navegador de la derecha recuerda los sitios en los que has iniciado sesión; aunque reinicies la aplicación, no tendrás que volver a iniciarla.</p></div>
+      <div><b>Convierte tus flujos habituales en herramientas</b><p>Convierte las tareas repetitivas en una herramienta: después solo tendrás que rellenar unos parámetros y hacer un clic para ejecutarla, sin pasar por la conversación y sin gastar cuota.</p></div>
+      <div><b>Graba una vez y automatiza</b><p>Realiza la tarea manualmente una vez mientras la grabas; el asistente analizará las interfaces del sitio web y te ayudará a crear una herramienta estable y rápida.</p></div>
+      <div><b>Protección mediante borradores</b><p>Al crear o modificar una herramienta, primero se escribe en un borrador; solo cuando la ejecución de prueba funciona se añade a la caja de herramientas, así nunca se estropea la versión que estás usando.</p></div>
+      <div><b>Herramientas compartibles</b><p>Las herramientas se pueden exportar a un archivo para enviárselo a un compañero; antes de importarla se muestran las funciones sensibles que utiliza y se puede ver su código fuente.</p></div>
+      <div><b>Mucho más que un navegador</b><p>El asistente también puede leer y escribir archivos en tu ordenador y ejecutar comandos: organizar datos, exportar hojas de cálculo y mucho más.</p></div>
+      <div><b>Avisos de seguridad</b><p>Durante la grabación, las contraseñas y los tokens se ocultan automáticamente; antes de exportar una herramienta se comprueba si su código contiene contraseñas escritas directamente.</p></div>
+    </div>
+  </section>
+
+  <section id="guide">
+    <h2>Guía de uso</h2>
+
+    <h3>1. Interfaz</h3>
+    <ul>
+      <li><b>Izquierda</b>: la conversación con el asistente. Arriba están «Nueva conversación», «Historial», «Caja de herramientas» y ⚙ Ajustes.</li>
+      <li><b>Derecha</b>: el navegador. Arriba están la barra de direcciones, los botones de avanzar, retroceder y recargar, el botón de grabación y las herramientas de desarrollo.</li>
+      <li>La línea divisoria central se puede arrastrar para ajustar el ancho de ambos lados. Al hacer clic en «BrowserX», en la esquina superior izquierda, se abre el portal web.</li>
+    </ul>
+
+    <h3>2. Conversar con el asistente</h3>
+    <ul>
+      <li>Escribe lo que quieres hacer en el cuadro de texto de la esquina inferior izquierda; pulsa <kbd>Enter</kbd> para enviar y <kbd>Shift</kbd>+<kbd>Enter</kbd> para insertar un salto de línea.</li>
+      <li>Ejemplos: «Abre baidu.com y busca BrowserX», «Convierte la tabla de esta página en un Excel y guárdalo en el escritorio».</li>
+      <li>Mientras el asistente trabaja, puedes hacer clic en «Detener» o pulsar <kbd>Esc</kbd> para interrumpirlo.</li>
+      <li>A veces el asistente mostrará una pregunta de opción múltiple: elige una opción y pulsa «Enviar»; si no quieres responder, haz clic en «Omitir».</li>
+      <li>Cuando haga falta iniciar sesión, escanear un código QR o introducir un código de verificación, hazlo tú mismo en el navegador de la derecha y luego dile al asistente que continúe.</li>
+    </ul>
+
+    <h3>3. Nueva conversación e historial</h3>
+    <ul>
+      <li>«Nueva conversación» vacía el panel izquierdo y empieza un tema completamente nuevo.</li>
+      <li>«Historial» muestra las conversaciones anteriores; haz clic en una para continuarla. También puedes cambiarles el nombre o eliminarlas.</li>
+    </ul>
+
+    <h3>4. Ajustes</h3>
+    <ul>
+      <li><b>Directorio de trabajo</b>: la carpeta en la que el asistente lee y escribe archivos y ejecuta comandos. Al cambiarlo se inicia una nueva conversación.</li>
+      <li><b>Modelo</b>: se puede cambiar en cualquier momento y la conversación actual continúa.</li>
+      <li><b>Modo de permisos</b>: «Preguntar siempre» es lo más seguro, ya que te consulta antes de cada operación; «Permitir todo» es lo más cómodo, pero el asistente ya no pedirá confirmación, así que úsalo con precaución.</li>
+      <li><b>Página de inicio</b>: la dirección que abre el navegador de la derecha al iniciar la aplicación.</li>
+    </ul>
+  </section>
+
+  <section id="toolbox">
+    <h2>Caja de herramientas</h2>
+    <h3>Ejecutar una herramienta</h3>
+    <ol>
+      <li>Haz clic en «Caja de herramientas» en la parte superior; puedes usar el cuadro de búsqueda para encontrar herramientas por nombre o descripción.</li>
+      <li>Haz clic en una herramienta para desplegarla, rellena los parámetros y pulsa «Ejecutar». El resultado aparecerá en el área de conversación.</li>
+      <li>Si la ejecución falla, haz clic en «Pedir al asistente que diagnostique y repare»: el asistente averiguará la causa y arreglará la herramienta.</li>
+    </ol>
+    <p class="tip">Las herramientas usan los sitios web en los que hayas iniciado sesión en el navegador de la derecha, así que asegúrate primero de haber iniciado sesión en los sitios correspondientes.</p>
+
+    <h3>Crear una herramienta nueva</h3>
+    <ol>
+      <li>En la caja de herramientas, haz clic en «Nueva herramienta», rellena el nombre de la herramienta en chino (obligatorio), el nombre en inglés (puede dejarse vacío y se asignará automáticamente) y lo que debe hacer, y pulsa «Empezar a crear».</li>
+      <li>En la parte superior aparecerá el aviso «Creando herramienta». Si lo necesitas, haz clic en «Grabar», realiza la tarea manualmente en el navegador de la derecha y luego pulsa Detener; el resultado de la grabación se enviará automáticamente al asistente.</li>
+      <li>Cuando el asistente termine, haz clic en «Ejecución de prueba» para probarla; si algo no está bien, explícale en la conversación cómo corregirlo.</li>
+      <li>Cuando todo funcione, haz clic en «Finalizar»: la herramienta se añade a la caja de herramientas y se puede usar de inmediato en la conversación actual. Si ya no la quieres, haz clic en «Descartar».</li>
+    </ol>
+
+    <h3>Modificar, exportar e importar</h3>
+    <ul>
+      <li>«Editar», en la tarjeta de la herramienta, abre el mismo proceso de creación; la herramienta original solo se reemplaza cuando haces clic en «Finalizar».</li>
+      <li>«Exportar» guarda la herramienta como un archivo .js que puedes enviar a otras personas.</li>
+      <li>«Importar» te permite elegir un archivo que te hayan dado; primero se muestra una vista previa de los riesgos y del código fuente, y solo se importa tras tu confirmación. Importa únicamente herramientas de personas de confianza.</li>
+    </ul>
+  </section>
+
+  <section id="tips">
+    <h2>Preguntas frecuentes</h2>
+    <h3>El navegador de la derecha aparece en blanco o muestra «La página no se ha abierto»</h3>
+    <p>Lo más probable es que hayas vuelto a la página de resultados de un formulario enviado o que haya cambiado la red. Haz clic en «Volver a la página anterior» y repite la operación, o haz clic en «Reintentar».</p>
+    <h3>La herramienta indica que no has iniciado sesión</h3>
+    <p>Abre el sitio web correspondiente en el navegador de la derecha, vuelve a iniciar sesión y ejecuta de nuevo la herramienta.</p>
+    <h3>¿Dónde están los archivos grabados?</h3>
+    <p>En Finder, pulsa ⌘⇧G e introduce <code>~/Library/Application Support/BrowserX/recon</code>. Pueden contener datos de tu empresa, así que no los compartas.</p>
+    <h3>¿Dónde están los archivos de las herramientas?</h3>
+    <p>En Finder, pulsa ⌘⇧G e introduce <code>~/Library/Application Support/BrowserX/tools</code>. Se recomienda modificarlas mediante «Editar» en la caja de herramientas en lugar de editar los archivos directamente.</p>
+    <h3>Atajos de teclado</h3>
+    <ul>
+      <li><kbd>⌘</kbd>+<kbd>,</kbd> Abrir ajustes　<kbd>⌘</kbd>+<kbd>L</kbd> Seleccionar la barra de direcciones　<kbd>⌘</kbd>+<kbd>R</kbd> Recargar la interfaz</li>
+      <li><kbd>Enter</kbd> Enviar　<kbd>Shift</kbd>+<kbd>Enter</kbd> Salto de línea　<kbd>Esc</kbd> Detener el asistente</li>
+    </ul>
+  </section>
+
+  <footer>BrowserX <span id="ver2"></span> · www.xingke888.com</footer>
+</div>
+<script src="../../help.js"></script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 {
   "name": "browserx",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "左侧 Claude Code 助手，右侧浏览器",
   "main": "main.js",
   "private": true,
@@ -68,6 +68,8 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "acorn": "^8.19.0",
+    "acorn-walk": "^8.3.5",
     "electron": "^45.2.1",
     "electron-builder": "^25.1.8"
   }

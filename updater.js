@@ -15,9 +15,10 @@ const newer = (a, b) => {
 };
 
 class Updater {
-  constructor({ portal, getWin }) {
+  constructor({ portal, getWin, t }) {
     this.portal = portal;
     this.getWin = getWin;
+    this.t = t || ((k, v = []) => k.replace(/\{(\d+)\}/g, (_, i) => v[i] ?? ''));
     this.state = 'idle'; // idle / checking / downloading / ready
     this.manual = false; // 这次检查是用户在菜单里点的：结果都要弹窗告诉用户；后台自动检查只在下载好时提示
     this.ready = null; // 下载好的版本名
@@ -32,11 +33,11 @@ class Updater {
     autoUpdater.on('checking-for-update', () => { this.state = 'checking'; });
     autoUpdater.on('update-available', () => {
       this.state = 'downloading';
-      if (this.manual) this.box({ message: '发现新版本，正在后台下载', detail: '下载好后会提示你重启更新，期间可以照常使用。' });
+      if (this.manual) this.box({ message: this.t('发现新版本，正在后台下载'), detail: this.t('下载好后会提示你重启更新，期间可以照常使用。') });
     });
     autoUpdater.on('update-not-available', () => {
       this.state = 'idle';
-      if (this.manual) this.box({ message: '已是最新版本', detail: `当前版本 ${app.getVersion()}。` });
+      if (this.manual) this.box({ message: this.t('已是最新版本'), detail: this.t('当前版本 {0}。', [app.getVersion()]) });
       this.manual = false;
     });
     autoUpdater.on('update-downloaded', (_e, _notes, name) => {
@@ -62,7 +63,7 @@ class Updater {
     if (manual) this.manual = true;
     if (this.state === 'ready') return manual && this.askRestart();
     if (this.state !== 'idle') {
-      if (manual) this.box({ message: this.state === 'downloading' ? '新版本正在后台下载' : '正在检查更新', detail: '好了会提示你。' });
+      if (manual) this.box({ message: this.t(this.state === 'downloading' ? '新版本正在后台下载' : '正在检查更新'), detail: this.t('好了会提示你。') });
       return;
     }
     try { autoUpdater.checkForUpdates(); } catch (e) { this.manual = false; if (manual) this.failed(e); }
@@ -76,9 +77,9 @@ class Updater {
 
   async askRestart() {
     const r = await this.box({
-      message: `${this.ready} 已下载好`,
-      detail: '重启 BrowserX 就会更新。登录状态和工具箱都会保留。\n不想现在重启的话，下次退出 BrowserX 时会自动装上。',
-      buttons: ['立即重启更新', '稍后'],
+      message: this.t('{0} 已下载好', [this.ready]),
+      detail: this.t('重启 BrowserX 就会更新。登录状态和工具箱都会保留。\n不想现在重启的话，下次退出 BrowserX 时会自动装上。'),
+      buttons: [this.t('立即重启更新'), this.t('稍后')],
     });
     if (r.response === 0) autoUpdater.quitAndInstall();
   }
@@ -87,9 +88,9 @@ class Updater {
   async failed(e) {
     const r = await this.box({
       type: 'warning',
-      message: '自动更新失败',
-      detail: `${e.message}\n\n请确认 BrowserX 已经拖进「应用程序」文件夹再试；也可以去网站下载新版手动安装。`,
-      buttons: ['去下载页', '关闭'],
+      message: this.t('自动更新失败'),
+      detail: `${e.message}\n\n${this.t('请确认 BrowserX 已经拖进「应用程序」文件夹再试；也可以去网站下载新版手动安装。')}`,
+      buttons: [this.t('去下载页'), this.t('关闭')],
     });
     if (r.response === 0) shell.openExternal(`${this.portal}/download`);
   }
@@ -102,18 +103,18 @@ class Updater {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       info = await res.json();
     } catch (e) {
-      return this.box({ type: 'warning', message: '检查更新失败', detail: `连不上 ${this.portal}：${e.cause?.code || e.message}。请检查网络后再试。` });
+      return this.box({ type: 'warning', message: this.t('检查更新失败'), detail: this.t('连不上 {0}：{1}。请检查网络后再试。', [this.portal, e.cause?.code || e.message]) });
     }
-    if (!info.version || !newer(info.version, app.getVersion())) return this.box({ message: '已是最新版本', detail: `当前版本 ${app.getVersion()}。` });
+    if (!info.version || !newer(info.version, app.getVersion())) return this.box({ message: this.t('已是最新版本'), detail: this.t('当前版本 {0}。', [app.getVersion()]) });
     const r = await this.box({
-      message: `发现新版本 ${info.version}`,
-      detail: `当前版本 ${app.getVersion()}。点「下载新版本」会在浏览器里下载安装包，装好后替换旧版即可。`,
-      buttons: ['下载新版本', '以后再说'],
+      message: this.t('发现新版本 {0}', [info.version]),
+      detail: this.t('当前版本 {0}。点「下载新版本」会在浏览器里下载安装包，装好后替换旧版即可。', [app.getVersion()]),
+      buttons: [this.t('下载新版本'), this.t('以后再说')],
     });
     if (r.response === 0) shell.openExternal(`${this.portal}/download`);
   }
 
-  box({ type = 'info', message, detail, buttons = ['好'] }) {
+  box({ type = 'info', message, detail, buttons = [this.t('好')] }) {
     return dialog.showMessageBox(this.getWin(), { type, message, detail, buttons, defaultId: 0, cancelId: buttons.length - 1 });
   }
 }

@@ -28,7 +28,7 @@ function prompts(draftName) {
   const ctx = { THEMES: require('../article').THEMES }; // WECHAT_PROMPT 里列了排版主题
   vm.runInNewContext(`${src.slice(a, b)}\nthis.r = { LANG_PROMPT, BROWSER_PROMPT, WECHAT_PROMPT, TOOLBOX_PROMPT, MAKING_PROMPT };`, ctx);
   const { LANG_PROMPT, BROWSER_PROMPT, WECHAT_PROMPT, TOOLBOX_PROMPT, MAKING_PROMPT } = ctx.r;
-  const parts = [['回复语言 LANG_PROMPT（首尾各一次）', LANG_PROMPT], ['浏览器规则 BROWSER_PROMPT', BROWSER_PROMPT], ['工具箱规则 TOOLBOX_PROMPT', TOOLBOX_PROMPT(toolsDir)]];
+  const parts = [['回复语言 LANG_PROMPT（首尾各一次，这里按简体中文显示）', LANG_PROMPT('zh-CN')], ['浏览器规则 BROWSER_PROMPT', BROWSER_PROMPT], ['工具箱规则 TOOLBOX_PROMPT', TOOLBOX_PROMPT(toolsDir)]];
   if (draftName) {
     const draft = path.join(drafts, `${draftName}.js`);
     const code = fs.existsSync(draft) ? fs.readFileSync(draft, 'utf8') : '';

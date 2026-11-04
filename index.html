@@ -33,7 +33,7 @@
         <button id="mk_try" class="ghost" title="换个参数用草稿跑一次（不经过助手）">试运行</button>
         <button id="mk_cancel" class="ghost" title="不做这个工具了（草稿移到废纸篓）">不做了</button>
       </div>
-      <span class="mk_kind">工具<span id="mk_verb">制作</span>模式</span>
+      <span class="mk_kind" id="mk_kind">工具制作模式</span>
     </div>
 
     <div id="settings" hidden>
@@ -49,6 +49,21 @@
             <label for="model">模型</label>
             <p class="hint">对话中切换，当前对话会继续</p>
             <select id="model"></select>
+          </div>
+          <div class="field inline">
+            <label for="s_replyLang">语言</label>
+            <p class="hint">界面和助手回复的语言；正在进行的对话下一条消息起就换。菜单「BrowserX → 语言」也能改</p>
+            <select id="s_replyLang">
+              <option value="system">跟随系统</option>
+              <option value="zh-CN">简体中文</option>
+              <option value="zh-TW">繁體中文</option>
+              <option value="en">English</option>
+              <option value="ja">日本語</option>
+              <option value="fr">Français</option>
+              <option value="de">Deutsch</option>
+              <option value="es">Español</option>
+              <option value="ko">한국어</option>
+            </select>
           </div>
           <div class="field inline">
             <label for="mode">权限模式</label>
@@ -150,6 +165,7 @@
     </div>
   </section>
 </main>
+<script src="i18n.js"></script>
 <script src="renderer.js"></script>
 </body>
 </html>

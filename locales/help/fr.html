@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>Guide d'utilisation de BrowserX</title>
+<style>
+:root{--bg:#f5f4ef;--card:#fff;--text:#2b2a26;--muted:#77736a;--line:#e2dfd6;--link:#2563eb;--accent:#c96442;--code:#f1efe8}
+@media (prefers-color-scheme:dark){:root{--bg:#1f1e1c;--card:#2e2d2a;--text:#ecebe6;--muted:#a19d93;--line:#3a3935;--link:#6ea8fe;--accent:#d97757;--code:#1b1a18}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:28px 24px 48px}
+header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+header h1{margin:0;font-family:Optima,"Segoe UI",sans-serif;font-size:30px;font-weight:700;letter-spacing:-.2px}
+header span{color:var(--muted)}
+header .ver{font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:10px;padding:0 8px;line-height:20px}
+header .ver:empty{display:none}
+nav{display:flex;gap:8px;margin:14px 0 22px;flex-wrap:wrap}
+nav a{padding:5px 14px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--text);text-decoration:none;font-size:13px}
+nav a:hover{border-color:var(--link);color:var(--link)}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 22px 18px;margin-bottom:18px;scroll-margin-top:16px}
+h2{font-size:18px;margin:16px 0 4px;color:var(--link)}
+h3{font-size:15px;margin:18px 0 4px}
+p{margin:6px 0}
+ul,ol{margin:6px 0;padding-left:22px}
+li{margin:3px 0}
+b{font-weight:600}
+kbd,code{font:12px Menlo,ui-monospace,monospace;background:var(--code);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.feat{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:12px}
+.feat div{border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.feat b{display:block;color:var(--accent);margin-bottom:2px}
+.feat p{margin:0;font-size:13px;color:var(--muted)}
+.tip{border-left:3px solid var(--accent);padding:4px 12px;margin:10px 0;color:var(--muted);font-size:13px}
+footer{text-align:center;color:var(--muted);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>BrowserX</h1><span class="ver" id="ver"></span><span>À gauche, l'assistant intelligent ; à droite, le navigateur</span></header>
+  <nav><a href="#features">Points forts</a><a href="#guide">Mode d'emploi</a><a href="#toolbox">Boîte à outils</a><a href="#tips">Questions fréquentes</a></nav>
+
+  <section id="features">
+    <h2>Points forts</h2>
+    <p>BrowserX réunit l'assistant intelligent et le navigateur dans une seule fenêtre : vous dites simplement ce que vous voulez faire, et l'assistant clique, remplit et recherche pour vous directement dans le navigateur à droite, sous vos yeux du début à la fin.</p>
+    <div class="feat">
+      <div><b>Piloter le web par la parole</b><p>Ouvrir un site, rechercher, cliquer, remplir un formulaire, lire le contenu d'une page : une phrase suffit pour confier la tâche à l'assistant.</p></div>
+      <div><b>Sessions de connexion conservées</b><p>Le navigateur de droite se souvient des sites sur lesquels vous êtes connecté ; même après un redémarrage du logiciel, inutile de vous reconnecter.</p></div>
+      <div><b>Transformer les tâches courantes en outils</b><p>Faites d'une opération répétitive un outil : il suffira ensuite de saisir quelques paramètres et de cliquer pour l'exécuter, sans passer par la conversation ni consommer de quota.</p></div>
+      <div><b>Enregistrer une fois, automatiser ensuite</b><p>Effectuez l'opération une fois à la main en l'enregistrant : l'assistant analyse les API du site et en fait un outil fiable et rapide.</p></div>
+      <div><b>Protection par brouillon</b><p>Tout outil créé ou modifié est d'abord rédigé en brouillon ; il n'entre dans la boîte à outils qu'après un essai concluant, sans risque d'abîmer la version en service.</p></div>
+      <div><b>Outils partageables</b><p>Un outil peut être exporté sous forme de fichier à envoyer à un collègue ; avant l'importation, les capacités sensibles qu'il utilise sont listées et son code source peut être consulté.</p></div>
+      <div><b>Bien plus qu'un navigateur</b><p>L'assistant peut aussi lire et écrire des fichiers sur votre ordinateur, exécuter des commandes, organiser des données ou exporter des tableaux.</p></div>
+      <div><b>Alertes de sécurité</b><p>Les mots de passe et jetons sont automatiquement masqués pendant l'enregistrement ; avant l'export d'un outil, le code est vérifié pour détecter des mots de passe écrits en dur.</p></div>
+    </div>
+  </section>
+
+  <section id="guide">
+    <h2>Mode d'emploi</h2>
+
+    <h3>1. Interface</h3>
+    <ul>
+      <li><b>À gauche</b> : la conversation avec l'assistant. En haut se trouvent « Nouvelle conversation », « Historique », « Boîte à outils » et ⚙ Réglages.</li>
+      <li><b>À droite</b> : le navigateur. En haut se trouvent la barre d'adresse, les boutons Précédent, Suivant et Actualiser, le bouton d'enregistrement et les outils de développement.</li>
+      <li>La ligne de séparation centrale peut être déplacée pour ajuster la largeur des deux côtés. Cliquer sur « BrowserX » en haut à gauche ouvre le site portail.</li>
+    </ul>
+
+    <h3>2. Converser avec l'assistant</h3>
+    <ul>
+      <li>Écrivez ce que vous voulez faire dans la zone de saisie en bas à gauche, appuyez sur <kbd>Enter</kbd> pour envoyer et sur <kbd>Shift</kbd>+<kbd>Enter</kbd> pour aller à la ligne.</li>
+      <li>Exemples : « Ouvre baidu.com et recherche BrowserX », « Mets le tableau de cette page dans un fichier Excel et enregistre-le sur le bureau ».</li>
+      <li>Pendant que l'assistant travaille, vous pouvez cliquer sur « Arrêter » ou appuyer sur <kbd>Esc</kbd> pour l'interrompre.</li>
+      <li>L'assistant affiche parfois une question à choix : sélectionnez une réponse puis cliquez sur « Envoyer » ; si vous ne souhaitez pas répondre, cliquez sur « Passer ».</li>
+      <li>Lorsqu'il faut se connecter, scanner un QR code ou saisir un code de vérification, faites-le vous-même dans le navigateur de droite, puis dites à l'assistant de continuer.</li>
+    </ul>
+
+    <h3>3. Nouvelle conversation et historique</h3>
+    <ul>
+      <li>« Nouvelle conversation » vide la partie gauche et démarre un tout nouveau sujet.</li>
+      <li>« Historique » liste les conversations précédentes ; cliquez sur l'une d'elles pour la reprendre. Vous pouvez aussi les renommer ou les supprimer.</li>
+    </ul>
+
+    <h3>4. Réglages</h3>
+    <ul>
+      <li><b>Répertoire de travail</b> : le dossier dans lequel l'assistant lit et écrit des fichiers et exécute des commandes. Le changer démarre une nouvelle conversation.</li>
+      <li><b>Modèle</b> : peut être changé à tout moment ; la conversation en cours se poursuit.</li>
+      <li><b>Mode d'autorisation</b> : « Toujours demander » est le plus sûr, chaque action vous est d'abord soumise ; « Tout autoriser » est le plus pratique, mais les actions de l'assistant ne sont plus confirmées : à utiliser avec prudence.</li>
+      <li><b>Page d'accueil</b> : l'adresse ouverte dans le navigateur de droite au démarrage.</li>
+    </ul>
+  </section>
+
+  <section id="toolbox">
+    <h2>Boîte à outils</h2>
+    <h3>Exécuter un outil</h3>
+    <ol>
+      <li>Cliquez sur « Boîte à outils » en haut ; la barre de recherche permet de trouver un outil par son nom ou sa description.</li>
+      <li>Cliquez sur un outil pour le déplier, renseignez les paramètres, puis cliquez sur « Exécuter ». Le résultat s'affiche dans la zone de conversation.</li>
+      <li>En cas d'échec, cliquez sur « Demander à l'assistant de diagnostiquer et réparer » : l'assistant en trouvera la cause et corrigera l'outil.</li>
+    </ol>
+    <p class="tip">Les outils utilisent les sites sur lesquels vous êtes connecté dans le navigateur de droite ; vérifiez donc d'abord que vous êtes bien connecté aux sites concernés.</p>
+
+    <h3>Créer un nouvel outil</h3>
+    <ol>
+      <li>Dans la boîte à outils, cliquez sur « Nouvel outil », renseignez le nom de l'outil en chinois (obligatoire), le nom en anglais (facultatif, attribué automatiquement s'il est vide) et ce qu'il doit faire, puis cliquez sur « Commencer la création ».</li>
+      <li>Une bannière « Création d'outil en cours » apparaît en haut. Si nécessaire, cliquez sur « Enregistrer », effectuez l'opération à la main dans le navigateur de droite, puis cliquez sur Arrêter : l'enregistrement est automatiquement transmis à l'assistant.</li>
+      <li>Une fois l'outil écrit par l'assistant, cliquez sur « Essai » pour le tester ; si quelque chose ne va pas, expliquez à l'assistant dans la conversation ce qu'il faut modifier.</li>
+      <li>Quand tout fonctionne, cliquez sur « Terminer » : l'outil est ajouté à la boîte à outils et immédiatement utilisable dans la conversation en cours. Si vous n'en voulez plus, cliquez sur « Abandonner ».</li>
+    </ol>
+
+    <h3>Modifier, exporter, importer</h3>
+    <ul>
+      <li>Le bouton « Modifier » d'une fiche d'outil lance le même processus de création ; l'outil d'origine n'est remplacé qu'une fois que vous cliquez sur « Terminer ».</li>
+      <li>« Exporter » enregistre l'outil dans un fichier .js que vous pouvez envoyer à d'autres personnes.</li>
+      <li>« Importer » permet de choisir un fichier reçu ; les risques et le code source sont d'abord affichés, et l'importation n'a lieu qu'après confirmation. N'importez que des outils provenant de personnes de confiance.</li>
+    </ul>
+  </section>
+
+  <section id="tips">
+    <h2>Questions fréquentes</h2>
+    <h3>Le navigateur de droite est vide ou affiche « La page ne s'est pas ouverte »</h3>
+    <p>Le plus souvent, vous êtes revenu sur la page de résultat d'un formulaire envoyé, ou le réseau a changé. Cliquez sur « Revenir à la page précédente » pour recommencer, ou sur « Réessayer ».</p>
+    <h3>L'outil indique que vous n'êtes pas connecté</h3>
+    <p>Ouvrez le site correspondant dans le navigateur de droite, reconnectez-vous, puis relancez l'outil.</p>
+    <h3>Où se trouvent les fichiers d'enregistrement ?</h3>
+    <p>Dans le Finder, appuyez sur ⌘⇧G et saisissez <code>~/Library/Application Support/BrowserX/recon</code>. Ils peuvent contenir des données professionnelles : ne les diffusez pas.</p>
+    <h3>Où se trouvent les fichiers des outils ?</h3>
+    <p>Dans le Finder, appuyez sur ⌘⇧G et saisissez <code>~/Library/Application Support/BrowserX/tools</code>. Il est conseillé de les modifier via le bouton « Modifier » de la boîte à outils plutôt que d'éditer directement les fichiers.</p>
+    <h3>Raccourcis clavier</h3>
+    <ul>
+      <li><kbd>⌘</kbd>+<kbd>,</kbd> Ouvrir les réglages　<kbd>⌘</kbd>+<kbd>L</kbd> Sélectionner la barre d'adresse　<kbd>⌘</kbd>+<kbd>R</kbd> Actualiser l'interface</li>
+      <li><kbd>Enter</kbd> Envoyer　<kbd>Shift</kbd>+<kbd>Enter</kbd> Aller à la ligne　<kbd>Esc</kbd> Arrêter l'assistant</li>
+    </ul>
+  </section>
+
+  <footer>BrowserX <span id="ver2"></span> · www.xingke888.com</footer>
+</div>
+<script src="../../help.js"></script>
+</body>
+</html>

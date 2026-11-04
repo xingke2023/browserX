@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>BrowserX 使い方ガイド</title>
+<style>
+:root{--bg:#f5f4ef;--card:#fff;--text:#2b2a26;--muted:#77736a;--line:#e2dfd6;--link:#2563eb;--accent:#c96442;--code:#f1efe8}
+@media (prefers-color-scheme:dark){:root{--bg:#1f1e1c;--card:#2e2d2a;--text:#ecebe6;--muted:#a19d93;--line:#3a3935;--link:#6ea8fe;--accent:#d97757;--code:#1b1a18}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:28px 24px 48px}
+header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+header h1{margin:0;font-family:Optima,"Segoe UI",sans-serif;font-size:30px;font-weight:700;letter-spacing:-.2px}
+header span{color:var(--muted)}
+header .ver{font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:10px;padding:0 8px;line-height:20px}
+header .ver:empty{display:none}
+nav{display:flex;gap:8px;margin:14px 0 22px;flex-wrap:wrap}
+nav a{padding:5px 14px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--text);text-decoration:none;font-size:13px}
+nav a:hover{border-color:var(--link);color:var(--link)}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 22px 18px;margin-bottom:18px;scroll-margin-top:16px}
+h2{font-size:18px;margin:16px 0 4px;color:var(--link)}
+h3{font-size:15px;margin:18px 0 4px}
+p{margin:6px 0}
+ul,ol{margin:6px 0;padding-left:22px}
+li{margin:3px 0}
+b{font-weight:600}
+kbd,code{font:12px Menlo,ui-monospace,monospace;background:var(--code);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.feat{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:12px}
+.feat div{border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.feat b{display:block;color:var(--accent);margin-bottom:2px}
+.feat p{margin:0;font-size:13px;color:var(--muted)}
+.tip{border-left:3px solid var(--accent);padding:4px 12px;margin:10px 0;color:var(--muted);font-size:13px}
+footer{text-align:center;color:var(--muted);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>BrowserX</h1><span class="ver" id="ver"></span><span>左側にAIアシスタント、右側にブラウザ</span></header>
+  <nav><a href="#features">主な特長</a><a href="#guide">使い方</a><a href="#toolbox">ツールボックス</a><a href="#tips">よくある質問</a></nav>
+
+  <section id="features">
+    <h2>主な特長</h2>
+    <p>BrowserX は、AIアシスタントとブラウザをひとつのウィンドウにまとめました。やりたいことを普段の言葉で伝えるだけで、アシスタントが右側のブラウザでクリック・入力・検索を代わりに行います。その様子はすべて目の前で確認できます。</p>
+    <div class="feat">
+      <div><b>話しかけるだけでWeb操作</b><p>サイトを開く、検索する、クリックする、フォームに入力する、ページの内容を読み取る——ひと言でアシスタントに任せられます。</p></div>
+      <div><b>ログイン状態をずっと保持</b><p>右側のブラウザはログインしたサイトを記憶するので、アプリを再起動しても再ログインは不要です。</p></div>
+      <div><b>よく使う手順をツール化</b><p>繰り返す操作をツールにしておけば、次からはパラメータを入れてクリックするだけで完了。会話を介さないので利用枠も消費しません。</p></div>
+      <div><b>一度記録すれば自動化</b><p>手作業で一度操作して記録すると、アシスタントがサイトのAPIを分析し、安定して高速に動くツールを作ってくれます。</p></div>
+      <div><b>下書きで安全に編集</b><p>ツールの新規作成や修正はまず下書きに書き込まれ、試運転で問題がなければツールボックスに追加されます。使用中のバージョンを壊す心配はありません。</p></div>
+      <div><b>ツールを共有できる</b><p>ツールは1つのファイルとしてエクスポートし、同僚に渡せます。インポート前には使用する機密性の高い機能が一覧表示され、ソースコードも確認できます。</p></div>
+      <div><b>ブラウザだけじゃない</b><p>アシスタントはパソコン上のファイルの読み書きやコマンドの実行もでき、データの整理や表のエクスポートもこなします。</p></div>
+      <div><b>セキュリティへの配慮</b><p>記録時にはパスワードやトークンを自動でマスクし、ツールのエクスポート前にはコード内にパスワードが直接書かれていないかをチェックします。</p></div>
+    </div>
+  </section>
+
+  <section id="guide">
+    <h2>使い方</h2>
+
+    <h3>1. 画面構成</h3>
+    <ul>
+      <li><b>左側</b>：アシスタントとの会話。上部に「新しい会話」「履歴」「ツールボックス」と ⚙ 設定があります。</li>
+      <li><b>右側</b>：ブラウザ。上部にアドレスバー、進む・戻る・再読み込み、記録ボタン、デベロッパーツールがあります。</li>
+      <li>中央の区切り線はドラッグして左右の幅を調整できます。左上の「BrowserX」をクリックするとポータルサイトが開きます。</li>
+    </ul>
+
+    <h3>2. アシスタントと会話する</h3>
+    <ul>
+      <li>左下の入力欄にやりたいことを書き、<kbd>Enter</kbd> で送信、<kbd>Shift</kbd>+<kbd>Enter</kbd> で改行します。</li>
+      <li>例：「baidu.com を開いて BrowserX を検索して」「このページの表を Excel にまとめてデスクトップに保存して」。</li>
+      <li>アシスタントの実行中は「停止」をクリックするか <kbd>Esc</kbd> を押すと中断できます。</li>
+      <li>アシスタントが選択式の質問を表示することがあります。選んでから「送信」を押してください。答えたくない場合は「スキップ」を押します。</li>
+      <li>ログイン、QRコードの読み取り、認証コードの入力が必要な場面では、ご自身で右側のブラウザで操作を済ませてから、アシスタントに続行を伝えてください。</li>
+    </ul>
+
+    <h3>3. 新しい会話と履歴</h3>
+    <ul>
+      <li>「新しい会話」を押すと左側がクリアされ、まったく新しい話題を始められます。</li>
+      <li>「履歴」には過去の会話が一覧表示され、クリックすると続きから会話できます。名前の変更や削除も可能です。</li>
+    </ul>
+
+    <h3>4. 設定</h3>
+    <ul>
+      <li><b>作業フォルダ</b>：アシスタントがファイルの読み書きやコマンドの実行を行うフォルダです。変更すると新しい会話が始まります。</li>
+      <li><b>モデル</b>：いつでも切り替えられ、現在の会話はそのまま続きます。</li>
+      <li><b>権限モード</b>：「毎回確認」が最も安全で、操作のたびに事前に確認されます。「すべて許可」は最も手軽ですが、アシスタントの操作は確認なしで実行されるため、慎重にご利用ください。</li>
+      <li><b>ホームページ</b>：起動時に右側のブラウザで開くURLです。</li>
+    </ul>
+  </section>
+
+  <section id="toolbox">
+    <h2>ツールボックス</h2>
+    <h3>ツールを実行する</h3>
+    <ol>
+      <li>上部の「ツールボックス」をクリックします。検索欄で名前や説明から探せます。</li>
+      <li>ツールをクリックして展開し、パラメータを入力して「実行」をクリックします。結果は会話エリアに表示されます。</li>
+      <li>実行に失敗した場合は「アシスタントに診断・修復してもらう」をクリックすると、アシスタントが原因を調べてツールを修正します。</li>
+    </ol>
+    <p class="tip">ツールは右側のブラウザでログイン済みのサイトを利用して動作します。事前に関連サイトにログインしていることを確認してください。</p>
+
+    <h3>新しいツールを作る</h3>
+    <ol>
+      <li>ツールボックスで「新規ツール」をクリックし、表示用のツール名（必須）、英語のツール名（空欄可・自動で割り当て）、やりたいことを入力して「作成開始」をクリックします。</li>
+      <li>上部に「ツール作成中」のバナーが表示されます。必要に応じて「記録」をクリックし、右側のブラウザで手作業で一通り操作してから停止を押すと、記録結果が自動でアシスタントに渡されます。</li>
+      <li>アシスタントが書き終えたら「試運転」でテストします。うまくいかなければ、会話でどう直すかをアシスタントに伝えてください。</li>
+      <li>問題がなければ「完了」をクリックすると、ツールがツールボックスに追加され、現在の会話ですぐに使えます。不要になったら「破棄」をクリックします。</li>
+    </ol>
+
+    <h3>修正・エクスポート・インポート</h3>
+    <ul>
+      <li>ツールカードの「編集」を押すと同じ作成フローに入ります。修正後に「完了」を押したときに初めて元のツールが置き換えられます。</li>
+      <li>「エクスポート」はツールを1つの .js ファイルとして保存し、他の人に渡せます。</li>
+      <li>「インポート」では他の人から受け取ったファイルを選び、リスクとソースコードをプレビューして確認してからインポートします。信頼できる相手から受け取ったツールのみインポートしてください。</li>
+    </ul>
+  </section>
+
+  <section id="tips">
+    <h2>よくある質問</h2>
+    <h3>右側のブラウザが真っ白、または「ページを開けませんでした」と表示される</h3>
+    <p>多くの場合、フォーム送信後の結果ページに戻ったか、ネットワークが切り替わったことが原因です。「前のページに戻る」で操作し直すか、「再試行」をクリックしてください。</p>
+    <h3>ツールで「ログインしていません」と表示される</h3>
+    <p>右側のブラウザで該当サイトを開いて再ログインしてから、ツールを実行してください。</p>
+    <h3>記録したファイルはどこにある？</h3>
+    <p>Finder で ⌘⇧G を押し、<code>~/Library/Application Support/BrowserX/recon</code> と入力します。業務データが含まれている可能性があるため、外部に送らないでください。</p>
+    <h3>ツールのファイルはどこにある？</h3>
+    <p>Finder で ⌘⇧G を押し、<code>~/Library/Application Support/BrowserX/tools</code> と入力します。ファイルを直接編集せず、ツールボックスの「編集」から修正することをおすすめします。</p>
+    <h3>キーボードショートカット</h3>
+    <ul>
+      <li><kbd>⌘</kbd>+<kbd>,</kbd> 設定を開く　<kbd>⌘</kbd>+<kbd>L</kbd> アドレスバーを選択　<kbd>⌘</kbd>+<kbd>R</kbd> 画面を再読み込み</li>
+      <li><kbd>Enter</kbd> 送信　<kbd>Shift</kbd>+<kbd>Enter</kbd> 改行　<kbd>Esc</kbd> アシスタントを停止</li>
+    </ul>
+  </section>
+
+  <footer>BrowserX <span id="ver2"></span> · www.xingke888.com</footer>
+</div>
+<script src="../../help.js"></script>
+</body>
+</html>

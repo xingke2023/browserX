@@ -1,8 +1,29 @@
 const $ = (id) => document.getElementById(id);
 
+// ---------------------------------------------------------------- 界面多语言（见 i18n.js）
+// 屏幕上出现的中文（文字、title、placeholder、aria-label）自动按当前语言换成译文；助手的回复、用户输入、操作卡片里的代码不动。
+// 换语言（菜单 / 设置）时主进程发 i18n，从记住的原文重新翻
+let TR = (s) => s;
+let UI_LANG = 'zh-CN';
+// 大数字：按界面语言的习惯缩写（Intl 的 compact 写法：简体「22万」、日文「22万」、韩文「22만」、英文「220K」…）
+const fmtBig = (n) => (n >= 10000 ? new Intl.NumberFormat(UI_LANG, { notation: 'compact', maximumFractionDigits: 1 }).format(n) : n.toLocaleString(UI_LANG));
+const UI_SKIP = '.msg.ai, .msg.user, pre, code, [data-no-i18n]';
+const uiTranslator = BXI18N.domTranslator(() => TR, UI_SKIP);
+function setUiLang({ dict, lang }) {
+  TR = BXI18N.makeT(dict).tr;
+  UI_LANG = lang || 'zh-CN';
+  document.body.classList.toggle('ui-latin', !/^(zh|ja|ko)/.test(UI_LANG)); // 字母文字：横幅上的圆按钮放不下，改成椭圆
+  // 空对话的提示写在 CSS ::before 里（不是网页文字，自动翻译管不到），按语言写进 CSS 变量
+  document.documentElement.style.setProperty('--empty-hint', JSON.stringify(TR('试试输入：「打开 baidu.com 搜索 BrowserX」')));
+  if (account?.loggedIn) renderAccount(); // 账号面板里的数字格式跟着换
+  uiTranslator.retranslate(document.body);
+}
+api.call('i18n:get').then((r) => { if (r.ok) { setUiLang(r.data); uiTranslator.observe(document.body); } });
+api.on('i18n', setUiLang);
+
 async function call(ch, ...a) {
   const r = await api.call(ch, ...a);
-  if (!r.ok) throw Object.assign(new Error(r.error), { url: r.url, needLogin: r.needLogin }); // url / needLogin 见 main.js handle()
+  if (!r.ok) throw Object.assign(new Error(r.error), { url: r.url, label: r.label, quota: r.quota, needLogin: r.needLogin }); // url / needLogin 见 main.js handle()
   return r.data;
 }
 
@@ -367,7 +388,9 @@ function onAgentEvent(ev) {
       if (tone === 'intro') { // 第一行当标题；最后一句问用户的话（以「？」结尾）加粗
         const [hd, ...rest] = String(ev.text).split('\n');
         const q = /？\s*$/.test(rest[rest.length - 1] || '') ? rest.pop() : '';
-        add('note intro', `<div class="nhd">${esc(hd)}</div>${esc(rest.join('\n').replace(/\n+$/, ''))}${q ? `<div class="nq">${esc(q)}</div>` : ''}`, true);
+        // 每行单独一个元素：界面翻译按行对词条（整段多行对不上）
+        const lines = rest.join('\n').replace(/\n+$/, '').split('\n').map((l) => `<div class="nl">${esc(l) || '&nbsp;'}</div>`).join('');
+        add('note intro', `<div class="nhd">${esc(hd)}</div>${lines}${q ? `<div class="nq">${esc(q)}</div>` : ''}`, true);
       }
       else if (ev.file) { // 下载完成：带一个「在访达中显示」
         const d = add('note', `${esc(ev.text)} <button class="ghost dl_show">在访达中显示</button>`, true);
@@ -387,8 +410,10 @@ function onAgentEvent(ev) {
       });
       break;
     }
+    case 'quota': quotaNote(T); break;
     case 'done':
       setRunning(false);
+      if (ev.quota) break; // 额度用完：上面已经有 quota 提示了
       if (ev.error) add('note err', `✗ ${esc(ev.error)}`);
       else add('note', '✓ 当前命令完成，如有需要请继续输入指令');
       break;
@@ -428,7 +453,7 @@ async function sendMsg() {
     else add('note', `当前模型：${(MODELS.find(([id]) => id === cfg.model) || [, cfg.model])[1]}。用法：/model opus5.5（也可以在设置里切换）`, true);
     return;
   }
-  try { await call('agent:send', text, cur.id); } catch (e) { add('note err', `✗ ${esc(e.message)}`, true); }
+  try { await call('agent:send', text, cur.id); } catch (e) { add('note err', errWithLink(e), true); }
 }
 $('btnSend').addEventListener('click', sendMsg);
 $('input').addEventListener('keydown', (e) => {
@@ -1118,12 +1143,37 @@ function loginPrompt(box, what) {
 }
 
 // 网站返回「去购买 / 开通会员」之类的错误时，带一个打开网站的按钮
+// Claude 额度用完的统一提示（开始前检查到 / 对话中途被门户拦下都用这个），措辞跟门户 ClaudeQuota::exceededMessage 一样。
+// 每句一个 <span>，界面翻译按句匹配；按钮：充值（开放了充值）、用积分兑换（积分能换额度）、开通会员（非会员）
+function quotaHtml() {
+  const u = account?.user || {};
+  const c = u.claude || {};
+  const credit = u.urls?.credit, points = u.tokens_per_point > 0;
+  const s = [c.limit ? `今天的 Claude 额度已用完（${fmtBig(c.used || 0)} / ${fmtBig(c.limit)}），明天 0 点恢复。` : '今天的 Claude 额度已用完，明天 0 点恢复。'];
+  if (credit && points) s.push('可以充值购买额度，或用邀约积分兑换额度，马上接着用。');
+  else if (credit) s.push('可以充值购买额度，马上接着用。');
+  else if (points) s.push('可以用邀约积分兑换额度，马上接着用。');
+  if (!u.member && !u.is_admin) s.push('开通会员可以提高每天的额度。');
+  else if (c.higher_package) s.push('换更高的套餐可以提高每天的额度。');
+  const btns = [
+    credit ? `<button class="primary ac_link" data-url="${esc(credit)}">充值</button>` : '',
+    points ? '<button class="ghost q_points">用积分兑换</button>' : '',
+    !u.member && !u.is_admin && u.urls?.packages ? `<button class="ghost ac_link" data-url="${esc(u.urls.packages)}">开通会员</button>` : '',
+  ].join('');
+  return `✗ ${s.map((x) => `<span>${esc(x)}</span>`).join('')}${btns ? `<div class="row q_btns">${btns}</div>` : ''}`;
+}
+function quotaNote(tab) {
+  // 先读一次最新的账号状态（用量、充值余额），再画提示
+  call('account:refresh').catch(() => {}).finally(() => inTab(tab, () => add('note err quota', quotaHtml(), true)));
+}
 function errWithLink(e) {
-  return `✗ ${esc(e.message)}${e.url ? ` <button class="ghost ac_link" data-url="${esc(e.url)}">去网站看看</button>` : ''}`;
+  if (e.quota) return quotaHtml();
+  return `✗ ${esc(e.message)}${e.url ? ` <button class="${e.label ? 'primary' : 'ghost'} ac_link" data-url="${esc(e.url)}">${esc(e.label || '去网站看看')}</button>` : ''}`;
 }
 document.addEventListener('click', (e) => {
   const b = e.target.closest('.ac_link');
   if (b) call('account:open', b.dataset.url).catch(() => {});
+  if (e.target.closest('.q_points')) openInvite();
 });
 
 // 2026-10-29 这种日期（插件市场的发布 / 更新日期）
@@ -1378,7 +1428,7 @@ function renderAccount() {
     return;
   }
   const lic = u?.license;
-  const wan = (n) => (n >= 10000 ? `${+(n / 10000).toFixed(n < 100000 ? 1 : 0)} 万` : n.toLocaleString()); // 大数字用「万」，一行放得下
+  const wan = (n) => fmtBig(n); // 大数字按界面语言缩写（中日「万」、韩「만」、英文 K / M…），一行放得下
   // 会员状态：右上角一个标签 + 开通 / 续期按钮
   const status = !u ? '<span class="ac_badge">读取中…</span>'
     : u.is_admin ? '<span class="ac_badge ok">管理员</span>'
@@ -1392,6 +1442,7 @@ function renderAccount() {
     return `<div class="ac_usage" title="每天 0 点重置${c.exceeded && !u.member ? '；开通会员可以提高额度' : ''}">
         <div class="ac_urow"><span>今日 Claude 用量</span><span><b>${wan(c.used)}</b> / ${wan(c.limit)}${c.exceeded ? ' · <em class="ac_over">已用完，明天 0 点恢复</em>' : ''}</span></div>
         <div class="ac_meter"><i style="width:${pct}%" class="${c.exceeded ? 'full' : pct >= 80 ? 'hi' : ''}"></i></div>
+        ${u.urls?.credit ? `<div class="ac_urow ac_credit"><span>充值余额 <b>${wan(c.credit || 0)}</b><small>（每天的额度用完后从这里扣）</small></span><button class="${c.exceeded || (c.used >= c.limit && !c.credit) ? 'primary' : 'ghost'} ac_link ac_small" data-url="${esc(u.urls.credit)}">充值</button></div>` : ''}
       </div>`;
   })() : '';
   box.innerHTML = `<div class="ac_card ac_main">
@@ -1402,17 +1453,18 @@ function renderAccount() {
       ${usage}
       ${u && !u.member && !u.is_admin ? '<p class="hint">开通会员后可以安装、发布插件市场里的工具，Claude 额度也更高。</p>' : ''}
     </div>
-    ${u ? `<div class="ac_card ac_invite">
-      <div><b>邀约有礼</b><span>最高得 <em>${esc(u.max_per_invite ?? 650)} 积分</em>/人 · 我的积分 ${esc(u.points ?? 0)}</span></div>
-      <button class="primary ac_invite_go">去邀约</button>
-    </div>` : ''}
     <div class="ac_links">
       <button class="ghost ac_market">插件市场</button>${u ? `<button class="ghost ac_link" data-url="${esc(u.urls.my_tools)}">我发布的工具</button><button class="ghost ac_link" data-url="${esc(u.urls.panel)}">会员中心</button>` : ''}
-      <span class="ac_spacer"></span><button class="ghost ac_refresh" title="重新读取账号、会员和用量">刷新</button><button class="ghost ac_logout">退出登录</button>
-    </div>`;
+      <button class="ghost ac_logout">退出登录</button>
+    </div>
+    ${u ? `<div class="ac_card ac_invite">
+      <div><b>邀约有礼</b><span>最高得 <em>${esc(u.max_per_invite ?? 650)} 积分</em>/人 · 我的积分 ${esc(u.points ?? 0)}</span>
+        ${u.points_per_day ? `<span class="ac_inv_rule">积分可兑换会员天数（${esc(u.points_per_day)} 积分 = 1 天）</span>` : ''}
+        ${u.tokens_per_point ? `<span class="ac_inv_rule">也可兑换 Claude 额度（1 积分 = ${esc(fmtBig(u.tokens_per_point))}）</span>` : ''}</div>
+      <button class="primary ac_invite_go">去邀约</button>
+    </div>` : ''}`;
   box.querySelector('.ac_market').addEventListener('click', () => { $('account').hidden = true; $('toolbox').hidden = false; renderMarket(); });
   box.querySelector('.ac_invite_go')?.addEventListener('click', openInvite);
-  box.querySelector('.ac_refresh').addEventListener('click', () => call('account:refresh').catch((e) => add('note err', `✗ ${esc(e.message)}`, true)));
   box.querySelector('.ac_logout').addEventListener('click', async () => {
     if (await askConfirm('退出 BrowserX 账号？工具箱里已经安装的工具不受影响。')) call('account:logout').catch(() => {});
   });
@@ -1431,11 +1483,13 @@ async function openInvite() {
       <div class="inv_side">
         <p class="inv_rules">${rules}</p>
         <p class="inv_rules">积分可以兑换会员天数：${d.points_per_day} 积分 = 1 天。</p>
+        ${d.tokens_per_point ? `<p class="inv_rules">也可以兑换 Claude 额度：1 积分 = ${fmtBig(d.tokens_per_point)}，加进充值余额，不过期。</p>` : ''}
         <div class="inv_stats"><span><b>${d.invited}</b>已邀请</span><span><b>${d.purchased}</b>已购买</span><span><b class="inv_pts">${d.points}</b>我的积分</span></div>
       </div>
     </div>
     <div class="inv_link"><input readonly value="${esc(d.url)}"><button class="primary inv_copy">复制链接</button></div>
     <div class="inv_redeem"><span>兑换</span><input type="number" min="1" class="inv_days"><span>天会员</span><button class="ghost inv_go">兑换</button><span class="inv_msg"></span></div>
+    ${d.tokens_per_point ? '<div class="inv_redeem"><span>用</span><input type="number" min="1" class="inv_cpts"><span>积分换 Claude 额度</span><button class="ghost inv_cgo">兑换</button><span class="inv_msg inv_cmsg"></span></div>' : ''}
     <div class="modal-actions"><button class="ghost inv_web">在网站上查看明细</button><button class="primary" data-a="cancel">关闭</button></div>
   </div>`;
   document.body.appendChild(overlay);
@@ -1473,6 +1527,31 @@ async function openInvite() {
       msg.textContent = `✓ 已兑换 ${n} 天，到期 ${fmtDate(r.expires_at)}`;
     } catch (e) { msg.className = 'inv_msg err'; msg.textContent = e.message; }
     syncRedeem();
+    syncCredit();
+  });
+  // 积分换 Claude 额度（门户后台设了比例才显示这一行）
+  const cpts = q('.inv_cpts'), cmsg = q('.inv_cmsg');
+  function syncCredit() {
+    if (!cpts) return;
+    cpts.max = Math.max(1, d.points);
+    cpts.value = d.points >= 1 ? d.points : '';
+    q('.inv_cgo').disabled = d.points < 1;
+    if (d.points < 1 && !cmsg.classList.contains('ok')) { cmsg.className = 'inv_msg inv_cmsg'; cmsg.textContent = '还没有积分'; }
+  }
+  syncCredit();
+  q('.inv_cgo')?.addEventListener('click', async () => {
+    const n = parseInt(cpts.value, 10);
+    if (!(n >= 1)) return;
+    q('.inv_cgo').disabled = true;
+    try {
+      const r = await call('invite:redeemCredit', n);
+      d.points = r.points;
+      q('.inv_pts').textContent = r.points;
+      cmsg.className = 'inv_msg inv_cmsg ok';
+      cmsg.textContent = `✓ 已换 ${fmtBig(r.tokens)} 额度，充值余额 ${fmtBig(r.credit)}`;
+    } catch (e) { cmsg.className = 'inv_msg inv_cmsg err'; cmsg.textContent = e.message; }
+    syncRedeem();
+    syncCredit();
   });
 }
 function openAccount(show) {
@@ -1480,7 +1559,7 @@ function openAccount(show) {
   $('settings').hidden = true;
   $('toolbox').hidden = true;
   $('account').hidden = !show;
-  if (show) { renderAccount(); if (account.loggedIn) call('account:refresh').catch(() => {}); }
+  if (show) { renderAccount(); if (account.loggedIn) call('account:refresh').catch(() => {}); } // 每次打开都重新读一次账号、额度、积分（面板上没有刷新按钮）
 }
 $('btnAccount').addEventListener('click', () => openAccount($('account').hidden));
 $('mk_ask').addEventListener('click', () => waitingCard(cur)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
@@ -1535,7 +1614,7 @@ async function beginMaking(opts) {
     else focusInput(); // 修改工具：等用户说要改什么
     return true;
   } catch (e) {
-    add('note err', `✗ ${esc(e.message)}`, true);
+    add('note err', errWithLink(e), true);
     return false;
   }
 }
@@ -1550,7 +1629,7 @@ function renderMakingSteps(m) {
     const skipped = i === 2 && step > 2 && !m.recorded;
     const state = skipped ? 'skip' : i < step ? 'done' : i === step ? 'now' : 'todo';
     const text = i === 4 && m.testing ? '测试中' : i === 4 && m.testFails && step === 4 ? `测试（第 ${m.testFails + 1} 轮）` : label;
-    return `<span class="mks ${state}">${state === 'done' ? '✓' : state === 'skip' ? '–' : state === 'now' ? '●' : '○'} ${esc(text)}</span>`;
+    return `<span class="mks ${state}">${state === 'done' ? '✓' : state === 'skip' ? '–' : state === 'now' ? '●' : '○'} ${esc(TR(text))}</span>`; // 前面带符号，自动翻译整段对不上：这里先翻
   }).join('<span class="mksep">›</span>');
 }
 
@@ -1562,7 +1641,7 @@ function renderMaking(m) {
   // 制作工具时发送框提示先输入需求
   $('input').placeholder = m ? (m.editing ? '说说要改什么、改成什么样…' : '描述这个工具要做什么：在哪个网站、输入什么、要得到什么结果…') : INPUT_PH;
   if (!m) return;
-  $('mk_verb').textContent = m.editing ? '修改' : '制作';
+  $('mk_kind').textContent = m.editing ? '工具修改模式' : '工具制作模式'; // 整句一个词条（拆开翻会变成「Tools Build Mode」这种）
   $('mk_done').textContent = m.streamlining ? '优化并保存中' : saveLabel(m);
   $('mk_done').classList.toggle('primary', m.step >= 5); // 自己测试通过了：保存按钮变成主按钮
   renderMakingSteps(m);
@@ -1580,7 +1659,7 @@ function renderMaking(m) {
   // 要用户动手、而 BrowserX 不在最前面（用户在别的窗口等）：发一个系统通知，点了回到这里
   const key = m.hint?.action ? m.hint.text : '';
   if (key && key !== renderMaking.notified && !document.hasFocus() && 'Notification' in window) {
-    try { const n = new Notification('BrowserX 制作工具：需要你操作', { body: key, silent: false }); n.onclick = () => window.focus(); } catch { /* 通知被系统关掉了就算了 */ }
+    try { const n = new Notification(TR('BrowserX 制作工具：需要你操作'), { body: TR(key), silent: false }); n.onclick = () => window.focus(); } catch { /* 通知被系统关掉了就算了 */ }
   }
   renderMaking.notified = key;
 }
@@ -1695,7 +1774,10 @@ function renderCfg() {
 function openSettings() {
   $('settings').hidden = false;
   for (const k of TOP) $('s_' + k).value = cfg[k] || '';
+  $('s_replyLang').value = cfg.replyLang || 'system';
 }
+$('s_replyLang').addEventListener('change', async () => { cfg = await call('cfg:set', { replyLang: $('s_replyLang').value }); }); // 选了马上生效
+api.on('cfg', (c) => { cfg = c; if (!$('settings').hidden) $('s_replyLang').value = cfg.replyLang || 'system'; }); // 菜单里改了
 
 $('btnCwd').addEventListener('click', async () => {
   const before = cfg.cwd;

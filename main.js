@@ -31,6 +31,7 @@ const RECON_DIR = () => path.join(app.getPath('userData'), 'recon');
 const WORK_DIR = path.join(os.homedir(), 'BrowserX');
 const DEFAULTS = {
   apiKey: '', baseUrl: '', model: 'claude-opus-5-5', cwd: WORK_DIR, permissionMode: 'bypassPermissions', home: 'https://browserx.xingke888.com/',
+  replyLang: 'system', // Claude 的回复语言：system = 跟随系统语言，或 zh-CN / zh-TW / en
 };
 let cfg, win;
 let accountToken = null;
@@ -223,6 +224,7 @@ function createTab(url = cfg.home) {
     vault,
     show: async () => {},
     getCfg: () => cfg,
+    replyLang, // 回复语言（见 replyLang）
     getAccountToken: () => accountToken, // 没填 API Key 时，Claude 请求经门户中转，用账号 token 认证
     checkAccount, // 开会话 / 调模型前确认账号（见 checkAccount）
     getToolsDir: TOOLS_DIR,
@@ -339,25 +341,67 @@ const SHOW_SETTINGS = !app.isPackaged || process.env.CB_SETTINGS === '1';
 // 编辑 / 显示 / 窗口 用系统角色保留：复制粘贴（⌘C/⌘V）、刷新界面（⌘R）等快捷键靠它们
 // 使用说明 / 软件特色：一个独立窗口（help.html），hash 跳到对应部分；已打开就复用
 let helpWin = null;
+// 说明页按当前语言打开 locales/help/<语言>.html（scripts/i18n-help.py 生成），简体中文或没有译文就用原版 help.html
+function helpFile() {
+  const f = path.join(__dirname, 'locales', 'help', `${replyLang()}.html`);
+  return replyLang() !== 'zh-CN' && fs.existsSync(f) ? f : path.join(__dirname, 'help.html');
+}
+function reloadHelp() {
+  if (!helpWin || helpWin.isDestroyed()) return;
+  const hash = new URL(helpWin.webContents.getURL()).hash.slice(1);
+  helpWin.setTitle(L('BrowserX 使用说明'));
+  helpWin.loadFile(helpFile(), { query: { v: require('./package.json').version }, hash: hash || undefined });
+}
 function openHelp(section) {
   const opts = { query: { v: require('./package.json').version }, hash: section };
   if (helpWin && !helpWin.isDestroyed()) {
-    helpWin.loadFile(path.join(__dirname, 'help.html'), opts);
+    helpWin.loadFile(helpFile(), opts);
     helpWin.show();
     helpWin.focus();
     return;
   }
-  helpWin = new BrowserWindow({ width: 820, height: 760, minWidth: 480, minHeight: 400, title: 'BrowserX 使用说明', webPreferences: { sandbox: true } });
+  helpWin = new BrowserWindow({ width: 820, height: 760, minWidth: 480, minHeight: 400, title: L('BrowserX 使用说明'), webPreferences: { sandbox: true } });
   helpWin.setMenuBarVisibility(false);
   // 说明页里的外部链接用系统浏览器打开，不在说明窗口里跳走
   helpWin.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
   helpWin.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) { e.preventDefault(); shell.openExternal(url); } });
   helpWin.on('closed', () => { helpWin = null; });
-  helpWin.loadFile(path.join(__dirname, 'help.html'), opts);
+  helpWin.loadFile(helpFile(), opts);
+}
+
+// Claude 的回复语言：设成「跟随系统」时看 macOS 的首选语言——繁体（香港 / 台湾 / 澳门）→ 繁體中文，其它中文 → 简体中文，
+// 日 / 法 / 德 / 西 / 韩对应各自的语言，其它 → English
+const REPLY_LANG_NAMES = { 'zh-CN': '简体中文', 'zh-TW': '繁體中文', en: 'English', ja: '日本語', fr: 'Français', de: 'Deutsch', es: 'Español', ko: '한국어' };
+function systemReplyLang() {
+  const l = (app.getPreferredSystemLanguages?.()[0] || app.getLocale() || '').toLowerCase();
+  if (/^zh-(hant|tw|hk|mo)/.test(l)) return 'zh-TW';
+  if (/^zh/.test(l)) return 'zh-CN';
+  const base = l.split(/[-_]/)[0];
+  return REPLY_LANG_NAMES[base] ? base : 'en';
+}
+const replyLang = () => (REPLY_LANG_NAMES[cfg?.replyLang] ? cfg.replyLang : systemReplyLang());
+// 界面语言跟回复语言是同一个设置（菜单「BrowserX → 语言」）：简体中文是原文，其它语言读 locales/<语言>.json（见 i18n.js）
+const I18N = require('./i18n');
+let uiDict = {}, ui = I18N.makeT({});
+function loadUiLang() {
+  const l = replyLang();
+  uiDict = {};
+  if (l !== 'zh-CN') { try { uiDict = JSON.parse(fs.readFileSync(path.join(__dirname, 'locales', `${l}.json`), 'utf8')); } catch { /* 没有这个语言的文件：显示中文 */ } }
+  ui = I18N.makeT(uiDict);
+}
+const L = (key, vals) => ui.t(key, vals);
+function setReplyLang(v) {
+  cfg.replyLang = v;
+  saveCfg();
+  loadUiLang();
+  buildMenu();
+  send('cfg', cfg);
+  send('i18n', { lang: replyLang(), dict: uiDict }); // 界面马上按新语言重翻
+  reloadHelp();
 }
 
 // 自动更新（见 updater.js）
-const updater = new Updater({ portal: ACCOUNT_PORTAL, getWin: () => win });
+const updater = new Updater({ portal: ACCOUNT_PORTAL, getWin: () => win, t: (k, v) => L(k, v) });
 
 function buildMenu() {
   const openInView = (url) => cur?.view.webContents.loadURL(url).catch(() => {});
@@ -365,52 +409,57 @@ function buildMenu() {
     ...(process.platform === 'darwin' ? [{
       label: 'BrowserX',
       submenu: [
-        { role: 'about', label: '关于 BrowserX' },
-        { label: '检查更新…', click: () => updater.menuCheck() },
+        { role: 'about', label: L('关于 BrowserX') },
+        { label: L('检查更新…'), click: () => updater.menuCheck() },
+        { type: 'separator' },
+        { label: L('语言'), submenu: [
+          { label: L('跟随系统（{0}）', [REPLY_LANG_NAMES[systemReplyLang()]]), type: 'radio', checked: !REPLY_LANG_NAMES[cfg?.replyLang], click: () => setReplyLang('system') },
+          ...Object.entries(REPLY_LANG_NAMES).map(([v, name]) => ({ label: name, type: 'radio', checked: cfg?.replyLang === v, click: () => setReplyLang(v) })),
+        ] },
         { type: 'separator' },
         // 左侧栏收起时设置面板在隐藏的左栏里，看不到：先展开左栏再打开设置
         ...(SHOW_SETTINGS ? [
-          { label: '设置…', accelerator: 'CmdOrCtrl+,', click: () => { win?.show(); win?.webContents.executeJavaScript("document.body.classList.contains('side-collapsed') && $('sideToggle').click(); $('settings').hidden && $('btnSettings').click()").catch(() => {}); } },
+          { label: L('设置…'), accelerator: 'CmdOrCtrl+,', click: () => { win?.show(); win?.webContents.executeJavaScript("document.body.classList.contains('side-collapsed') && $('sideToggle').click(); $('settings').hidden && $('btnSettings').click()").catch(() => {}); } },
           { type: 'separator' },
         ] : []),
-        { role: 'hide', label: '隐藏 BrowserX' },
-        { role: 'hideOthers', label: '隐藏其他' },
-        { role: 'unhide', label: '全部显示' },
+        { role: 'hide', label: L('隐藏 BrowserX') },
+        { role: 'hideOthers', label: L('隐藏其他') },
+        { role: 'unhide', label: L('全部显示') },
         { type: 'separator' },
-        { role: 'quit', label: '退出 BrowserX' },
+        { role: 'quit', label: L('退出 BrowserX') },
       ],
     }] : []),
     {
-      label: '编辑',
+      label: L('编辑'),
       submenu: [
-        { role: 'undo', label: '撤销' }, { role: 'redo', label: '重做' }, { type: 'separator' },
-        { role: 'cut', label: '剪切' }, { role: 'copy', label: '拷贝' }, { role: 'paste', label: '粘贴' },
-        { role: 'pasteAndMatchStyle', label: '粘贴并匹配样式' }, { role: 'delete', label: '删除' }, { role: 'selectAll', label: '全选' },
+        { role: 'undo', label: L('撤销') }, { role: 'redo', label: L('重做') }, { type: 'separator' },
+        { role: 'cut', label: L('剪切') }, { role: 'copy', label: L('拷贝') }, { role: 'paste', label: L('粘贴') },
+        { role: 'pasteAndMatchStyle', label: L('粘贴并匹配样式') }, { role: 'delete', label: L('删除') }, { role: 'selectAll', label: L('全选') },
       ],
     },
     {
-      label: '显示',
+      label: L('显示'),
       submenu: [
-        { role: 'reload', label: '刷新界面' }, { role: 'forceReload', label: '强制刷新界面' }, { role: 'toggleDevTools', label: '界面开发者工具' },
+        { role: 'reload', label: L('刷新界面') }, { role: 'forceReload', label: L('强制刷新界面') }, { role: 'toggleDevTools', label: L('界面开发者工具') },
         // 右侧网页的开发者工具（原来在浏览器工具栏上，那个位置换成了收藏夹按钮）
-        { label: '网页开发者工具', accelerator: 'Alt+CmdOrCtrl+I', click: () => cur?.view.webContents.toggleDevTools() },
+        { label: L('网页开发者工具'), accelerator: 'Alt+CmdOrCtrl+I', click: () => cur?.view.webContents.toggleDevTools() },
         { type: 'separator' },
-        { role: 'resetZoom', label: '实际大小' }, { role: 'zoomIn', label: '放大' }, { role: 'zoomOut', label: '缩小' },
+        { role: 'resetZoom', label: L('实际大小') }, { role: 'zoomIn', label: L('放大') }, { role: 'zoomOut', label: L('缩小') },
         { type: 'separator' },
-        { role: 'togglefullscreen', label: '全屏' },
+        { role: 'togglefullscreen', label: L('全屏') },
       ],
     },
-    { role: 'windowMenu', label: '窗口' },
+    { role: 'windowMenu', label: L('窗口') },
     {
       role: 'help',
-      label: '帮助',
+      label: L('帮助'),
       submenu: [
-        { label: '使用说明', click: () => openHelp('guide') },
-        { label: '软件特色', click: () => openHelp('features') },
+        { label: L('使用说明'), click: () => openHelp('guide') },
+        { label: L('软件特色'), click: () => openHelp('features') },
         { label: `版本 ${require('./package.json').version}`, enabled: false },
         { type: 'separator' },
-        { label: '打开门户网站', click: () => openInView(PORTAL) },
-        { label: '在系统浏览器打开门户网站', click: () => shell.openExternal(PORTAL) },
+        { label: L('打开门户网站'), click: () => openInView(PORTAL) },
+        { label: L('在系统浏览器打开门户网站'), click: () => shell.openExternal(PORTAL) },
       ],
     },
   ];
@@ -531,6 +580,8 @@ app.whenReady().then(async () => {
   // npm start 直接跑时 Dock 显示的是 Electron 默认图标；打包后 electron-builder 会用 build/icon.png 生成正式图标
   if (process.platform === 'darwin' && !app.isPackaged) app.dock?.setIcon(path.join(__dirname, 'build', 'icon.png'));
   cfg = loadCfg();
+  loadUiLang();
+  buildMenu(); // 有了设置（语言）再按它重建一次菜单
   cfg.permissionMode = 'bypassPermissions'; // 每次启动都从「全部允许」开始（等同 claude --dangerously-skip-permissions），会话中可以在界面上切换
   encryptMarketTools();
   await migrateWorkDir();
@@ -546,7 +597,7 @@ app.on('window-all-closed', () => app.quit());
 
 const handle = (ch, fn) => ipcMain.handle(ch, async (_e, ...a) => {
   // url / needLogin：账号接口的错误带上网站地址（去购买、开通会员）或「要先登录」，界面据此给按钮
-  try { return { ok: true, data: await fn(...a) }; } catch (e) { return { ok: false, error: e.message, url: e.url, needLogin: e.needLogin }; }
+  try { return { ok: true, data: await fn(...a) }; } catch (e) { return { ok: false, error: e.message, url: e.url, label: e.label, quota: e.quota, needLogin: e.needLogin }; }
 });
 
 // 渲染进程告知浏览器区域位置。拖动分隔条时传 0 大小只是把前台视图藏起来，后台标签保持原大小（助手可能正在截图）
@@ -594,6 +645,7 @@ handle('tabs:find', (sessionId) => [...tabs.values()].find((t) => t.agent.sessio
 handle('win:fullscreen', () => win.setFullScreen(!win.isFullScreen()));
 
 handle('cfg:get', () => cfg);
+handle('i18n:get', () => ({ lang: replyLang(), dict: uiDict }));
 handle('app:showSettings', () => SHOW_SETTINGS);
 handle('cfg:set', (c) => {
   const same = (k) => JSON.stringify(c[k]) === JSON.stringify(cfg[k]);
@@ -602,6 +654,7 @@ handle('cfg:set', (c) => {
   const modelChanged = 'model' in c && c.model !== cfg.model;
   cfg = { ...cfg, ...c };
   saveCfg();
+  if ('replyLang' in c) { loadUiLang(); buildMenu(); send('i18n', { lang: replyLang(), dict: uiDict }); reloadHelp(); } // 菜单、界面跟着换语言
   for (const { agent } of tabs.values()) {
     if ('permissionMode' in c) agent.setPermissionMode(cfg.permissionMode);
     if (modelChanged && !restart) agent.setModel(cfg.model);
@@ -666,7 +719,7 @@ handle('tools:export', async (name) => {
   return r.filePath;
 });
 handle('tools:importPick', async () => {
-  const r = await dialog.showOpenDialog(win, { title: '导入工具', properties: ['openFile'], filters: [{ name: 'BrowserX 工具', extensions: ['js'] }] });
+  const r = await dialog.showOpenDialog(win, { title: L('导入工具'), properties: ['openFile'], filters: [{ name: L('BrowserX 工具'), extensions: ['js'] }] });
   if (r.canceled || !r.filePaths[0]) return null;
   importer = cur.agent; // 选文件和确认之间可能切了标签：确认时用同一个（待导入的内容存在它身上）
   marketPending = null;
@@ -717,6 +770,11 @@ handle('invite:get', () => account.api('/invite'));
 handle('invite:redeem', async (days) => {
   const r = await account.api('/invite/redeem', { method: 'POST', body: { days } });
   account.refresh().catch(() => {});
+  return r;
+});
+handle('invite:redeemCredit', async (points) => {
+  const r = await account.api('/invite/redeem-credit', { method: 'POST', body: { points } });
+  account.refresh().catch(() => {}); // 账号面板的充值余额跟着变
   return r;
 });
 handle('invite:copy', (text) => { clipboard.writeText(String(text)); });

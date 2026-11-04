@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>BrowserX 사용 설명서</title>
+<style>
+:root{--bg:#f5f4ef;--card:#fff;--text:#2b2a26;--muted:#77736a;--line:#e2dfd6;--link:#2563eb;--accent:#c96442;--code:#f1efe8}
+@media (prefers-color-scheme:dark){:root{--bg:#1f1e1c;--card:#2e2d2a;--text:#ecebe6;--muted:#a19d93;--line:#3a3935;--link:#6ea8fe;--accent:#d97757;--code:#1b1a18}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:28px 24px 48px}
+header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+header h1{margin:0;font-family:Optima,"Segoe UI",sans-serif;font-size:30px;font-weight:700;letter-spacing:-.2px}
+header span{color:var(--muted)}
+header .ver{font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:10px;padding:0 8px;line-height:20px}
+header .ver:empty{display:none}
+nav{display:flex;gap:8px;margin:14px 0 22px;flex-wrap:wrap}
+nav a{padding:5px 14px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--text);text-decoration:none;font-size:13px}
+nav a:hover{border-color:var(--link);color:var(--link)}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 22px 18px;margin-bottom:18px;scroll-margin-top:16px}
+h2{font-size:18px;margin:16px 0 4px;color:var(--link)}
+h3{font-size:15px;margin:18px 0 4px}
+p{margin:6px 0}
+ul,ol{margin:6px 0;padding-left:22px}
+li{margin:3px 0}
+b{font-weight:600}
+kbd,code{font:12px Menlo,ui-monospace,monospace;background:var(--code);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.feat{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:12px}
+.feat div{border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.feat b{display:block;color:var(--accent);margin-bottom:2px}
+.feat p{margin:0;font-size:13px;color:var(--muted)}
+.tip{border-left:3px solid var(--accent);padding:4px 12px;margin:10px 0;color:var(--muted);font-size:13px}
+footer{text-align:center;color:var(--muted);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>BrowserX</h1><span class="ver" id="ver"></span><span>왼쪽은 AI 어시스턴트, 오른쪽은 브라우저</span></header>
+  <nav><a href="#features">주요 기능</a><a href="#guide">사용 방법</a><a href="#toolbox">도구 상자</a><a href="#tips">자주 묻는 질문</a></nav>
+
+  <section id="features">
+    <h2>주요 기능</h2>
+    <p>BrowserX는 AI 어시스턴트와 브라우저를 하나의 창에 담았습니다. 하고 싶은 일을 말로 설명하면 어시스턴트가 오른쪽 브라우저에서 직접 클릭하고, 입력하고, 검색해 주며, 그 과정을 처음부터 끝까지 눈으로 확인할 수 있습니다.</p>
+    <div class="feat">
+      <div><b>말로 웹페이지 조작</b><p>웹사이트 열기, 검색, 클릭, 양식 작성, 페이지 내용 읽기까지 한 문장으로 어시스턴트에게 맡기세요.</p></div>
+      <div><b>로그인 상태 유지</b><p>오른쪽 브라우저는 로그인한 사이트를 기억하므로 프로그램을 다시 시작해도 다시 로그인할 필요가 없습니다.</p></div>
+      <div><b>자주 쓰는 작업을 도구로</b><p>반복되는 작업을 도구로 만들어 두면 이후에는 매개변수 몇 개만 입력하고 한 번 클릭으로 실행됩니다. 대화를 거치지 않으며 사용량도 소모되지 않습니다.</p></div>
+      <div><b>한 번 녹화로 자동화</b><p>직접 한 번 조작하면서 녹화하면 어시스턴트가 웹사이트 API를 분석해 안정적이고 빠른 도구로 만들어 줍니다.</p></div>
+      <div><b>초안 보호</b><p>도구를 새로 만들거나 수정할 때는 먼저 초안에 작성하고, 시험 실행에 문제가 없을 때 도구 상자에 넣으므로 사용 중인 버전이 망가지지 않습니다.</p></div>
+      <div><b>도구 공유</b><p>도구를 파일 하나로 내보내 동료에게 보낼 수 있습니다. 가져오기 전에 사용하는 민감한 권한 목록을 보여 주며 소스 코드도 확인할 수 있습니다.</p></div>
+      <div><b>브라우저 그 이상</b><p>어시스턴트는 컴퓨터의 파일을 읽고 쓰거나 명령을 실행할 수도 있어 데이터 정리나 표 내보내기도 가능합니다.</p></div>
+      <div><b>보안 알림</b><p>녹화 시 비밀번호와 토큰은 자동으로 가려지며, 도구를 내보내기 전에 코드에 하드코딩된 비밀번호가 있는지 검사합니다.</p></div>
+    </div>
+  </section>
+
+  <section id="guide">
+    <h2>사용 방법</h2>
+
+    <h3>1. 화면 구성</h3>
+    <ul>
+      <li><b>왼쪽</b>: 어시스턴트와의 대화. 상단에 '새 대화', '기록', '도구 상자'와 ⚙ 설정이 있습니다.</li>
+      <li><b>오른쪽</b>: 브라우저. 상단에 주소 표시줄, 앞으로·뒤로·새로고침, 녹화 버튼, 개발자 도구가 있습니다.</li>
+      <li>가운데 구분선을 드래그해 좌우 영역의 너비를 조절할 수 있습니다. 왼쪽 위의 'BrowserX'를 클릭하면 포털 웹사이트가 열립니다.</li>
+    </ul>
+
+    <h3>2. 어시스턴트와 대화하기</h3>
+    <ul>
+      <li>왼쪽 아래 입력창에 하고 싶은 일을 입력하고 <kbd>Enter</kbd>로 보내며, <kbd>Shift</kbd>+<kbd>Enter</kbd>로 줄을 바꿉니다.</li>
+      <li>예: "baidu.com을 열어서 BrowserX 검색해 줘", "이 페이지의 표를 Excel로 정리해서 바탕화면에 저장해 줘".</li>
+      <li>어시스턴트가 작업 중일 때 '중지'를 클릭하거나 <kbd>Esc</kbd>를 눌러 중단할 수 있습니다.</li>
+      <li>어시스턴트가 선택 질문을 띄우면 항목을 고른 뒤 '제출'을 누르세요. 답하고 싶지 않으면 '건너뛰기'를 누르면 됩니다.</li>
+      <li>로그인, QR 코드 스캔, 인증 코드 입력이 필요한 경우에는 오른쪽 브라우저에서 직접 완료한 뒤 어시스턴트에게 계속하라고 알려 주세요.</li>
+    </ul>
+
+    <h3>3. 새 대화와 기록</h3>
+    <ul>
+      <li>'새 대화'는 왼쪽을 비우고 완전히 새로운 주제를 시작합니다.</li>
+      <li>'기록'에는 이전 대화가 표시되며, 하나를 클릭하면 이어서 대화할 수 있습니다. 이름 변경이나 삭제도 가능합니다.</li>
+    </ul>
+
+    <h3>4. 설정</h3>
+    <ul>
+      <li><b>작업 폴더</b>: 어시스턴트가 파일을 읽고 쓰며 명령을 실행하는 폴더입니다. 변경하면 새 대화가 시작됩니다.</li>
+      <li><b>모델</b>: 언제든 전환할 수 있으며 현재 대화는 그대로 이어집니다.</li>
+      <li><b>권한 모드</b>: '매번 묻기'가 가장 안전하며 모든 작업 전에 확인을 요청합니다. '모두 허용'이 가장 편리하지만 어시스턴트의 작업을 더 이상 확인하지 않으므로 신중하게 사용하세요.</li>
+      <li><b>홈페이지</b>: 시작할 때 오른쪽 브라우저에서 열리는 주소입니다.</li>
+    </ul>
+  </section>
+
+  <section id="toolbox">
+    <h2>도구 상자</h2>
+    <h3>도구 실행</h3>
+    <ol>
+      <li>상단의 '도구 상자'를 클릭하고, 검색창에서 이름이나 설명으로 찾을 수 있습니다.</li>
+      <li>도구를 클릭해 펼치고 매개변수를 입력한 뒤 '실행'을 클릭합니다. 결과는 대화 영역에 표시됩니다.</li>
+      <li>실행에 실패하면 '어시스턴트에게 진단 및 수정 요청'을 클릭하세요. 어시스턴트가 원인을 찾아 도구를 고쳐 줍니다.</li>
+    </ol>
+    <p class="tip">도구는 실행 시 오른쪽 브라우저에서 로그인된 사이트를 사용하므로, 먼저 관련 사이트에 로그인되어 있는지 확인하세요.</p>
+
+    <h3>새 도구 만들기</h3>
+    <ol>
+      <li>도구 상자에서 '새 도구'를 클릭하고 중국어 도구 이름(필수), 영어 도구 이름(비워 두면 자동 지정), 수행할 작업을 입력한 뒤 '만들기 시작'을 클릭합니다.</li>
+      <li>상단에 '도구 제작 중' 배너가 나타납니다. 필요하면 '녹화'를 클릭해 오른쪽 브라우저에서 직접 한 번 조작한 뒤 중지를 클릭하세요. 녹화 결과가 자동으로 어시스턴트에게 전달됩니다.</li>
+      <li>어시스턴트가 작성을 마치면 '시험 실행'으로 테스트합니다. 문제가 있으면 대화로 어떻게 고칠지 알려 주세요.</li>
+      <li>문제가 없으면 '완료'를 클릭합니다. 도구가 도구 상자에 추가되어 현재 대화에서 바로 사용할 수 있습니다. 필요 없으면 '취소'를 클릭하세요.</li>
+    </ol>
+
+    <h3>수정, 내보내기, 가져오기</h3>
+    <ul>
+      <li>도구 카드의 '편집'을 누르면 같은 제작 과정으로 들어가며, 수정 후 '완료'를 클릭해야 기존 도구가 교체됩니다.</li>
+      <li>'내보내기'는 도구를 .js 파일 하나로 저장하며, 다른 사람에게 보낼 수 있습니다.</li>
+      <li>'가져오기'에서 다른 사람이 준 파일을 선택하면 위험 요소와 소스 코드를 먼저 미리 보고, 확인한 뒤에 가져옵니다. 신뢰할 수 있는 사람이 준 도구만 가져오세요.</li>
+    </ul>
+  </section>
+
+  <section id="tips">
+    <h2>자주 묻는 질문</h2>
+    <h3>오른쪽 브라우저가 비어 있거나 '페이지를 열 수 없습니다'가 표시됨</h3>
+    <p>대개 양식 제출 후의 결과 페이지로 되돌아갔거나 네트워크가 바뀐 경우입니다. '이전 페이지로'를 클릭해 다시 진행하거나 '다시 시도'를 클릭하세요.</p>
+    <h3>도구에서 로그인되어 있지 않다고 표시됨</h3>
+    <p>오른쪽 브라우저에서 해당 사이트를 열어 다시 로그인한 뒤 도구를 실행하세요.</p>
+    <h3>녹화 파일은 어디에 있나요</h3>
+    <p>Finder에서 ⌘⇧G를 누르고 <code>~/Library/Application Support/BrowserX/recon</code>을 입력하세요. 업무 데이터가 포함되어 있을 수 있으니 외부로 유출하지 마세요.</p>
+    <h3>도구 파일은 어디에 있나요</h3>
+    <p>Finder에서 ⌘⇧G를 누르고 <code>~/Library/Application Support/BrowserX/tools</code>를 입력하세요. 파일을 직접 수정하지 말고 도구 상자의 '편집'으로 수정하는 것을 권장합니다.</p>
+    <h3>단축키</h3>
+    <ul>
+      <li><kbd>⌘</kbd>+<kbd>,</kbd> 설정 열기　<kbd>⌘</kbd>+<kbd>L</kbd> 주소 표시줄 선택　<kbd>⌘</kbd>+<kbd>R</kbd> 화면 새로고침</li>
+      <li><kbd>Enter</kbd> 보내기　<kbd>Shift</kbd>+<kbd>Enter</kbd> 줄 바꿈　<kbd>Esc</kbd> 어시스턴트 중지</li>
+    </ul>
+  </section>
+
+  <footer>BrowserX <span id="ver2"></span> · www.xingke888.com</footer>
+</div>
+<script src="../../help.js"></script>
+</body>
+</html>

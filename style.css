@@ -226,6 +226,9 @@ body.vdragging iframe{pointer-events:none} /* 拖动经过表单（iframe）时�
 #makingBar #mk_done,#makingBar #mk_rec{padding:0 11px} /* 四个字正好两两一行：完成/制作、保存/修改 */
 #makingBar #mk_done:disabled{padding:0 5px;font-size:11px} /* 「优化并保存中」六个字：三个一行 */
 #makingBar #mk_rec.on::before{margin:0}
+/* 英文等字母文字：单词放不进 50px 的圆，按钮改成随字变宽的椭圆 */
+body.ui-latin #makingBar #mk_rec,body.ui-latin #makingBar #mk_done,body.ui-latin #makingBar #mk_try{width:auto;min-width:50px;height:36px;padding:0 14px;border-radius:18px;flex-direction:row;white-space:nowrap;font-size:12.5px}
+body.ui-latin #makingBar .mk_btns{gap:10px;flex-wrap:wrap}
 /* 录制中：红底白字 + 向外扩散的红色光圈 + 闪烁的白点（横幅和浏览器工具栏的录制按钮一样） */
 @keyframes recglow{0%{box-shadow:0 0 0 0 rgba(217,48,37,.55)}70%{box-shadow:0 0 0 9px rgba(217,48,37,0)}100%{box-shadow:0 0 0 0 rgba(217,48,37,0)}}
 #mk_rec.on,#recBtn.on{background:#d93025!important;border-color:#d93025!important;color:#fff!important;animation:recglow 1.4s ease-out infinite}
@@ -239,7 +242,7 @@ body.vdragging iframe{pointer-events:none} /* 拖动经过表单（iframe）时�
 .tbform .tberr{color:var(--err);font-size:12px}
 
 #msgs{flex:1;min-height:0;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px}
-#msgs:empty::before{content:'试试输入：「打开 baidu.com 搜索 BrowserX」';white-space:pre-wrap;color:var(--muted);font-size:13px;margin:auto 10px;text-align:center}
+#msgs:empty::before{content:var(--empty-hint, '试试输入：「打开 baidu.com 搜索 BrowserX」');white-space:pre-wrap;color:var(--muted);font-size:13px;margin:auto 10px;text-align:center}
 .msg{padding:8px 12px;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%}
 .msg.user{align-self:flex-end;max-width:88%;background:var(--user)}
 .msg.ai{align-self:stretch;padding:2px 2px}
@@ -535,13 +538,11 @@ body.browser-collapsed #browser,body.browser-collapsed #splitter{display:none}
 .ac_urow{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted)}
 .ac_urow b{color:var(--text);font-variant-numeric:tabular-nums}
 .ac_over{font-style:normal;color:var(--err)}
+.ac_credit{align-items:center;margin-top:2px}
+.ac_credit small{margin-left:4px;opacity:.75}
 .ac_meter{height:4px}
 .ac_card.ac_invite{padding:8px 12px}
 .ac_card.ac_invite .primary{height:28px;padding:0 14px;font-size:13px}
-.ac_links{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
-.ac_links .ac_spacer{flex:1}
-.ac_links button.ghost{height:28px;padding:0 10px;font-size:12.5px;border:1px solid var(--line-strong);background:var(--card)}
-.ac_links button.ghost:hover:not(:disabled){border-color:var(--link);color:var(--link)}
 .ac_card h3{margin:0;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.5px}
 .ac_card p{margin:0;font-size:13px}
 .ac_meter{height:6px;border-radius:3px;background:var(--line);overflow:hidden}
@@ -570,6 +571,7 @@ body.browser-collapsed #browser,body.browser-collapsed #splitter{display:none}
 .ac_invite>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .ac_invite b{font-size:14px;color:#9a3d0e}
 .ac_invite span{font-size:12px;color:#7a5a40}
+.ac_invite .ac_inv_rule{font-size:11.5px;opacity:.85}
 .ac_invite em,.inv_head em{font-style:normal;font-weight:700;color:#e0581c}
 .ac_card.ac_invite .primary{flex:none;height:32px;padding:0 16px;background:#e0702c;border-color:#e0702c}
 .modal-box.inv{width:min(460px,92vw);gap:14px;padding:18px}
@@ -586,7 +588,7 @@ body.browser-collapsed #browser,body.browser-collapsed #splitter{display:none}
 .inv_link{display:flex;gap:8px}
 .inv_link input{flex:1;min-width:0;font:12px Menlo,monospace;color:var(--muted)}
 .inv_redeem{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;padding-top:10px;border-top:1px solid var(--line)}
-.inv_redeem .inv_days{width:72px;padding:4px 8px}
+.inv_redeem .inv_days,.inv_redeem .inv_cpts{width:72px;padding:4px 8px}
 .inv_redeem .ghost{border:1px solid var(--line-strong);height:30px;padding:0 14px}
 .inv_msg{font-size:12px;color:var(--muted);width:100%}
 .inv_msg.ok{color:var(--ok)}
@@ -713,3 +715,19 @@ body.making .headtools{display:none}
 .mktested .row{align-items:center;gap:8px}
 /* 换工具时的会话分隔线（见 renderer.js freshChatForTool） */
 #msgs .note.sessionsep{text-align:center;color:var(--muted);font-size:12px;border-top:1px dashed var(--line-strong);padding-top:8px;margin-top:10px}
+
+/* 账号面板底部按钮：两列等宽、大一号；退出登录用红色描边，放在最后（右下角） */
+.ac_links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ac_links button{height:46px;padding:0 4px;font-size:15px;border:1px solid var(--line-strong);border-radius:9px;background:var(--card);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ac_links button{transition:background-color .15s,border-color .15s,box-shadow .15s}
+/* hover：浅一点的底色 + 稍深的边框 + 轻微阴影，文字颜色不变（盖过通用 button.ghost:hover 的「去掉边框」） */
+.ac_links button.ghost:hover:not(:disabled){background:var(--code);border-color:color-mix(in srgb,var(--text) 28%,var(--line-strong));color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.ac_links button.ghost:active:not(:disabled){background:var(--user);box-shadow:none}
+.ac_links .ac_logout{grid-column:-2;color:var(--err);border-color:color-mix(in srgb,var(--err) 40%,transparent)}
+.ac_links button.ghost.ac_logout:hover:not(:disabled){color:var(--err);background:color-mix(in srgb,var(--err) 8%,var(--card));border-color:color-mix(in srgb,var(--err) 65%,transparent);box-shadow:0 1px 3px rgba(0,0,0,.06)}
+/* 额度用完的提示：文字下面一排按钮（充值 / 用积分兑换 / 开通会员） */
+#msgs .note.quota .q_btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+#msgs .note.quota .q_btns button{height:30px;padding:0 14px;font-size:13px}
+body.ui-latin #msgs .note.quota span+span::before{content:' '} /* 英文等：句子之间留空格（中日韩不留） */
+#msgs .note.quota .q_btns button.primary{background:var(--link);border-color:var(--link);color:#fff}
+#msgs .note.quota .q_btns button.primary:hover:not(:disabled){filter:brightness(1.08);color:#fff}

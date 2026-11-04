@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>BrowserX User Guide</title>
+<style>
+:root{--bg:#f5f4ef;--card:#fff;--text:#2b2a26;--muted:#77736a;--line:#e2dfd6;--link:#2563eb;--accent:#c96442;--code:#f1efe8}
+@media (prefers-color-scheme:dark){:root{--bg:#1f1e1c;--card:#2e2d2a;--text:#ecebe6;--muted:#a19d93;--line:#3a3935;--link:#6ea8fe;--accent:#d97757;--code:#1b1a18}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:28px 24px 48px}
+header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+header h1{margin:0;font-family:Optima,"Segoe UI",sans-serif;font-size:30px;font-weight:700;letter-spacing:-.2px}
+header span{color:var(--muted)}
+header .ver{font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:10px;padding:0 8px;line-height:20px}
+header .ver:empty{display:none}
+nav{display:flex;gap:8px;margin:14px 0 22px;flex-wrap:wrap}
+nav a{padding:5px 14px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--text);text-decoration:none;font-size:13px}
+nav a:hover{border-color:var(--link);color:var(--link)}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 22px 18px;margin-bottom:18px;scroll-margin-top:16px}
+h2{font-size:18px;margin:16px 0 4px;color:var(--link)}
+h3{font-size:15px;margin:18px 0 4px}
+p{margin:6px 0}
+ul,ol{margin:6px 0;padding-left:22px}
+li{margin:3px 0}
+b{font-weight:600}
+kbd,code{font:12px Menlo,ui-monospace,monospace;background:var(--code);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.feat{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:12px}
+.feat div{border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.feat b{display:block;color:var(--accent);margin-bottom:2px}
+.feat p{margin:0;font-size:13px;color:var(--muted)}
+.tip{border-left:3px solid var(--accent);padding:4px 12px;margin:10px 0;color:var(--muted);font-size:13px}
+footer{text-align:center;color:var(--muted);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>BrowserX</h1><span class="ver" id="ver"></span><span>Smart assistant on the left, browser on the right</span></header>
+  <nav><a href="#features">Features</a><a href="#guide">User Guide</a><a href="#toolbox">Toolbox</a><a href="#tips">FAQ</a></nav>
+
+  <section id="features">
+    <h2>Features</h2>
+    <p>BrowserX puts a smart assistant and a browser in the same window: just tell it in plain language what you want to do, and the assistant clicks, fills in, and looks things up for you directly in the browser on the right, while you watch every step.</p>
+    <div class="feat">
+      <div><b>Operate web pages by talking</b><p>Open websites, search, click, fill in forms, read page content: hand it all to the assistant in a single sentence.</p></div>
+      <div><b>Stay signed in</b><p>The browser on the right remembers the websites you've signed in to, so you don't need to sign in again even after restarting the app.</p></div>
+      <div><b>Turn common workflows into tools</b><p>Turn repetitive tasks into a tool. Next time, just fill in a few parameters and click once to run it, with no chat and no usage quota spent.</p></div>
+      <div><b>Record once, automate forever</b><p>Perform a task manually once while recording, and the assistant will analyze the website's APIs and build a stable, fast tool for you.</p></div>
+      <div><b>Draft protection</b><p>New or modified tools are written as drafts first and only go into the Toolbox after a successful test run, so the version you're using never gets broken.</p></div>
+      <div><b>Shareable tools</b><p>Tools can be exported as a single file and sent to colleagues. Before importing, the sensitive capabilities a tool uses are listed, and you can view its source code.</p></div>
+      <div><b>More than a browser</b><p>The assistant can also read and write files on your computer and run commands, so it can organize data and export spreadsheets too.</p></div>
+      <div><b>Security reminders</b><p>Passwords and tokens are automatically masked during recording, and before a tool is exported, its code is checked for hard-coded passwords.</p></div>
+    </div>
+  </section>
+
+  <section id="guide">
+    <h2>User Guide</h2>
+
+    <h3>1. Interface</h3>
+    <ul>
+      <li><b>Left side</b>: Your conversation with the assistant. At the top are "New Chat", "History", "Toolbox", and ⚙ Settings.</li>
+      <li><b>Right side</b>: The browser. At the top are the address bar, back/forward/refresh buttons, the record button, and developer tools.</li>
+      <li>Drag the divider in the middle to adjust the width of the two sides. Click "BrowserX" in the top-left corner to open the portal website.</li>
+    </ul>
+
+    <h3>2. Chatting with the assistant</h3>
+    <ul>
+      <li>Type what you want done in the input box at the bottom left. Press <kbd>Enter</kbd> to send and <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line.</li>
+      <li>Examples: "Open baidu.com and search for BrowserX", "Turn the table on this page into an Excel file and save it to the desktop".</li>
+      <li>While the assistant is working, click "Stop" or press <kbd>Esc</kbd> to interrupt it.</li>
+      <li>The assistant may sometimes show a multiple-choice question. Make your selection and click "Submit"; if you'd rather not answer, click "Skip".</li>
+      <li>Wherever you need to sign in, scan a QR code, or enter a verification code, please do it yourself in the browser on the right, then tell the assistant to continue.</li>
+    </ul>
+
+    <h3>3. New chats and history</h3>
+    <ul>
+      <li>"New Chat" clears the left side and starts a brand-new topic.</li>
+      <li>"History" lists your previous conversations. Click one to pick up where you left off; you can also rename or delete them.</li>
+    </ul>
+
+    <h3>4. Settings</h3>
+    <ul>
+      <li><b>Working directory</b>: The folder where the assistant reads and writes files and runs commands. Changing it starts a new chat.</li>
+      <li><b>Model</b>: Can be switched at any time; the current chat will continue.</li>
+      <li><b>Permission mode</b>: "Ask every time" is the safest, as you'll be asked before each action; "Allow all" is the most convenient, but the assistant's actions will no longer require confirmation, so use it with caution.</li>
+      <li><b>Home page</b>: The URL the browser on the right opens at startup.</li>
+    </ul>
+  </section>
+
+  <section id="toolbox">
+    <h2>Toolbox</h2>
+    <h3>Running a tool</h3>
+    <ol>
+      <li>Click "Toolbox" at the top. You can use the search box to find tools by name or description.</li>
+      <li>Click a tool to expand it, fill in the parameters, and click "Run". The results appear in the chat area.</li>
+      <li>If a run fails, click "Ask the assistant to diagnose and fix", and the assistant will find the cause and fix the tool.</li>
+    </ol>
+    <p class="tip">Tools use the websites you're signed in to in the browser on the right, so make sure you're signed in to the relevant websites first.</p>
+
+    <h3>Creating a new tool</h3>
+    <ol>
+      <li>In the Toolbox, click "New Tool", fill in the Chinese tool name (required), the English tool name (optional; assigned automatically if left blank), and what it should do, then click "Start Building".</li>
+      <li>A "Building tool" banner appears at the top. If needed, click "Record", perform the task manually once in the browser on the right, then click Stop. The recording is automatically handed to the assistant.</li>
+      <li>Once the assistant has written the tool, click "Test Run" to test it. If something's wrong, tell the assistant in the chat how to change it.</li>
+      <li>When everything works, click "Done". The tool goes into the Toolbox and can be used right away in the current chat. If you no longer want it, click "Discard".</li>
+    </ol>
+
+    <h3>Editing, exporting, and importing</h3>
+    <ul>
+      <li>"Edit" on a tool card enters the same building process; the original tool is only replaced once you click "Done".</li>
+      <li>"Export" saves the tool as a .js file that you can send to others.</li>
+      <li>"Import" lets you select a file someone gave you. You'll first preview its risks and source code, and it's only imported after you confirm. Only import tools from people you trust.</li>
+    </ul>
+  </section>
+
+  <section id="tips">
+    <h2>FAQ</h2>
+    <h3>The browser on the right is blank or shows "Page not opened"</h3>
+    <p>Most likely you've gone back to a results page after a form submission, or your network changed. Click "Go back" to redo the action, or click "Retry".</p>
+    <h3>A tool says I'm not signed in</h3>
+    <p>Open the corresponding website in the browser on the right, sign in again, then run the tool.</p>
+    <h3>Where are the recording files?</h3>
+    <p>In Finder, press ⌘⇧G and enter <code>~/Library/Application Support/BrowserX/recon</code>. They may contain business data, so please don't share them.</p>
+    <h3>Where are the tool files?</h3>
+    <p>In Finder, press ⌘⇧G and enter <code>~/Library/Application Support/BrowserX/tools</code>. We recommend making changes through "Edit" in the Toolbox rather than editing the files directly.</p>
+    <h3>Keyboard shortcuts</h3>
+    <ul>
+      <li><kbd>⌘</kbd>+<kbd>,</kbd> Open Settings · <kbd>⌘</kbd>+<kbd>L</kbd> Select address bar · <kbd>⌘</kbd>+<kbd>R</kbd> Reload interface</li>
+      <li><kbd>Enter</kbd> Send · <kbd>Shift</kbd>+<kbd>Enter</kbd> New line · <kbd>Esc</kbd> Stop the assistant</li>
+    </ul>
+  </section>
+
+  <footer>BrowserX <span id="ver2"></span> · www.xingke888.com</footer>
+</div>
+<script src="../../help.js"></script>
+</body>
+</html>

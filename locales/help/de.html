@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>BrowserX – Bedienungsanleitung</title>
+<style>
+:root{--bg:#f5f4ef;--card:#fff;--text:#2b2a26;--muted:#77736a;--line:#e2dfd6;--link:#2563eb;--accent:#c96442;--code:#f1efe8}
+@media (prefers-color-scheme:dark){:root{--bg:#1f1e1c;--card:#2e2d2a;--text:#ecebe6;--muted:#a19d93;--line:#3a3935;--link:#6ea8fe;--accent:#d97757;--code:#1b1a18}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.75 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:28px 24px 48px}
+header{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+header h1{margin:0;font-family:Optima,"Segoe UI",sans-serif;font-size:30px;font-weight:700;letter-spacing:-.2px}
+header span{color:var(--muted)}
+header .ver{font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:10px;padding:0 8px;line-height:20px}
+header .ver:empty{display:none}
+nav{display:flex;gap:8px;margin:14px 0 22px;flex-wrap:wrap}
+nav a{padding:5px 14px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--text);text-decoration:none;font-size:13px}
+nav a:hover{border-color:var(--link);color:var(--link)}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 22px 18px;margin-bottom:18px;scroll-margin-top:16px}
+h2{font-size:18px;margin:16px 0 4px;color:var(--link)}
+h3{font-size:15px;margin:18px 0 4px}
+p{margin:6px 0}
+ul,ol{margin:6px 0;padding-left:22px}
+li{margin:3px 0}
+b{font-weight:600}
+kbd,code{font:12px Menlo,ui-monospace,monospace;background:var(--code);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.feat{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:12px}
+.feat div{border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.feat b{display:block;color:var(--accent);margin-bottom:2px}
+.feat p{margin:0;font-size:13px;color:var(--muted)}
+.tip{border-left:3px solid var(--accent);padding:4px 12px;margin:10px 0;color:var(--muted);font-size:13px}
+footer{text-align:center;color:var(--muted);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>BrowserX</h1><span class="ver" id="ver"></span><span>Links der intelligente Assistent, rechts der Browser</span></header>
+  <nav><a href="#features">Funktionen</a><a href="#guide">Bedienungsanleitung</a><a href="#toolbox">Werkzeugkasten</a><a href="#tips">Häufige Fragen</a></nav>
+
+  <section id="features">
+    <h2>Funktionen</h2>
+    <p>BrowserX vereint den intelligenten Assistenten und den Browser in einem Fenster: Sie sagen in Ihren eigenen Worten, was erledigt werden soll, und der Assistent klickt, füllt aus und recherchiert direkt im Browser auf der rechten Seite – und Sie können jederzeit alles mitverfolgen.</p>
+    <div class="feat">
+      <div><b>Webseiten per Sprache bedienen</b><p>Websites öffnen, suchen, klicken, Formulare ausfüllen, Seiteninhalte auslesen – ein Satz genügt, und der Assistent übernimmt.</p></div>
+      <div><b>Anmeldungen bleiben erhalten</b><p>Der Browser rechts merkt sich, bei welchen Websites Sie angemeldet sind – auch nach einem Neustart der App müssen Sie sich nicht erneut anmelden.</p></div>
+      <div><b>Häufige Abläufe als Werkzeuge</b><p>Wiederkehrende Abläufe werden zu einem Werkzeug: Künftig nur ein paar Parameter eingeben, einmal klicken, fertig – ohne Gespräch und ohne Kontingent zu verbrauchen.</p></div>
+      <div><b>Einmal aufzeichnen, automatisieren</b><p>Führen Sie einen Ablauf einmal manuell aus und zeichnen Sie ihn auf. Der Assistent analysiert die Schnittstellen der Website und erstellt daraus ein stabiles, schnelles Werkzeug.</p></div>
+      <div><b>Entwurfsschutz</b><p>Neue oder geänderte Werkzeuge entstehen zunächst als Entwurf und kommen erst nach einem erfolgreichen Testlauf in den Werkzeugkasten – die aktuell genutzte Version bleibt unversehrt.</p></div>
+      <div><b>Werkzeuge teilen</b><p>Werkzeuge lassen sich als Datei exportieren und an Kollegen weitergeben. Vor dem Import werden die verwendeten sensiblen Berechtigungen aufgelistet, und der Quellcode kann eingesehen werden.</p></div>
+      <div><b>Mehr als nur ein Browser</b><p>Der Assistent kann außerdem Dateien auf Ihrem Computer lesen und schreiben, Befehle ausführen, Daten aufbereiten und Tabellen exportieren.</p></div>
+      <div><b>Sicherheitshinweise</b><p>Beim Aufzeichnen werden Passwörter und Tokens automatisch unkenntlich gemacht; vor dem Export eines Werkzeugs wird geprüft, ob der Code fest eingetragene Passwörter enthält.</p></div>
+    </div>
+  </section>
+
+  <section id="guide">
+    <h2>Bedienungsanleitung</h2>
+
+    <h3>1. Oberfläche</h3>
+    <ul>
+      <li><b>Links</b>: das Gespräch mit dem Assistenten. Oben befinden sich „Neues Gespräch“, „Verlauf“, „Werkzeugkasten“ und ⚙ Einstellungen.</li>
+      <li><b>Rechts</b>: der Browser. Oben befinden sich die Adressleiste, Vor/Zurück/Neu laden, die Aufnahmetaste und die Entwicklertools.</li>
+      <li>Die Trennlinie in der Mitte lässt sich verschieben, um die Breite beider Seiten anzupassen. Ein Klick auf „BrowserX“ oben links öffnet die Portal-Website.</li>
+    </ul>
+
+    <h3>2. Mit dem Assistenten sprechen</h3>
+    <ul>
+      <li>Schreiben Sie in das Eingabefeld unten links, was erledigt werden soll. <kbd>Enter</kbd> sendet, <kbd>Shift</kbd>+<kbd>Enter</kbd> fügt einen Zeilenumbruch ein.</li>
+      <li>Beispiele: „Öffne baidu.com und suche nach BrowserX“, „Speichere die Tabelle auf dieser Seite als Excel-Datei auf dem Schreibtisch“.</li>
+      <li>Während der Assistent arbeitet, können Sie mit „Stopp“ oder <kbd>Esc</kbd> abbrechen.</li>
+      <li>Manchmal stellt der Assistent eine Auswahlfrage. Wählen Sie eine Antwort und klicken Sie auf „Senden“; wenn Sie nicht antworten möchten, klicken Sie auf „Überspringen“.</li>
+      <li>Wo eine Anmeldung, ein QR-Code-Scan oder ein Bestätigungscode erforderlich ist, erledigen Sie dies bitte selbst im Browser rechts und sagen dem Assistenten dann, dass er fortfahren soll.</li>
+    </ul>
+
+    <h3>3. Neues Gespräch und Verlauf</h3>
+    <ul>
+      <li>„Neues Gespräch“ leert die linke Seite und beginnt ein völlig neues Thema.</li>
+      <li>„Verlauf“ listet frühere Gespräche auf. Ein Klick auf einen Eintrag setzt das Gespräch fort; Einträge lassen sich auch umbenennen oder löschen.</li>
+    </ul>
+
+    <h3>4. Einstellungen</h3>
+    <ul>
+      <li><b>Arbeitsverzeichnis</b>: der Ordner, in dem der Assistent Dateien liest und schreibt und Befehle ausführt. Nach einem Wechsel beginnt ein neues Gespräch.</li>
+      <li><b>Modell</b>: kann jederzeit gewechselt werden; das aktuelle Gespräch wird fortgesetzt.</li>
+      <li><b>Berechtigungsmodus</b>: „Jedes Mal fragen“ ist am sichersten – vor jeder Aktion werden Sie gefragt. „Alles erlauben“ ist am bequemsten, die Aktionen des Assistenten werden dann aber nicht mehr bestätigt. Bitte mit Bedacht verwenden.</li>
+      <li><b>Startseite</b>: die Adresse, die der Browser rechts beim Start öffnet.</li>
+    </ul>
+  </section>
+
+  <section id="toolbox">
+    <h2>Werkzeugkasten</h2>
+    <h3>Werkzeuge ausführen</h3>
+    <ol>
+      <li>Klicken Sie oben auf „Werkzeugkasten“. Über das Suchfeld können Sie nach Name oder Beschreibung suchen.</li>
+      <li>Klicken Sie auf ein Werkzeug, um es aufzuklappen, füllen Sie die Parameter aus und klicken Sie auf „Ausführen“. Das Ergebnis erscheint im Gesprächsbereich.</li>
+      <li>Schlägt die Ausführung fehl, klicken Sie auf „Assistent diagnostizieren und reparieren lassen“. Der Assistent ermittelt die Ursache und repariert das Werkzeug.</li>
+    </ol>
+    <p class="tip">Werkzeuge nutzen beim Ausführen die Websites, bei denen Sie im Browser rechts angemeldet sind. Stellen Sie daher vorher sicher, dass Sie bei den betreffenden Websites angemeldet sind.</p>
+
+    <h3>Neue Werkzeuge erstellen</h3>
+    <ol>
+      <li>Klicken Sie im Werkzeugkasten auf „Neues Werkzeug“, geben Sie den chinesischen Werkzeugnamen (Pflichtfeld), den englischen Werkzeugnamen (optional, wird sonst automatisch vergeben) und die gewünschte Aufgabe ein und klicken Sie auf „Erstellung starten“.</li>
+      <li>Oben erscheint das Banner „Werkzeug wird erstellt“. Klicken Sie bei Bedarf auf „Aufzeichnen“, führen Sie den Ablauf einmal manuell im Browser rechts aus und klicken Sie dann auf Stopp. Die Aufzeichnung wird automatisch an den Assistenten übergeben.</li>
+      <li>Sobald der Assistent fertig ist, klicken Sie zum Testen auf „Testlauf“. Stimmt etwas nicht, sagen Sie dem Assistenten im Gespräch, was er ändern soll.</li>
+      <li>Wenn alles passt, klicken Sie auf „Fertig“. Das Werkzeug kommt in den Werkzeugkasten und steht im aktuellen Gespräch sofort zur Verfügung. Möchten Sie es nicht behalten, klicken Sie auf „Verwerfen“.</li>
+    </ol>
+
+    <h3>Bearbeiten, Exportieren, Importieren</h3>
+    <ul>
+      <li>„Bearbeiten“ auf der Werkzeugkarte startet denselben Erstellungsablauf. Das ursprüngliche Werkzeug wird erst ersetzt, wenn Sie nach den Änderungen auf „Fertig“ klicken.</li>
+      <li>„Exportieren“ speichert das Werkzeug als .js-Datei, die Sie an andere weitergeben können.</li>
+      <li>Bei „Importieren“ wählen Sie eine Datei aus, die Sie erhalten haben. Zuerst werden Risiken und Quellcode in einer Vorschau angezeigt; importiert wird erst nach Ihrer Bestätigung. Importieren Sie nur Werkzeuge von Personen, denen Sie vertrauen.</li>
+    </ul>
+  </section>
+
+  <section id="tips">
+    <h2>Häufige Fragen</h2>
+    <h3>Der Browser rechts ist leer oder zeigt „Seite konnte nicht geöffnet werden“</h3>
+    <p>Meist wurde zur Ergebnisseite nach einem Formularversand zurückgekehrt oder die Netzwerkverbindung hat gewechselt. Klicken Sie auf „Zurück zur vorherigen Seite“ und wiederholen Sie den Vorgang, oder klicken Sie auf „Erneut versuchen“.</p>
+    <h3>Das Werkzeug meldet, dass Sie nicht angemeldet sind</h3>
+    <p>Öffnen Sie die betreffende Website im Browser rechts, melden Sie sich erneut an und führen Sie das Werkzeug dann noch einmal aus.</p>
+    <h3>Wo befinden sich die Aufzeichnungsdateien?</h3>
+    <p>Drücken Sie im Finder ⌘⇧G und geben Sie <code>~/Library/Application Support/BrowserX/recon</code> ein. Die Dateien können Geschäftsdaten enthalten – bitte nicht weitergeben.</p>
+    <h3>Wo befinden sich die Werkzeugdateien?</h3>
+    <p>Drücken Sie im Finder ⌘⇧G und geben Sie <code>~/Library/Application Support/BrowserX/tools</code> ein. Es wird empfohlen, Änderungen über „Bearbeiten“ im Werkzeugkasten vorzunehmen und die Dateien nicht direkt zu bearbeiten.</p>
+    <h3>Tastenkürzel</h3>
+    <ul>
+      <li><kbd>⌘</kbd>+<kbd>,</kbd> Einstellungen öffnen　<kbd>⌘</kbd>+<kbd>L</kbd> Adressleiste auswählen　<kbd>⌘</kbd>+<kbd>R</kbd> Oberfläche neu laden</li>
+      <li><kbd>Enter</kbd> Senden　<kbd>Shift</kbd>+<kbd>Enter</kbd> Zeilenumbruch　<kbd>Esc</kbd> Assistent stoppen</li>
+    </ul>
+  </section>
+
+  <footer>BrowserX <span id="ver2"></span> · www.xingke888.com</footer>
+</div>
+<script src="../../help.js"></script>
+</body>
+</html>

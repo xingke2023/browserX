@@ -21,9 +21,20 @@ const CB_TAG = 'claude-browser'; // 标记本应用创建的会话，历史列�
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Claude Code 自带的系统提示是英文的，只在中间写一句「用中文」压不住：放在追加提示的最前和最后各一次
-const LANG_PROMPT = `
+// 回复语言（菜单「BrowserX → 语言」/ 设置里选；跟界面语言是同一个设置，默认跟随系统语言，见 main.js replyLang）
+const REPLY_LANGS = {
+  'zh-CN': { name: '简体中文', rule: '始终用简体中文回复用户，包括每一句进度说明（「正在打开……」「我来看一下……」）和最后的总结，用户用别的语言问时也一样。只有代码、命令、网址、文件名、网页上原样的文字保持原文。' },
+  'zh-TW': { name: '繁體中文', rule: '始終用繁體中文（香港 / 台灣用語）回覆用戶，包括每一句進度說明（「正在打開……」「我來看一下……」）和最後的總結，用戶用別的語言問時也一樣。只有程式碼、命令、網址、檔案名、網頁上原樣的文字保持原文。' },
+  en: { name: 'English', rule: 'Always reply to the user in English, including every short progress note ("Opening…", "Let me check…") and the final summary, even if the user writes in another language. Keep code, commands, URLs, file names and text quoted from web pages as they are.' },
+  ja: { name: '日本語', rule: 'ユーザーへの返信は必ず日本語で行ってください。短い進捗の一言（「開いています…」「確認します…」）や最後のまとめも含め、ユーザーが他の言語で書いた場合も同じです。コード、コマンド、URL、ファイル名、Web ページから引用した文字はそのまま残してください。' },
+  fr: { name: 'Français', rule: "Répondez toujours à l'utilisateur en français, y compris chaque courte note de progression (« J'ouvre… », « Je vérifie… ») et le résumé final, même si l'utilisateur écrit dans une autre langue. Laissez tels quels le code, les commandes, les URL, les noms de fichiers et les textes cités depuis les pages web." },
+  de: { name: 'Deutsch', rule: 'Antworte dem Benutzer immer auf Deutsch, auch bei jeder kurzen Fortschrittsmeldung („Ich öffne…“, „Ich prüfe…“) und bei der abschließenden Zusammenfassung, selbst wenn der Benutzer in einer anderen Sprache schreibt. Code, Befehle, URLs, Dateinamen und von Webseiten zitierter Text bleiben unverändert.' },
+  es: { name: 'Español', rule: 'Responde siempre al usuario en español, incluidas cada breve nota de progreso («Abriendo…», «Voy a revisar…») y el resumen final, aunque el usuario escriba en otro idioma. Deja tal cual el código, los comandos, las URL, los nombres de archivo y el texto citado de páginas web.' },
+  ko: { name: '한국어', rule: '사용자에게는 항상 한국어로 답하세요. 짧은 진행 상황 안내(「여는 중…」「확인해 볼게요…」)와 마지막 요약도 포함하며, 사용자가 다른 언어로 써도 마찬가지입니다. 코드, 명령어, URL, 파일 이름, 웹페이지에서 인용한 글은 원문 그대로 두세요.' },
+};
+const LANG_PROMPT = (lang) => `
 # 回复语言（最重要）
-始终用简体中文回复用户，包括每一句进度说明（「正在打开……」「我来看一下……」）和最后的总结，用户用英文问时也一样。只有代码、命令、网址、文件名、网页上原样的文字保持原文。`;
+${(REPLY_LANGS[lang] || REPLY_LANGS['zh-CN']).rule}`;
 
 const BROWSER_PROMPT = `
 # 内置浏览器
@@ -86,7 +97,7 @@ const MAKING_PROMPT = (m) => `
 - 用户的具体指示优先于下面的流程。用户发的每条消息都当成这个工具的要求，落实到草稿里；明显无关的问题简短回答。
 - 网页上的按钮说成「右侧网页上的「提交」」。横幅上有「不做了」按钮，点了草稿会被丢弃，绝不要让用户点它；做好了是点横幅上的「${SAVE_LABEL(m)}」。
 - 横幅提示 making_hint 只在需要用户动手时用（action:true）：扫码登录、输验证码、确认提交、做一遍示范。**只要需要用户动手，就一定同时发 making_hint**（用户可能没在看对话），说清楚在哪里做什么，例如「请在右侧网页扫码登录小红书，扫完说一声」。不要用它报进度（横幅上的进度由程序显示）。
-- 回复简短，全部用中文（包括「正在测试」这类一句话的进度说明）。
+- 回复简短，全部用「回复语言」规定的语言（包括「正在测试」这类一句话的进度说明）。
 
 **流程**
 1. 弄清三件事：网址（拿到就用 navigate 打开；知名网站可直接打开）、要不要自动登录（只有页面需要登录才问：「如果没有登录的话，是否需要自动登录功能？」，需要的话再问登录方式和账号来源）、要做什么（输入什么、得到什么结果）。用户说清楚的不再问；缺的一次问完，能列选项就用 AskUserQuestion；保存格式这类小事按默认做，最后说一句。没弄清之前不写代码、不在网站上乱点。
@@ -508,6 +519,8 @@ class Agent {
   // ------------------------------------------------------------ 浏览器
 
   get wc() { return this.ctx.getWc(); } // 当前网页标签
+
+  replyLang() { const l = this.ctx.replyLang?.(); return REPLY_LANGS[l] ? l : 'zh-CN'; }
 
   // main.js 每新建一个网页标签调一次
   watchPage(wc) {
@@ -1661,11 +1674,14 @@ ${old || '（无）'}`);
 
   // ------------------------------------------------------------ 会话
 
-  // 门户按天限额：今天已经用完就别开会话了，直接告诉用户（对话中途用完时，中转会回 402，Claude Code 直接显示原因）
+  // 门户按天限额：今天已经用完就别开会话了，直接告诉用户。对话中途用完时中转回 402，Claude Code 把它当成一条「API Error: 402 …」助手消息，
+  // loop() 认出来换成同样的 quota 提示
   checkQuota(state) {
     if (state?.stale) return; // 这次没拿到最新的账号状态：不按旧数据拦，交给中转判断
     const c = state?.user?.claude;
-    if (c?.exceeded) throw new Error(`今天的 Claude 额度已用完（${c.used.toLocaleString()} / ${c.limit.toLocaleString()}），明天 0 点恢复。${state.user.member ? '' : '开通会员可以提高额度。'}`);
+    if (!c?.exceeded) return;
+    // quota：界面按账号状态画统一的「额度用完」提示（renderer.js quotaHtml，带充值 / 用积分兑换按钮），这里的文字只是兜底
+    throw Object.assign(new Error('今天的 Claude 额度已用完，明天 0 点恢复。'), { quota: true });
   }
 
   // Claude 怎么登录：设置里填了 API Key 就用它；否则必须登录 BrowserX 账号，请求发到门户服务器，
@@ -1691,6 +1707,8 @@ ${old || '（无）'}`);
     const sdk = await import('@anthropic-ai/claude-agent-sdk');
     this.sdk = sdk;
     const cfg = this.ctx.getCfg();
+    const lang = this.replyLang();
+    this.sessionLang = lang;
     const toolboxPrompt = TOOLBOX_PROMPT(this.ctx.getToolsDir?.() || '') + (this.making ? `\n\n${MAKING_PROMPT(this.making)}` : '');
     // 公众号工具的说明：平时都带（用户随时可能让它发公众号）；制作工具时只有跟公众号 / 微信有关才带，省 token
     const m = this.making;
@@ -1706,7 +1724,7 @@ ${old || '（无）'}`);
         model: cfg.model || undefined,
         cwd: cfg.cwd,
         env,
-        systemPrompt: { type: 'preset', preset: 'claude_code', append: `${LANG_PROMPT}\n${BROWSER_PROMPT}\n\n${wechatPrompt}${toolboxPrompt}\n\n${LANG_PROMPT}` },
+        systemPrompt: { type: 'preset', preset: 'claude_code', append: `${LANG_PROMPT(lang)}\n${BROWSER_PROMPT}\n\n${wechatPrompt}${toolboxPrompt}\n\n${LANG_PROMPT(lang)}` },
         tools: { type: 'preset', preset: 'claude_code' },
         settingSources: ['user', 'project', 'local'], // 与终端里的 Claude Code 一致：读取 CLAUDE.md、权限规则等
         includePartialMessages: true, // 逐字输出：模型边写边发 stream_event，界面一个字一个字显示
@@ -1742,6 +1760,10 @@ ${old || '（无）'}`);
           // 逐字：只转发正文文字的增量；整段写完后照常还会收到完整的 assistant 消息（界面用它定稿）
           const e = m.event;
           if (e?.type === 'content_block_delta' && e.delta?.type === 'text_delta' && e.delta.text) this.ctx.emit({ type: 'text_delta', text: e.delta.text });
+        } else if (m.type === 'assistant' && m.message.content.some((b) => b.type === 'text' && /^API Error: 402\b/.test(b.text))) {
+          // 门户中转说今天的额度用完了：不显示原文（「API Error: 402 …」和随后的「请求出错：unknown」），换成带按钮的统一提示
+          if (!this.quotaHit) this.ctx.emit({ type: 'quota' });
+          this.quotaHit = true;
         } else if (m.type === 'assistant') {
           for (const b of m.message.content) {
             if (b.type === 'text' && b.text.trim()) { this.ctx.emit({ type: 'text', text: b.text }); this.logMaking(`助手：${clip(b.text, 600)}`); this.lastText = b.text; }
@@ -1776,7 +1798,8 @@ ${old || '（无）'}`);
             if (this.making.step >= 5) this.setHint('工具测试通过了：满意就点「保存」，要改直接在下面说', true);
             else if (/[？?]\s*$/.test(last) || /请(你|您)?(回答|告诉|确认|选择|回复)/.test(last)) this.setHint('助手在等你回答：请在下面的对话框回复', true);
           }
-          this.ctx.emit({ type: 'done', error: m.is_error ? (m.result || m.subtype) : null, cost: m.total_cost_usd });
+          this.ctx.emit({ type: 'done', error: m.is_error && !this.quotaHit ? (m.result || m.subtype) : null, quota: this.quotaHit, cost: m.total_cost_usd });
+          this.quotaHit = false;
           // 用户点「完成」→ 助手精简完：直接放进工具箱（点一次就完成；要不要试运行用户自己决定）。
           // 只有新建工具撞名这种会覆盖别的工具的情况，才停下来让用户再点一次确认
           if (autoFinish) this.finishMaking({ force: true }).then((r) => {
@@ -1801,6 +1824,12 @@ ${old || '（无）'}`);
     this.pageNotes = [];
     this.running = true;
     this.ctx.emit({ type: 'user', text: shown });
+    // 对话进行中换了回复语言：系统提示是开会话时定的，这条消息前面带一句新规则（用户看不到），不用开新对话
+    const lang = this.replyLang();
+    if (lang !== this.sessionLang) {
+      text = `（回复语言改了：${REPLY_LANGS[lang].rule}）\n\n${text}`;
+      this.sessionLang = lang;
+    }
     this.inbox.push({ type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null });
   }
 
