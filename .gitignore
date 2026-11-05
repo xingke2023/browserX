@@ -7,3 +7,5 @@ dist/
 # 系统 / 编辑器
 .DS_Store
 *.log
+# Windows 打包时下载的便携版 Git（GitHub Actions 里下载，见 .github/workflows/windows.yml）
+build/win-git/

@@ -1,0 +1,71 @@
+# Windows 测试安装包：在 GitHub 的 Windows 服务器上打包（不签名），装好便携版 Git，跑一次启动自检，安装包作为 Artifact 下载。
+# 手动触发：gh workflow run windows.yml；或推一个 win-v* 标签
+name: Windows build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['win-v*']
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check Claude runtime for Windows
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Recurse -Filter claude.exe node_modules\@anthropic-ai | Select-Object -First 1
+          if (-not $exe) { throw "claude-agent-sdk-win32-x64 not installed" }
+          Write-Host "claude.exe: $($exe.FullName)"
+
+      # Claude Code 在 Windows 上执行命令要用 Git Bash：打一份 Git for Windows 官方便携版进安装包（resources/git）
+      - name: Portable Git
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $rel = Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:GH_TOKEN" } https://api.github.com/repos/git-for-windows/git/releases/latest
+          $asset = $rel.assets | Where-Object { $_.name -match '^PortableGit-.*-64-bit\.7z\.exe$' } | Select-Object -First 1
+          if (-not $asset) { throw "PortableGit asset not found in $($rel.tag_name)" }
+          Write-Host "PortableGit: $($asset.name)"
+          Invoke-WebRequest $asset.browser_download_url -OutFile pg.exe
+          Start-Process -FilePath .\pg.exe -ArgumentList '-o"build\win-git"', '-y' -Wait -NoNewWindow
+          if (-not (Test-Path build\win-git\bin\bash.exe)) { throw "bash.exe missing after extract" }
+          Remove-Item pg.exe
+
+      - name: Build installer
+        run: npx electron-builder --win --x64 --publish never
+
+      # 启动自检（main.js runSmokeTest）：找得到并能执行 claude.exe、Git Bash 能用、系统加密可用
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          $env:CB_SMOKE = "1"
+          $env:CB_SMOKE_OUT = "$PWD\smoke.json"
+          $p = Start-Process -FilePath "dist\win-unpacked\BrowserX.exe" -PassThru -Wait
+          if (Test-Path smoke.json) { Get-Content smoke.json } else { throw "smoke.json not written (exit $($p.ExitCode))" }
+          if ($p.ExitCode -ne 0) { throw "smoke test failed (exit $($p.ExitCode))" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BrowserX-windows-x64
+          path: dist/*.exe
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-result
+          path: smoke.json
+          if-no-files-found: ignore

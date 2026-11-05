@@ -4,6 +4,12 @@ const $ = (id) => document.getElementById(id);
 // 屏幕上出现的中文（文字、title、placeholder、aria-label）自动按当前语言换成译文；助手的回复、用户输入、操作卡片里的代码不动。
 // 换语言（菜单 / 设置）时主进程发 i18n，从记住的原文重新翻
 let TR = (s) => s;
+// 平台：Mac 用 ⌘ / 访达 / 废纸篓，Windows 用 Ctrl / 文件资源管理器 / 回收站
+const IS_MAC = /Mac/i.test(navigator.platform);
+const MOD = IS_MAC ? '⌘' : 'Ctrl+';
+const FINDER = IS_MAC ? '访达' : '文件资源管理器';
+const TRASH = IS_MAC ? '废纸篓' : '回收站';
+const modKey = (e) => (IS_MAC ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey);
 let UI_LANG = 'zh-CN';
 // 大数字：按界面语言的习惯缩写（Intl 的 compact 写法：简体「22万」、日文「22万」、韩文「22만」、英文「220K」…）
 const fmtBig = (n) => (n >= 10000 ? new Intl.NumberFormat(UI_LANG, { notation: 'compact', maximumFractionDigits: 1 }).format(n) : n.toLocaleString(UI_LANG));
@@ -398,7 +404,7 @@ function onAgentEvent(ev) {
         add('note intro', `<div class="nhd">${esc(hd)}</div>${lines}${q ? `<div class="nq">${esc(q)}</div>` : ''}`, true);
       }
       else if (ev.file) { // 下载完成：带一个「在访达中显示」
-        const d = add('note', `${esc(ev.text)} <button class="ghost dl_show">在访达中显示</button>`, true);
+        const d = add('note', `${esc(ev.text)} <button class="ghost dl_show">在${FINDER}中显示</button>`, true);
         d.querySelector('.dl_show').addEventListener('click', () => call('downloads:show', ev.file).catch(() => {}));
       }
       else add('note' + (tone ? ` ${tone}` : ''), `${ev.at != null ? `<span class="tl_at">+${(ev.at / 1000).toFixed(1)}s</span> ` : ''}${esc(ev.text)}`, true);
@@ -543,7 +549,7 @@ $('btnNew').addEventListener('click', async () => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && cur.running) call('agent:stop', cur.id).catch(() => {});
-  if (e.metaKey && e.key === 'l') { e.preventDefault(); $('url').select(); }
+  if (modKey(e) && e.key === 'l') { e.preventDefault(); $('url').select(); }
 });
 
 // ---------------------------------------------------------------- 简单弹窗
@@ -602,8 +608,8 @@ async function renderHistoryList(keepPage) {
   try { items = await call('history:list'); } catch (e) { list.innerHTML = `<div class="hempty">${esc(e.message)}</div>`; return; }
   list.innerHTML = items.length ? `<div class="htop"><span>共 ${items.length} 条 · 最多保留 30 条，最新的在最上面</span><button class="ghost hclear" title="删除全部历史记录（包括正开着的对话）">清空</button></div>` : '<div class="hempty">还没有保存的对话</div>';
   list.querySelector('.hclear')?.addEventListener('click', async () => {
-    if (!(await askConfirm(`清空全部 ${items.length} 条历史记录（包括正开着的对话）？记录会移到废纸篓，需要的话可以从废纸篓拿回来。正开着的对话会结束，聊天内容还在界面上，下一条消息开始新对话。`))) return;
-    try { const n = await call('history:clear'); add('note', `已清空历史记录（${n} 条移到了废纸篓）`, true); renderHistoryList(); }
+    if (!(await askConfirm(`清空全部 ${items.length} 条历史记录（包括正开着的对话）？记录会移到${TRASH}，需要的话可以从${TRASH}拿回来。正开着的对话会结束，聊天内容还在界面上，下一条消息开始新对话。`))) return;
+    try { const n = await call('history:clear'); add('note', `已清空历史记录（${n} 条移到了${TRASH}）`, true); renderHistoryList(); }
     catch (err) { add('note err', `✗ ${esc(err.message)}`, true); }
   });
   for (const it of items) {
@@ -1190,7 +1196,7 @@ function buildDynamicForm(t) {
       return `<div class="${cls}"${f.title ? ` title="${esc(f.title)}"` : ''}><label for="${id}">${esc(f.label || f.key)}${req}</label>${hint}${control}</div>`;
     }).join('');
     const credFields = t.draft ? [] : fields.filter((f) => credKind(f));
-    const credRow = credFields.length ? `<div class="tbf full cred_row"><label class="tbcheck cred_rem" title="只记住账号密码这几栏（其它参数不记），用 macOS 钥匙串加密保存在本机，不会上传，也不会发给助手"><input type="checkbox" class="cred_remember" checked><span>记住账号密码（加密保存在本机）</span></label><button type="button" class="cred_clear"${credState.saved ? '' : ' hidden'}>清除已记住的</button></div>` : '';
+    const credRow = credFields.length ? `<div class="tbf full cred_row"><label class="tbcheck cred_rem" title="只记住账号密码这几栏（其它参数不记），用${IS_MAC ? ' macOS 钥匙串' : '系统'}加密保存在本机，不会上传，也不会发给助手"><input type="checkbox" class="cred_remember" checked><span>记住账号密码（加密保存在本机）</span></label><button type="button" class="cred_clear"${credState.saved ? '' : ' hidden'}>清除已记住的</button></div>` : '';
     form.innerHTML = `${html}${credRow}<div class="tberr" hidden></div><div class="row"><button class="primary tbrun"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z"/></svg><span>${esc(submit)}</span></button>${t.draft ? '' : '<button class="ghost tbsched" title="按表单上现在填的内容，每天 / 工作日定时或每隔一段时间自动运行（BrowserX 开着时）"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>定时运行</span></button>'}</div>`;
     for (const f of fields) {
       if (!f.key || f.kind === 'note' || f.kind === 'section') continue;
@@ -1372,11 +1378,11 @@ async function runToolArgs(t, args, form, fields = []) {
 
 async function deleteTool(t) {
   const label = t.title ? `${t.title}（${t.name}）` : t.name;
-  if (!(await askConfirm(`删除工具 ${label}？\n工具文件和它的制作记录会移到废纸篓，需要时可以从废纸篓恢复。已经发布到插件市场的版本不受影响。`))) return;
+  if (!(await askConfirm(`删除工具 ${label}？\n工具文件和它的制作记录会移到${TRASH}，需要时可以从${TRASH}恢复。已经发布到插件市场的版本不受影响。`))) return;
   try {
     await call('tools:delete', t.name);
     if (tbFavs.has(t.name)) toggleFav(t.name);
-    add('note', `— 已删除工具 ${esc(label)}（在废纸篓里） —`, true);
+    add('note', `— 已删除工具 ${esc(label)}（在${TRASH}里） —`, true);
     renderToolboxList();
   } catch (e) {
     add('note err', `✗ 删除失败：${esc(e.message)}`, true);
@@ -2134,7 +2140,7 @@ $('mk_cancel').addEventListener('click', async () => {
   }
   // 放弃后清空对话（结束当前会话，跟「新对话」一样），只留一条说明
   await clearChat();
-  add('note', `— 已退出${verb}工具 ${esc(label)}${editing ? '，原工具没有改动' : ''}（草稿在废纸篓里） —`, true);
+  add('note', `— 已退出${verb}工具 ${esc(label)}${editing ? '，原工具没有改动' : ''}（草稿在${TRASH}里） —`, true);
   focusInput();
 });
 
@@ -2549,7 +2555,7 @@ function renderTabs() {
   }
   const plus = document.createElement('button');
   plus.className = 'ghost tnew';
-  plus.title = '新标签（⌘T）：新的对话 + 新的浏览器页面';
+  plus.title = `新标签（${MOD}T）：新的对话 + 新的浏览器页面`;
   plus.setAttribute('aria-label', '新标签');
   plus.textContent = '＋';
   plus.addEventListener('click', () => newTab().catch((e) => add('note err', `✗ ${esc(e.message)}`, true)));
@@ -2625,7 +2631,7 @@ api.on('tabs', (list) => {
 });
 
 // ⌘T 新标签、⌘W 关闭当前标签、⌘1…⌘9 切换（⌘9 = 最后一个）、⌘⇧[ / ⌘⇧] 上一个 / 下一个
-document.addEventListener('keydown', (e) => { if (e.metaKey && !e.altKey && !e.ctrlKey) tabKey(e); });
+document.addEventListener('keydown', (e) => { if (modKey(e) && !e.altKey) tabKey(e); });
 api.on('tabkey', (k) => tabKey({ ...k, shiftKey: k.shift, preventDefault() {} })); // 焦点在右侧网页里时由主进程转过来
 function tabKey(e) {
   if (!cur) return;
@@ -2641,6 +2647,7 @@ function tabKey(e) {
 }
 
 call('cfg:get').then((c) => { cfg = c; renderCfg(); });
+if (!IS_MAC) $('mk_cancel').title = `不做这个工具了（草稿移到${TRASH}）`;
 call('app:showSettings').then((show) => { if (!show) $('btnSettings').style.display = 'none'; }); // 正式版不给客户看设置（见 main.js SHOW_SETTINGS）；button.icon 是 display:grid，hidden 属性藏不住
 // 界面刷新（⌘R）后主进程里的标签还在：照原样建回来（对话内容只在界面里，刷新后就没了，跟以前一样）
 call('tabs:list').then(async (list) => {

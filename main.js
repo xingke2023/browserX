@@ -2,7 +2,7 @@ const { app, BrowserWindow, WebContentsView, ipcMain, dialog, safeStorage, Menu,
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { Agent, CB_TAG, scanRisks, BLOCKING_SECRETS } = require('./agent');
+const { Agent, CB_TAG, scanRisks, BLOCKING_SECRETS, nativeClaude, gitBash, shellEnv } = require('./agent');
 const { Account, PORTAL: ACCOUNT_PORTAL } = require('./account');
 const { Updater } = require('./updater');
 const { Scheduler } = require('./scheduler');
@@ -153,7 +153,10 @@ function addPage(t, { view, url, activate = true } = {}) {
   for (const ev of ['did-navigate', 'page-title-updated']) wc.on(ev, () => { if (p === t.page) sendTabs(); });
   // 焦点在右侧网页里时，标签快捷键（⌘T / ⌘W / ⌘1…9 / ⌘⇧[ ]）也要能用：拦下来转给界面处理
   wc.on('before-input-event', (e, i) => {
-    if (i.type !== 'keyDown' || !i.meta || i.alt || i.control) return;
+    // 标签快捷键：Mac 用 ⌘，Windows 用 Ctrl
+    const mod = process.platform === 'darwin' ? i.meta : i.control;
+    const other = process.platform === 'darwin' ? i.control : i.meta;
+    if (i.type !== 'keyDown' || !mod || i.alt || other) return;
     if ((!i.shift && /^([tw1-9])$/.test(i.key)) || (i.shift && /^Bracket(Left|Right)$/.test(i.code))) {
       e.preventDefault();
       send('tabkey', { key: i.key, code: i.code, shift: i.shift });
@@ -416,7 +419,26 @@ const updater = new Updater({ portal: ACCOUNT_PORTAL, getWin: () => win, t: (k, 
 
 function buildMenu() {
   const openInView = (url) => cur?.view.webContents.loadURL(url).catch(() => {});
+  const langMenu = { label: L('语言'), submenu: [
+    { label: L('跟随系统（{0}）', [REPLY_LANG_NAMES[systemReplyLang()]]), type: 'radio', checked: !REPLY_LANG_NAMES[cfg?.replyLang], click: () => setReplyLang('system') },
+    ...Object.entries(REPLY_LANG_NAMES).map(([v, name]) => ({ label: name, type: 'radio', checked: cfg?.replyLang === v, click: () => setReplyLang(v) })),
+  ] };
+  const settingsItems = SHOW_SETTINGS ? [
+    { label: L('设置…'), accelerator: 'CmdOrCtrl+,', click: () => { win?.show(); win?.webContents.executeJavaScript("document.body.classList.contains('side-collapsed') && $('sideToggle').click(); $('settings').hidden && $('btnSettings').click()").catch(() => {}); } },
+    { type: 'separator' },
+  ] : [];
   const template = [
+    ...(process.platform !== 'darwin' ? [{
+      label: 'BrowserX',
+      submenu: [
+        { label: L('检查更新…'), click: () => updater.menuCheck() },
+        { type: 'separator' },
+        langMenu,
+        { type: 'separator' },
+        ...settingsItems,
+        { role: 'quit', label: L('退出 BrowserX') },
+      ],
+    }] : []),
     ...(process.platform === 'darwin' ? [{
       label: 'BrowserX',
       submenu: [
@@ -460,7 +482,8 @@ function buildMenu() {
         { role: 'togglefullscreen', label: L('全屏') },
       ],
     },
-    { role: 'windowMenu', label: L('窗口') },
+    // Windows / Linux 没有应用菜单：检查更新、语言、设置、退出放进「BrowserX」菜单（窗口菜单栏的第一个）
+    ...(process.platform !== 'darwin' ? [] : [{ role: 'windowMenu', label: L('窗口') }]),
     {
       role: 'help',
       label: L('帮助'),
@@ -554,6 +577,26 @@ function watchDownloads() {
 
 // 定时运行工具（见 scheduler.js）：到点后在后台的「定时任务」对话里直接调工具（不经过模型、不花 token），跑完发系统通知，点通知切到那个对话
 let schedTabId = null;
+function runSmokeTest() {
+  const { execFileSync } = require('child_process');
+  const out = { platform: process.platform, arch: process.arch, version: app.getVersion(), packaged: app.isPackaged };
+  const env = shellEnv();
+  try {
+    out.claude = nativeClaude();
+    out.bash = gitBash();
+    if (out.bash) env.CLAUDE_CODE_GIT_BASH_PATH = out.bash;
+    out.claudeVersion = execFileSync(out.claude, ['--version'], { encoding: 'utf8', timeout: 120000, env }).trim();
+  } catch (e) { out.claudeError = String(e.message).slice(0, 500); }
+  if (process.platform === 'win32') {
+    try { out.bashCheck = execFileSync(out.bash || 'bash.exe', ['-lc', 'echo bash-ok && git --version'], { encoding: 'utf8', timeout: 60000, env }).trim(); } catch (e) { out.bashError = String(e.message).slice(0, 500); }
+  }
+  try { out.safeStorage = safeStorage.isEncryptionAvailable(); } catch (e) { out.safeStorage = false; }
+  const ok = !!out.claudeVersion && (process.platform !== 'win32' || /bash-ok/.test(out.bashCheck || '')) && out.safeStorage;
+  out.ok = ok;
+  try { fs.writeFileSync(process.env.CB_SMOKE_OUT || path.join(os.tmpdir(), 'browserx-smoke.json'), JSON.stringify(out, null, 1)); } catch {}
+  app.exit(ok ? 0 : 1);
+}
+
 async function runScheduled(task) {
   let t = tabs.get(schedTabId);
   if (!t) {
@@ -588,6 +631,9 @@ const scheduler = new Scheduler({
 });
 
 app.whenReady().then(async () => {
+  // 打包后的自检（CB_SMOKE=1，GitHub Actions 打完 Windows 包时用）：找得到 Claude 运行时、能执行、Git Bash 能用、系统加密可用，写结果到 CB_SMOKE_OUT 后退出
+  if (process.env.CB_SMOKE) { runSmokeTest(); return; }
+  if (process.platform === 'win32') app.setAppUserModelId('com.browserx.app'); // Windows 系统通知要有这个才会弹出
   useChromeIdentity(); // 要在建第一个网页标签之前
   watchDownloads();
   buildMenu();
@@ -898,7 +944,7 @@ handle('creds:get', (tool) => {
   try { return JSON.parse(safeStorage.decryptString(Buffer.from(enc, 'base64'))); } catch { return null; }
 });
 handle('creds:set', (tool, values) => {
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('这台电脑上没法加密保存（钥匙串不可用），没有记住账号密码');
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('这台电脑上没法加密保存（系统加密不可用），没有记住账号密码');
   const clean = Object.fromEntries(Object.entries(values || {}).filter(([, v]) => typeof v === 'string' && v !== '').map(([k, v]) => [k, v.slice(0, 500)]));
   const all = readCreds();
   const acc = credAccount();

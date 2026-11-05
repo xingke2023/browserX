@@ -211,10 +211,35 @@ function findLines(code, rules) {
 
 // 从 Finder 启动时 PATH 很短，补上常见位置，Bash 工具才能找到 git/node 等命令
 function shellEnv() {
+  const env = { ...process.env };
+  if (process.platform === 'win32') {
+    // Windows：环境变量名不分大小写，一般叫 Path；复制成普通对象后要改原来那个键，不能再加一个 PATH（子进程会拿到两份）
+    const key = Object.keys(env).find((k) => k.toLowerCase() === 'path') || 'Path';
+    const bash = gitBash();
+    const extra = bash ? [path.dirname(bash), path.join(path.dirname(path.dirname(bash)), 'usr', 'bin'), path.join(path.dirname(path.dirname(bash)), 'cmd')] : [];
+    env[key] = [...extra, env[key]].filter(Boolean).join(path.delimiter);
+    return env;
+  }
   const extra = ['/opt/homebrew/bin', '/usr/local/bin', path.join(os.homedir(), '.local/bin')];
   const nvm = path.join(os.homedir(), '.nvm/versions/node');
   if (fs.existsSync(nvm)) for (const v of fs.readdirSync(nvm)) extra.push(path.join(nvm, v, 'bin'));
-  return { ...process.env, PATH: [process.env.PATH, ...extra].filter(Boolean).join(':') };
+  return { ...env, PATH: [env.PATH, ...extra].filter(Boolean).join(path.delimiter) };
+}
+
+// Windows 上 Claude Code 执行命令要用 Git Bash（Git for Windows 的 bash.exe）。安装包里自带一份便携版（resources/git），
+// 开发时用 build/win-git；都没有就找用户自己装的 Git for Windows
+function gitBash() {
+  if (process.platform !== 'win32') return null;
+  const pf = process.env.ProgramFiles || 'C:\\Program Files';
+  const candidates = [
+    process.resourcesPath && path.join(process.resourcesPath, 'git', 'bin', 'bash.exe'),
+    path.join(__dirname, 'build', 'win-git', 'bin', 'bash.exe'),
+    process.env.CLAUDE_CODE_GIT_BASH_PATH,
+    path.join(pf, 'Git', 'bin', 'bash.exe'),
+    path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Git', 'bin', 'bash.exe'),
+    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs', 'Git', 'bin', 'bash.exe'),
+  ].filter(Boolean);
+  return candidates.find((f) => { try { return fs.existsSync(f); } catch { return false; } }) || null;
 }
 
 // SDK 按平台自带 Claude Code 原生程序（optionalDependencies 里的 @anthropic-ai/claude-agent-sdk-<平台>-<架构>）。
@@ -1871,6 +1896,11 @@ ${old || '（无）'}`);
     const cfg = this.ctx.getCfg();
     const env = { ...shellEnv(), CLAUDE_AGENT_SDK_CLIENT_APP: 'claude-browser/0.1.0' };
     for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'CLAUDE_CODE_OAUTH_TOKEN']) delete env[k];
+    if (process.platform === 'win32') {
+      const bash = gitBash();
+      if (!bash) throw new Error('缺少 Git Bash：Claude 在 Windows 上要用它执行命令。请重新安装 BrowserX，或安装 Git for Windows（git-scm.com）后再试');
+      env.CLAUDE_CODE_GIT_BASH_PATH = bash;
+    }
     if (cfg.apiKey) {
       env.ANTHROPIC_API_KEY = cfg.apiKey;
       if (cfg.baseUrl) env.ANTHROPIC_BASE_URL = cfg.baseUrl;
@@ -2164,4 +2194,4 @@ ${old || '（无）'}`);
   }
 }
 
-module.exports = { Agent, CB_TAG, scanRisks, BLOCKING_SECRETS };
+module.exports = { Agent, CB_TAG, scanRisks, BLOCKING_SECRETS, nativeClaude, gitBash, shellEnv };
