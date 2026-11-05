@@ -99,7 +99,8 @@ class Updater {
   async checkVersionOnly() {
     let info;
     try {
-      const res = await fetch(`${this.portal}/api/desktop/version`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15000) });
+      // 带上平台：网站有 Windows 版时，Windows 上拿到的是 Windows 版的版本号和下载地址
+      const res = await fetch(`${this.portal}/api/desktop/version?platform=${process.platform}-${process.arch}`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       info = await res.json();
     } catch (e) {
@@ -111,7 +112,9 @@ class Updater {
       detail: this.t('当前版本 {0}。点「下载新版本」会在浏览器里下载安装包，装好后替换旧版即可。', [app.getVersion()]),
       buttons: [this.t('下载新版本'), this.t('以后再说')],
     });
-    if (r.response === 0) shell.openExternal(`${this.portal}/download`);
+    // 用网站给的下载地址（Windows 版是 /download/windows）；不是网站自己的地址就不打开，退回 /download
+    const url = typeof info.url === 'string' && info.url.startsWith(`${this.portal}/`) ? info.url : `${this.portal}/download`;
+    if (r.response === 0) shell.openExternal(url);
   }
 
   box({ type = 'info', message, detail, buttons = [this.t('好')] }) {

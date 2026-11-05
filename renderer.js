@@ -812,7 +812,7 @@ function drawToolCards() {
     // 标题旁：「有新版本 x」（不能更新时附原因）；「更新」按钮放在操作按钮最后（删除的右边）
     const updHtml = upd ? `<span class="tbupd" title="${esc(upd.changelog ? `更新内容：${upd.changelog}` : '作者发布了新版本')}">有新版本 ${esc(upd.version)}</span>${upd.can_install ? '' : `<span class="tbupdno" title="${esc(upd.reason || '')}">${esc(upd.reason || '暂时不能更新')}</span>`}` : '';
     const updBtn = upd?.can_install ? '<button class="primary tbedit tbupdbtn" title="更新到新版本">更新</button>' : '';
-    d.innerHTML = `<div class="tbhead"><span class="tbname">${i + 1}、${mark(t.title || t.name)}${t.title ? `<small class="tbid">${mark(t.name)}</small>` : ''}${updHtml}</span><span class="tbacts"><button class="ghost tbedit tbfav${tbFavs.has(t.name) ? ' on' : ''}" title="${tbFavs.has(t.name) ? '取消收藏' : '收藏'}">${tbFavs.has(t.name) ? '★' : '☆'}</button>${t.market ? '<span class="tbmk" title="从插件市场安装的别人的工具：不能编辑、导出、发布">市场</span>' : `<button class="ghost tbedit tbeditbtn" title="进入制作模式修改这个工具（改的是草稿，完成前不影响现在的版本）">编辑</button><button class="ghost tbedit tbexport" title="导出成一个 .js 文件，发给别人导入">导出</button>${t.fromMarket ? '' : '<button class="ghost tbedit tbpublish" title="发布到 BrowserX 网站的插件市场（进入审核）">发布</button>'}`}<button class="ghost tbedit tbrepair" title="插件修复：让 Claude 根据最近一次运行（报错、警告、各步耗时）和插件说明、代码，分析出错或很慢的原因">修复</button><button class="ghost tbedit tbdel" title="从工具箱删除（文件移到废纸篓，可以恢复）">删除</button>${updBtn}</span></div>
+    d.innerHTML = `<div class="tbhead"><span class="tbname">${i + 1}、${mark(t.title || t.name)}${t.title ? `<small class="tbid">${mark(t.name)}</small>` : ''}${updHtml}</span><span class="tbacts"><button class="ghost tbedit tbfav${tbFavs.has(t.name) ? ' on' : ''}" title="${tbFavs.has(t.name) ? '取消收藏' : '收藏'}">${tbFavs.has(t.name) ? '★' : '☆'}</button>${t.market ? '<span class="tbmk" title="从插件市场安装的别人的工具：不能编辑、导出、发布">市场</span>' : `<button class="ghost tbedit tbeditbtn" title="进入制作模式修改这个工具（改的是草稿，完成前不影响现在的版本）">编辑</button><button class="ghost tbedit tbexport" title="导出成一个 .js 文件，发给别人导入">导出</button>${t.fromMarket ? '' : '<button class="ghost tbedit tbpublish" title="发布到 BrowserX 网站的插件市场（进入审核）">发布</button>'}`}<button class="ghost tbedit tbrepair" title="插件修复：让 Claude 根据最近一次运行（报错、警告、各步耗时）和插件说明、代码，分析出错或很慢的原因">修复</button><button class="ghost tbedit tbdel" title="从工具箱删除（文件移到${TRASH}，可以恢复）">删除</button>${updBtn}</span></div>
       ${t.description ? `<div class="tbdesc" title="${esc(t.description)}">${mark(t.description)}</div>` : ''}`;
     d.querySelector('.tbeditbtn')?.addEventListener('click', (e) => { e.stopPropagation(); beginMaking({ edit: t.name }); });
     d.querySelector('.tbfav').addEventListener('click', (e) => {
@@ -2546,7 +2546,7 @@ function renderTabs() {
     d.setAttribute('aria-selected', t === cur);
     d.tabIndex = 0;
     d.title = [tabLabel(t), t.pageTitle && t.pageTitle !== tabLabel(t) ? t.pageTitle : '', t.url].filter(Boolean).join('\n');
-    d.innerHTML = `<span class="tdot" aria-hidden="true"></span><span class="tl">${esc(tabLabel(t))}</span>${many ? '<button class="tx" title="关闭标签（⌘W）" aria-label="关闭标签">×</button>' : ''}`;
+    d.innerHTML = `<span class="tdot" aria-hidden="true"></span><span class="tl">${esc(tabLabel(t))}</span>${many ? `<button class="tx" title="关闭标签（${MOD}W）" aria-label="关闭标签">×</button>` : ''}`;
     d.addEventListener('click', (e) => { if (!e.target.closest('.tx')) selectTab(t.id); });
     d.addEventListener('keydown', (e) => { if (e.key === 'Enter') selectTab(t.id); });
     d.addEventListener('auxclick', (e) => { if (e.button === 1 && many) closeTab(t.id); }); // 中键关闭

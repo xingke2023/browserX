@@ -62,7 +62,7 @@ body.dragging{cursor:col-resize;user-select:none}
 .headtools button:active:not(:disabled){transform:translateY(1px);background:var(--btn-lo);
   box-shadow:inset 0 2px 4px var(--btn-shadow),0 0 0 transparent}
 .cwdrow{display:flex;align-items:center;gap:6px;min-width:0}
-.cwdrow #cwd{flex:1;min-width:0;font:12px Menlo,monospace;background:var(--code);border:1px solid var(--line-strong);border-radius:8px;padding:0 10px;line-height:32px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cwdrow #cwd{flex:1;min-width:0;font:12px Menlo,Consolas,monospace;background:var(--code);border:1px solid var(--line-strong);border-radius:8px;padding:0 10px;line-height:32px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cwdrow button{flex:none;padding:0 14px}
 body.bypass #settings #mode{border-color:var(--warn);color:var(--warn);background:var(--warn-weak)}
 
@@ -147,7 +147,7 @@ body.vdragging iframe{pointer-events:none} /* 拖动经过表单（iframe）时�
 .tbimp-risks .risk{color:var(--warn)}
 .tbimp-ow{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px}
 .tbimp details{margin-top:8px;font-size:12px}
-.tbimp-code{max-height:320px;overflow:auto;font:11px/1.5 Menlo,monospace;background:var(--code);padding:8px;border-radius:6px;white-space:pre}
+.tbimp-code{max-height:320px;overflow:auto;font:11px/1.5 Menlo,Consolas,monospace;background:var(--code);padding:8px;border-radius:6px;white-space:pre}
 .tbimp .row{display:flex;gap:6px;margin-top:10px}
 
 /* 制作工具模式横幅（见 renderer.js renderMaking） */
@@ -192,7 +192,7 @@ body.vdragging iframe{pointer-events:none} /* 拖动经过表单（iframe）时�
 #makingBar #mk_tested{color:#dcfce7;font-size:11.5px;border:1px solid rgba(220,252,231,.45);background:rgba(34,197,94,.22);border-radius:10px;padding:1px 8px}
 #makingBar #mk_tested:empty{display:none}
 /* RUNNING：红色方块底，白色粗体字 + 白色转圈，放在第一行「工具制作模式」和「退出」之间（紧挨退出左边） */
-#mk_busy{position:absolute;top:3px;right:76px;height:25px;box-sizing:border-box;display:flex;align-items:center;gap:6px;padding:0 9px;border-radius:0;background:#d93025;font:12px/1 Menlo,ui-monospace,monospace;letter-spacing:.06em;color:#fff}
+#mk_busy{position:absolute;top:3px;right:76px;height:25px;box-sizing:border-box;display:flex;align-items:center;gap:6px;padding:0 9px;border-radius:0;background:#d93025;font:12px/1 Menlo,Consolas,ui-monospace,monospace;letter-spacing:.06em;color:#fff}
 #makingBar #mk_busy{font-weight:700!important} /* 白色粗体 */
 #mk_busy::before{content:'';width:10px;height:10px;border-radius:50%;border:2px solid #fff;border-right-color:transparent;animation:tabspin .8s linear infinite}
 #mk_busy[hidden]{display:none}
@@ -254,8 +254,8 @@ body.ui-latin #makingBar .mk_btns{gap:10px;flex-wrap:wrap}
 #msgs .msg_editbox:focus{border-color:var(--link)}
 #msgs .msg_editbar{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
 .msg.ai{align-self:stretch;padding:2px 2px}
-.msg.ai code,.perm code{font:12px Menlo,monospace;background:var(--code);padding:1px 4px;border-radius:4px}
-.msg.ai pre{font:12px/1.5 Menlo,monospace;background:var(--code);padding:8px 10px;border-radius:8px;overflow-x:auto;white-space:pre;margin:6px 0}
+.msg.ai code,.perm code{font:12px Menlo,Consolas,monospace;background:var(--code);padding:1px 4px;border-radius:4px}
+.msg.ai pre{font:12px/1.5 Menlo,Consolas,monospace;background:var(--code);padding:8px 10px;border-radius:8px;overflow-x:auto;white-space:pre;margin:6px 0}
 .msg.ai .h{display:block;margin-top:4px}
 .msg.ai u{text-decoration-color:var(--accent)}
 
@@ -264,11 +264,11 @@ body.ui-latin #makingBar .mk_btns{gap:10px;flex-wrap:wrap}
 .tool summary::-webkit-details-marker{display:none}
 .tool .ti{color:var(--accent);font-weight:700;flex:none}
 .tool .tn{font-weight:600;flex:none}
-.tool .ta{color:var(--muted);font-family:Menlo,monospace;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.tool .ta{color:var(--muted);font-family:Menlo,Consolas,monospace;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
 .tool .ts{flex:none;font-size:11px}
 .tool.err .ts{color:var(--err)}
 .tool:not(.ok):not(.err) .ti{animation:pulse 1.2s ease-in-out infinite}
-.tool pre{margin:0;padding:8px 10px;border-top:1px solid var(--line);font:11px/1.5 Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow-y:auto}
+.tool pre{margin:0;padding:8px 10px;border-top:1px solid var(--line);font:11px/1.5 Menlo,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow-y:auto}
 .tool .tout{color:var(--muted)}
 .tool.err .tout{color:var(--err)}
 @keyframes pulse{50%{opacity:.3}}
@@ -280,7 +280,7 @@ body.ui-latin #makingBar .mk_btns{gap:10px;flex-wrap:wrap}
 .perm.warn{border-color:var(--warn);background:var(--warn-weak)}
 .perm .ph{font-size:12px;font-weight:600;color:var(--accent)}
 .perm.warn .ph{color:var(--warn)}
-.perm pre{margin:0;font:12px/1.5 Menlo,monospace;background:var(--card);padding:6px 8px;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow-y:auto}
+.perm pre{margin:0;font:12px/1.5 Menlo,Consolas,monospace;background:var(--card);padding:6px 8px;border-radius:6px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow-y:auto}
 .perm details summary{font-size:12px;color:var(--muted);cursor:pointer}
 .perm .pb{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .perm .pb button{font-size:12px;padding:4px 10px}
@@ -311,7 +311,7 @@ body.ui-latin #makingBar .mk_btns{gap:10px;flex-wrap:wrap}
 .qopt.sel b{color:var(--link)}
 .qother-in{font-size:13px}
 .qother-in[hidden]{display:none}
-.qprev{margin:0;font:12px/1.5 Menlo,monospace;background:var(--card);padding:6px 8px;border-radius:6px;white-space:pre-wrap;max-height:220px;overflow:auto}
+.qprev{margin:0;font:12px/1.5 Menlo,Consolas,monospace;background:var(--card);padding:6px 8px;border-radius:6px;white-space:pre-wrap;max-height:220px;overflow:auto}
 .qprev[hidden]{display:none}
 .qcard.done{opacity:1}
 .qcard.done>:not(.pb){opacity:.55} /* 答完：问题和选项变淡，底下的答案保持清楚 */
@@ -449,7 +449,7 @@ body.waiting #status::before{display:none}
 .tbitem:has(.tbform):hover,.tbnew:hover,.tbimp:hover{border-color:var(--line);box-shadow:none}
 .tbitem .tbhead{display:flex;align-items:center;gap:8px;min-width:0}
 .tbitem .tbname{flex:1;min-width:0;font-size:16px;font-weight:600;color:var(--link);overflow-wrap:anywhere}
-.tbitem .tbid{margin-left:8px;font-size:12px;font-weight:400;color:var(--muted);font-family:Menlo,ui-monospace,monospace}
+.tbitem .tbid{margin-left:8px;font-size:12px;font-weight:400;color:var(--muted);font-family:Menlo,Consolas,ui-monospace,monospace}
 .tbitem .tbacts{flex:none;display:flex;gap:4px}
 .tbitem .tbedit{height:26px;padding:0 10px;font-size:12px;border:1px solid var(--line-strong);background:var(--card)}
 .tbitem .tbdel:hover:not(:disabled){color:var(--err);border-color:var(--err)} /* 删除：悬停变红 */
@@ -594,7 +594,7 @@ body.browser-collapsed #browser,body.browser-collapsed #splitter{display:none}
 .inv_stats span{flex:1;display:flex;flex-direction:column;align-items:center;padding:6px 0;border-radius:8px;background:var(--user);font-size:11px;color:var(--muted)}
 .inv_stats b{font-size:17px;color:var(--text)}
 .inv_link{display:flex;gap:8px}
-.inv_link input{flex:1;min-width:0;font:12px Menlo,monospace;color:var(--muted)}
+.inv_link input{flex:1;min-width:0;font:12px Menlo,Consolas,monospace;color:var(--muted)}
 .inv_redeem{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;padding-top:10px;border-top:1px solid var(--line)}
 .inv_redeem .inv_days,.inv_redeem .inv_cpts{width:72px;padding:4px 8px}
 .inv_redeem .ghost{border:1px solid var(--line-strong);height:30px;padding:0 14px}
@@ -874,17 +874,17 @@ p.tbimp-ow{display:block;margin:8px 0 0;padding:8px 10px;border-radius:8px;backg
 .tbitem:not(.tbnew)>.tbform.tbdyn>.tbf.cred_row:has(>label.cred_rem){flex-direction:row;justify-content:flex-start;align-items:center;gap:10px}
 
 /* 插件运行耗时（renderer renderProfile）：进度文字前的时间、结果下面的汇总 */
-#msgs .tl_at{font:11px Menlo,monospace;color:var(--muted);margin-right:2px}
+#msgs .tl_at{font:11px Menlo,Consolas,monospace;color:var(--muted);margin-right:2px}
 #msgs .note.tprof{color:var(--muted);font-size:12px}
 #msgs .note.tprof summary{cursor:pointer;list-style:none}
 #msgs .note.tprof summary::-webkit-details-marker{display:none}
 #msgs .note.tprof details[open] summary{margin-bottom:4px}
 #msgs .tp_h{margin:6px 0 2px;font-weight:600;color:var(--text)}
 #msgs .tp_r{display:flex;gap:8px;align-items:baseline;padding:1px 0}
-#msgs .tp_at{font:11px Menlo,monospace;min-width:52px}
+#msgs .tp_at{font:11px Menlo,Consolas,monospace;min-width:52px}
 #msgs .tp_t{flex:1;min-width:0;overflow-wrap:anywhere;color:var(--text)}
-#msgs .tp_t code{font:11px Menlo,monospace;background:var(--code);padding:0 4px;border-radius:4px}
-#msgs .tp_ms{font:11px Menlo,monospace;white-space:nowrap}
+#msgs .tp_t code{font:11px Menlo,Consolas,monospace;background:var(--code);padding:0 4px;border-radius:4px}
+#msgs .tp_ms{font:11px Menlo,Consolas,monospace;white-space:nowrap}
 #msgs .tp_act{margin-top:6px}
 .sch_prof{font-size:12px;color:var(--muted);margin-top:2px}
 .sch_prof .sch_why{margin-left:6px;padding:1px 8px;font-size:12px}

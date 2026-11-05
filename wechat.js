@@ -195,7 +195,7 @@ class WeChat {
       const b = blocks[i];
       this.log(`  [${i + 1}/${blocks.length}] ${b.kind === 'html' ? '正文' : '图片'}`);
       if (b.kind === 'html') await this.pasteHtml(b.html);
-      else if (!(await this.pasteImage(b.file))) problems.push(`图片 ${b.file.split('/').pop()} 上传失败`);
+      else if (!(await this.pasteImage(b.file))) problems.push(`图片 ${b.file.split(/[\\/]/).pop()} 上传失败`);
     }
 
     if (art.digest) await this.typeInto('#js_description', art.digest.slice(0, 120));

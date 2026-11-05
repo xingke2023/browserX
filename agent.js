@@ -34,7 +34,7 @@ const CDP_DENY = /^(Network\.(getCookies|getAllCookies)|Storage\.getCookies|Targ
 const TOOL_NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const BUILTIN_TOOLS = new Set(['screenshot', 'page_info', 'navigate', 'click', 'type', 'press', 'scroll', 'eval', 'cdp', 'rec_start', 'rec_mark', 'rec_stop', 'wx_fill', 'wx_save_draft', 'wx_publish', 'toolbox_new', 'toolbox_edit', 'tab_list', 'tab_new', 'tab_switch', 'tab_close', 'downloads', 'upload_file']);
 // Bash 里像是在写文件的命令（配合工具目录路径判断，见 protectToolFiles）
-const BASH_WRITE = /\btee\b|\bsed\s+(-\w*\s+)*-i|\bcp\b|\bmv\b|\brm\b|\bln\b|\btruncate\b|\bdd\b|\bperl\b|\bpython3?\b|\bnode\b|\bruby\b|\binstall\b|\brsync\b/;
+const BASH_WRITE = /\btee\b|\bsed\s+(-\w*\s+)*-i|\bcp\b|\bmv\b|\brm\b|\bln\b|\btruncate\b|\bdd\b|\bperl\b|\bpython3?\b|\bnode\b|\bruby\b|\binstall\b|\brsync\b|\bx?copy\b|\brobocopy\b|\bmove\b|\bdel\b|\berase\b|\bren(ame)?\b|\b(Set|Add|Clear)-Content\b|\bOut-File\b|\b(Copy|Move|Remove|Rename|New)-Item\b|\bWriteAll(Text|Bytes|Lines)\b|\bpowershell\b|\bpwsh\b/i;
 const HISTORY_MAX = 30; // 历史记录最多保留几条（最新的在前，多的自动删）
 const CB_TAG = 'claude-browser'; // 标记本应用创建的会话，历史列表/自动清理只认这个标签，不动用户在终端里的会话
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -485,7 +485,7 @@ class Agent {
     if (!raw.length) throw new Error('这条历史记录读不出完整对话内容（可能已损坏或是异常中断的空会话），为避免进一步损坏没有尝试恢复实时对话，建议在历史列表里把它删除');
     // 保险起见还是备份一份原始文件再尝试恢复，即使有内容也可能失败并被原生进程清空
     try {
-      const file = path.join(os.homedir(), '.claude', 'projects', dir.replace(/[/\\]/g, '-'), `${sessionId}.jsonl`);
+      const file = path.join(os.homedir(), '.claude', 'projects', dir.replace(/[^a-zA-Z0-9]/g, '-'), `${sessionId}.jsonl`); // 跟 Claude Code 的目录名规则一致（Windows 的 C: 也换成 -）
       if (fs.existsSync(file)) fs.copyFileSync(file, `${file}.bak`);
     } catch { /* 备份失败不影响主流程，只是少一层保险 */ }
     const events = [];
@@ -908,7 +908,7 @@ class Agent {
       tool('type', '在当前焦点处输入文字（先 click 输入框）。', { text: z.string() },
         wrap((a) => this.doType(a.text).then(ok))),
 
-      tool('press', '按键，例如 Enter、Backspace、Tab、Escape、ArrowDown；modifiers 可含 meta/shift/alt/control（如全选：key=a, modifiers=[meta]）。',
+      tool('press', `按键，例如 Enter、Backspace、Tab、Escape、ArrowDown；modifiers 可含 meta/shift/alt/control（如全选：key=a, modifiers=[${process.platform === 'darwin' ? 'meta' : 'control'}]）。`,
         { key: z.string(), modifiers: z.array(z.enum(['meta', 'shift', 'alt', 'control'])).optional() },
         wrap((a) => this.doPress(a.key, a.modifiers || []).then(ok))),
 
@@ -1537,20 +1537,27 @@ ${m.editing ? '请问您想改什么、改成什么样？' : '请问您想在哪
     const dir = this.ctx.getToolsDir?.();
     if (!dir || input.hook_event_name !== 'PreToolUse') return {};
     const drafts = path.join(dir, '_drafts') + path.sep;
+    const win = process.platform === 'win32';
+    // Windows 的路径不分大小写，Mac 默认的磁盘格式（APFS）也不分：按小写比，免得换个大小写就绕过去
+    const low = (p) => (process.platform === 'linux' ? p : p.toLowerCase());
     const ti = input.tool_input || {};
     let hit = null;
     if (['Edit', 'Write', 'MultiEdit', 'NotebookEdit'].includes(input.tool_name)) {
       const f = ti.file_path || ti.notebook_path;
       if (f) {
-        const abs = path.resolve(this.ctx.getCfg().cwd || os.homedir(), String(f).replace(/^~(?=\/)/, os.homedir()));
-        if (abs.startsWith(dir + path.sep) && !abs.startsWith(drafts)) hit = abs;
+        let s = String(f).replace(/^~(?=[/\\])/, os.homedir());
+        if (win) s = s.replace(/^\/([a-z])(?=\/)/i, '$1:'); // Git Bash 的写法 /c/Users/… = C:/Users/…
+        const abs = path.resolve(this.ctx.getCfg().cwd || os.homedir(), s);
+        if (low(abs).startsWith(low(dir + path.sep)) && !low(abs).startsWith(low(drafts))) hit = abs;
       }
-    } else if (input.tool_name === 'Bash') {
+    } else if (input.tool_name === 'Bash' || input.tool_name === 'PowerShell') {
       const cmd = String(ti.command || '').replace(/\\ /g, ' ');
-      const tail = path.relative(os.homedir(), dir); // Library/Application Support/BrowserX/tools
-      const t = `${tail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?!_drafts/)\\S`;
-      // 重定向写进正式工具文件，或者「像写文件的命令 + 出现正式工具路径」（2>/dev/null 之类的只读命令不算）
-      if (new RegExp(`>{1,2}\\s*["']?[^\\s"'>]*${t}`).test(cmd) || (new RegExp(t).test(cmd) && BASH_WRITE.test(cmd))) hit = '（Bash 命令）';
+      // 只认工具目录的最后两级（BrowserX/tools）：~/…、$HOME、%APPDATA%、/c/Users/… 各种写法都对得上；/ 和 \ 都算分隔符
+      const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const S = '[/\\\\]+';
+      const t = `${esc(path.basename(path.dirname(dir)))}${S}${esc(path.basename(dir))}${S}(?!_drafts[/\\\\])\\S`;
+      // 重定向写进正式工具文件（引号里的路径可以带空格），或者「像写文件的命令 + 出现正式工具路径」（2>/dev/null 之类的只读命令不算）
+      if (new RegExp(`>{1,2}\\s*(["'][^"'\\n]*|[^\\s"'>|;&]*)${t}`, 'i').test(cmd) || (new RegExp(t, 'i').test(cmd) && BASH_WRITE.test(cmd))) hit = `（${input.tool_name} 命令）`;
     }
     if (!hit) return {};
     return {
@@ -1958,7 +1965,7 @@ ${old || '（无）'}`);
         allowDangerouslySkipPermissions: true, // 允许在界面上切换到「全部允许」
         canUseTool: (name, input, opts) => this.canUseTool(name, input, opts),
         hooks: { PreToolUse: [
-          { matcher: 'Edit|Write|MultiEdit|NotebookEdit|Bash', hooks: [async (input) => this.protectToolFiles(input)] },
+          { matcher: 'Edit|Write|MultiEdit|NotebookEdit|Bash|PowerShell', hooks: [async (input) => this.protectToolFiles(input)] },
           // 等用户作答，可能要很久：超时给一天（默认超时一到就当没答）
           { matcher: 'AskUserQuestion', timeout: 86400, hooks: [async (input, _id, { signal }) => this.questionHook(input, signal)] },
         ],

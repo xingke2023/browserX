@@ -10,9 +10,20 @@ BrowserX (npm package `browserx`, formerly "Claude Browser") is an Electron desk
 
 ```
 npm start            # run the app (electron .)
-npm run debug         # run with CB_DEBUG_PORT=9334 (adds --remote-debugging-port, useful for driving the renderer over CDP from outside)
+npm run debug         # electron . --remote-debugging-port=9334 (works in cmd.exe too; CB_DEBUG_PORT still works), for driving the renderer over CDP from outside
 APPLE_KEYCHAIN_PROFILE=browserx-notary npx electron-builder --mac   # → dist/BrowserX-<version>-arm64.dmg, signed + notarized (no npm script wraps this)
+npx electron-builder --win --x64 --publish never                    # → dist/BrowserX-Setup-<version>-x64.exe (NSIS, unsigned); needs build/win-git, see Windows notes
 ```
+
+**Windows notes:**
+- The installer bundles a Git for Windows tree from `build/win-git` as `resources/git` (gitignored). Claude Code on Windows runs its Bash tool through Git Bash, so `gitBash()` looks there first, then `build/win-git`, `CLAUDE_CODE_GIT_BASH_PATH` and the usual Git install folders, and `claudeEnv()` passes the result as `CLAUDE_CODE_GIT_BASH_PATH`. CI (`.github/workflows/windows.yml`, manual or a `win-v*` tag) downloads the official PortableGit. For a local build, copying an installed `C:\Program Files\Git` into `build/win-git` works too.
+- `CB_SMOKE=1` (optionally `CB_SMOKE_OUT=<file>`) makes the app check that it can run `claude.exe --version`, Git Bash and `safeStorage`, write the result as JSON and exit. CI runs it on `dist/win-unpacked`.
+- User data is `%APPDATA%\BrowserX`. `safeStorage` uses DPAPI there instead of the keychain. `shell.trashItem` goes to the Recycle Bin.
+- No auto-update on Windows: `updater.enabled` is Mac-only, so 检查更新… only compares versions. It asks `/api/desktop/version?platform=<platform>-<arch>` and opens the returned `url` (only if it is on the portal, else `<portal>/download`).
+- **Portal side (added 2026-11-05, edited directly on the server, not committed; backup and patch in `~/bak/browserx-windows-20261105-152500/` on the server):** `BROWSERX_WINDOWS_FILE` in the portal `.env` names the installer in `storage/app/private/downloads/`, and `BROWSERX_WINDOWS_VERSION` defaults to `BROWSERX_VERSION`. With it set, `/download` serves the `.exe` to browsers whose User-Agent contains `Windows` and the dmg to everyone else. `/download/mac` and `/download/windows` pick explicitly. The version API returns the Windows version and `/download/windows` for `platform=win32…`. The home page and the member panel show both downloads. Without it everything behaves as before. Windows release: build, upload the exe to `storage/app/private/downloads/`, then set `BROWSERX_WINDOWS_FILE` (and `BROWSERX_WINDOWS_VERSION` if it differs from the Mac version).
+- Platform wording: the renderer uses `IS_MAC` / `MOD` / `FINDER` / `TRASH` (Ctrl+, 文件资源管理器, 回收站 on Windows). Locale keys carry a `{0}` for these, as in `关闭标签（{0}W）`. `help.js` rewrites the help page on non-Mac at load: `⌘` → Ctrl, and the two `~/Library/Application Support/BrowserX/…` paragraphs become File Explorer + `%APPDATA%\BrowserX\…` with a per-language phrase. The help HTML files themselves stay Mac-worded.
+- `protectToolFiles()` compares paths case-insensitively (Windows and default APFS). It also accepts Git Bash `/c/…` paths for Edit/Write. For Bash and PowerShell commands it matches only the last two segments `BrowserX/tools/` with either separator, so `~`, `$HOME`, `%APPDATA%` and `$env:APPDATA` forms are all caught. `BASH_WRITE` includes cmd and PowerShell write commands.
+- Session paths under `~/.claude/projects/` use Claude Code's rule, every non-alphanumeric character → `-`, so `C:\Users\x\BrowserX` becomes `C--Users-x-BrowserX`.
 
 There is no lint config and no test suite in this package.
 

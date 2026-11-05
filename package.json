@@ -8,7 +8,7 @@
     "prestart": "node scripts/dev-app-name.js",
     "start": "electron .",
     "predebug": "node scripts/dev-app-name.js",
-    "debug": "CB_DEBUG_PORT=9334 electron ."
+    "debug": "electron . --remote-debugging-port=9334"
   },
   "build": {
     "appId": "com.browserx.app",

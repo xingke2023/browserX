@@ -12,9 +12,16 @@
 2. 第一次打开时系统会提示「无法验证开发者」（应用没有用开发者证书签名和公证）：打开「系统设置 → 隐私与安全性」，在下方点「仍要打开」。
 3. 安装包已内置运行所需的全部组件，不需要安装 Node 或其他依赖。
 
+**Windows**：下载 `BrowserX-Setup-<版本>-x64.exe`，双击安装。
+
+1. 安装包没有代码签名，Windows 可能提示「Windows 已保护你的电脑」：点「更多信息」，再点「仍要运行」。
+2. 安装包里自带 Claude 需要的 Git Bash，不用另外安装 Git。
+3. Windows 版没有自动更新，有新版本时用菜单「BrowserX → 检查更新…」，再下载安装。
+
 **要求**
 
-- 仅支持 Apple 芯片的 Mac（M1 及以后）。
+- Mac：Apple 芯片（M1 及以后）。
+- Windows：Windows 10 / 11，64 位（x64）。
 - 对话需要账号：在设置里填写 API Key，或本机已登录过 Claude Code。
 
 ## 主要功能
@@ -51,6 +58,16 @@ CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac
 - 打包峰值约需 1.3 GB 磁盘空间。
 - 版本号改 `package.json` 里的 `version`。
 
+Windows 安装包：
+
+```bash
+npx electron-builder --win --x64 --publish never
+# 输出：dist/BrowserX-Setup-<版本>-x64.exe
+```
+
+- 打包前要把 Git for Windows 放进 `build/win-git`（安装包会带上它）。GitHub Actions 的 Windows build 会自动下载官方便携版，手动触发或推一个 `win-v*` 标签即可；本机打包可以直接复制 `C:\Program Files\Git`。
+- 安装包不签名。
+
 ### 目录结构
 
 ```
@@ -66,7 +83,7 @@ scripts/         开发与打包脚本
 build/icon.png   应用图标
 ```
 
-用户数据（工具箱、录制文件、登录状态、设置）保存在 `~/Library/Application Support/BrowserX/`，不在项目目录里。
+用户数据（工具箱、录制文件、登录状态、设置）保存在 `~/Library/Application Support/BrowserX/`（Windows 上是 `%APPDATA%\BrowserX\`），不在项目目录里。
 
 开发细节见 [CLAUDE.md](CLAUDE.md)。
 
