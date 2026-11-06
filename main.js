@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, dialog, safeStorage, Menu, shell, webFrameMain, clipboard, session, Notification } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, dialog, safeStorage, Menu, shell, webFrameMain, clipboard, session, Notification, webContents } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -29,7 +29,7 @@ const vault = new ToolVault(() => path.join(app.getPath('userData'), 'tool-keys.
 const RECON_DIR = () => path.join(app.getPath('userData'), 'recon');
 // 软件本身的东西，助手（Claude）不能写，只能读（agent.js protectToolFiles）：数据目录里的内部文件，正式版再加上安装目录
 // （macOS 是 BrowserX.app，Windows 是安装目录，里面有 app.asar）。用户只能通过插件扩展功能，改不了软件本身
-const APP_INTERNAL_FILES = ['config.json', 'market-installed.json', 'tool-keys.json', 'tool-creds.json', 'schedules.json'];
+const APP_INTERNAL_FILES = ['config.json', 'market-installed.json', 'tool-keys.json', 'tool-creds.json', 'schedules.json', 'site-identity.json'];
 const PROTECTED_PATHS = () => ({
   files: APP_INTERNAL_FILES.map((f) => path.join(app.getPath('userData'), f)),
   dirs: app.isPackaged ? [process.platform === 'darwin' ? path.resolve(process.resourcesPath, '..', '..') : path.dirname(process.execPath)] : [],
@@ -49,7 +49,7 @@ const tabs = new Map(); // id → { id, view, agent, navError }
 let cur = null;
 let tabSeq = 0;
 let stageBounds = null; // #stage 的位置，所有视图都用这个大小（后台标签截图尺寸跟前台一致）
-const MAX_TABS = 8;
+const MAX_TABS = 5; // 省内存：每个对话背后有一个 claude 进程和至少一个网页进程（原来 8）
 
 // API Key 用系统钥匙串加密后再写入配置文件
 function loadCfg() {
@@ -87,8 +87,89 @@ app.on('before-quit', () => { quitting = true; });
 
 // 右侧页面主框架加载失败时的错误存在各标签的 navError 上（Electron 的错误页是一片空白，交给界面显示说明，见 renderer.js renderNavError）
 let covered = false; // 界面弹窗打开时暂时藏起原生视图（它总是盖在 DOM 上面，居中的弹窗会被挡住）
-// 只显示当前对话的当前网页标签
-const syncViewVisible = () => { for (const t of tabs.values()) for (const p of t.pages) p.view.setVisible(t === cur && p === t.page && !p.navError && !covered); };
+// 只显示当前对话的当前网页标签。顺便记下每个网页什么时候被藏起来（休眠看这个），要显示的网页休眠了就唤醒
+const syncViewVisible = () => {
+  for (const t of tabs.values()) for (const p of t.pages) {
+    const shown = t === cur && p === t.page;
+    if (!shown && p.shown !== false) p.hiddenAt = Date.now();
+    p.shown = shown;
+    if (shown && p.sleeping) wakePage(t, p);
+    p.view.setVisible(shown && !p.navError && !covered);
+  }
+};
+
+// ---------------------------------------------------------------- 省内存：空闲的 claude 进程、看不见的网页
+// 每分钟看一次：
+// - 对话空闲 AGENT_IDLE_MS 没动静：关掉它的 claude 进程，下一条消息自动接上原会话（Agent.maybeSleep）
+// - 网页藏起来超过 PAGE_SLEEP_MS：结束它的渲染进程（webContents 留着，前进后退记录、sessionStorage、Cookie 都在），
+//   要显示 / 助手或工具要用时重新加载（wakePage）。跟 Chrome 的「标签页休眠」一样，页面里没保存的状态会丢，所以下面这些不休眠：
+//   正在显示的、对话在忙（回复、跑工具、制作工具、录制、等批准）、在加载、在放声音、开着开发者工具、
+//   跟别的网页有 opener 关系（登录弹窗之类要回传结果）、跟别的网页共用一个渲染进程、表单里填了东西 / 编辑器里有内容
+const minEnv = (k, d) => Math.max(0.1, Number(process.env[k]) || d) * 60 * 1000;
+const AGENT_IDLE_MS = minEnv('CB_AGENT_IDLE_MIN', 10);
+const PAGE_SLEEP_MS = minEnv('CB_PAGE_SLEEP_MIN', 30);
+const agentBusy = (a) => a.running || a.starting || a._toolRunning || a.toolAbort || a.making || a.rec?.active || a.pending.size || a.questions.size;
+
+// 页面里有没有用户填了还没提交的东西：输入框 / 下拉框跟默认值不一样，或者可编辑区域（富文本编辑器）里有字
+const DIRTY_JS = `(() => {
+  for (const e of document.querySelectorAll('input, textarea, select')) {
+    if (e.type === 'hidden' || e.disabled) continue;
+    if (e.type === 'checkbox' || e.type === 'radio') { if (e.checked !== e.defaultChecked) return true; continue; }
+    if (e.tagName === 'SELECT') { if ([...e.options].some((o) => o.selected !== o.defaultSelected)) return true; continue; }
+    if (e.value && e.value !== e.defaultValue) return true;
+  }
+  return [...document.querySelectorAll('[contenteditable=""], [contenteditable="true"]')].some((e) => e.innerText.trim());
+})()`;
+
+async function sleepPage(t, p) {
+  const wc = p.view.webContents;
+  if (p.sleeping || wc.isDestroyed() || wc.isCrashed() || wc.isLoading() || wc.isCurrentlyAudible() || wc.isDevToolsOpened()) return false;
+  if (!/^https?:/i.test(wc.getURL())) return false;
+  if ((p.opener && t.pages.includes(p.opener)) || t.pages.some((x) => x.opener === p)) return false;
+  const pid = wc.getOSProcessId();
+  if (!pid) return false;
+  for (const x of tabs.values()) for (const q of x.pages) {
+    const w = q.view.webContents;
+    if (q !== p && !w.isDestroyed() && w.getOSProcessId() === pid) return false;
+  }
+  let dirty;
+  try { dirty = await Promise.race([wc.executeJavaScript(DIRTY_JS, true), new Promise((r) => setTimeout(() => r(true), 2000))]); } catch { dirty = true; }
+  // 查的这 2 秒里情况变了（被切过来了、对话开始干活了…）：不休眠
+  if (dirty || !tabs.has(t.id) || !t.pages.includes(p) || p.shown || agentBusy(t.agent) || wc.isDestroyed()) return false;
+  p.sleeping = true;
+  wc.forcefullyCrashRenderer();
+  return true;
+}
+
+// 唤醒休眠的网页：重新加载当前地址，等它加载完（最多 20 秒）。没休眠就直接返回
+function wakePage(t, p) {
+  if (!p?.sleeping) return p?.waking || Promise.resolve();
+  p.sleeping = false;
+  p.hiddenAt = Date.now(); // 重新计时：刚唤醒（比如后台对话发了条消息）别马上又睡
+  const wc = p.view.webContents;
+  if (wc.isDestroyed()) return Promise.resolve();
+  p.waking = new Promise((resolve) => {
+    const done = () => { clearTimeout(timer); wc.removeListener('did-stop-loading', done); p.waking = null; resolve(); };
+    const timer = setTimeout(done, 20000);
+    wc.on('did-stop-loading', done);
+  });
+  try { t.agent.applyIdentity(wc); t.agent.cdp('Page.enable', {}, wc).catch(() => {}); } catch {}
+  wc.reload();
+  return p.waking;
+}
+
+async function sweepIdle() {
+  for (const t of [...tabs.values()]) {
+    try { t.agent.maybeSleep(AGENT_IDLE_MS); } catch {}
+    // 对话在忙：它的当前网页一直在用，重新计时（忙完再藏够 PAGE_SLEEP_MS 才休眠）
+    if (agentBusy(t.agent)) { if (t.page && !t.page.shown) t.page.hiddenAt = Date.now(); continue; }
+    for (const p of [...t.pages]) {
+      if (p.shown || Date.now() - (p.hiddenAt || Date.now()) < PAGE_SLEEP_MS) continue;
+      try { await sleepPage(t, p); } catch {}
+    }
+  }
+}
+setInterval(() => { if (!quitting) sweepIdle(); }, Math.min(60 * 1000, AGENT_IDLE_MS / 2, PAGE_SLEEP_MS / 2));
 
 function navState(t = cur) {
   const wc = t.view.webContents;
@@ -121,10 +202,10 @@ async function checkAccount() {
 // ---------------------------------------------------------------- 网页标签
 // 一个对话（左侧标签）可以开多个网页标签（右侧浏览器上方那一排）：t.pages，t.page 是当前的，t.view 指向它。
 // 网站 window.open / target=_blank 时新开一个网页标签并切过去（保留 opener，登录弹窗之类回传结果的流程能走通）；助手用 tab_* 工具切换
-const MAX_PAGES = 10;
+const MAX_PAGES = 5; // 省内存：每个网页一个渲染进程（原来 10）
 const pageList = (t) => t.pages.map((p, i) => {
   const wc = p.view.webContents;
-  return { index: i + 1, title: wc.getTitle(), url: wc.getURL(), loading: wc.isLoading(), active: p === t.page };
+  return { index: i + 1, title: wc.getTitle(), url: wc.getURL(), loading: wc.isLoading(), active: p === t.page, ...(p.sleeping ? { sleeping: true } : {}) };
 });
 const sendPages = (t) => { if (t === cur) send('pages', pageList(t)); };
 const pageAt = (t, index) => {
@@ -138,7 +219,7 @@ function addPage(t, { view, url, activate = true } = {}) {
   if (t.pages.length >= MAX_PAGES) throw new Error(`一个对话最多开 ${MAX_PAGES} 个标签页，先关掉一些`);
   // backgroundThrottling 关掉：藏起来的标签里，页面计时器和助手的操作照常跑
   view = view || new WebContentsView({ webPreferences: { partition: 'persist:browser', backgroundThrottling: false } }); // 记住登录状态（所有标签共用）
-  const p = { view, navError: null };
+  const p = { view, navError: null, hiddenAt: Date.now() };
   win.contentView.addChildView(view);
   if (stageBounds) view.setBounds(stageBounds);
   view.setVisible(false);
@@ -228,7 +309,7 @@ function removePage(t, p, closeIt = true) {
 const pagesApi = (t) => ({
   list: () => pageList(t),
   open: (url) => { const p = addPage(t, { url: toUrl(url || 'about:blank') }); return t.pages.indexOf(p) + 1; },
-  switch: (index) => activatePage(t, pageAt(t, index)),
+  switch: (index) => { const p = pageAt(t, index); activatePage(t, p); return wakePage(t, p); }, // 休眠的网页：返回的 Promise 等它重新加载完
   close: (index) => {
     if (t.pages.length === 1) throw new Error('最后一个标签页不能关');
     removePage(t, pageAt(t, index));
@@ -242,7 +323,10 @@ function createTab(url = cfg.home) {
   const id = ++tabSeq;
   const t = { id, pages: [], page: null, get view() { return this.page.view; } };
   t.agent = new Agent({
-    getWc: () => t.page.view.webContents,
+    isEmbedded: (wc) => embedWcs.has(wc.id), // 网页在白名单网站上：用内置浏览器原始身份（见 setEmbedded）
+    embedUa: () => EMBED_UA,
+    getWc: () => { if (t.page.sleeping) wakePage(t, t.page); return t.page.view.webContents; }, // 休眠的网页：用到就唤醒（开始重新加载）
+    wakePage: () => wakePage(t, t.page), // 发消息、跑工具前调：唤醒并等加载完
     pages: pagesApi(t),
     vault,
     show: async () => {},
@@ -251,6 +335,7 @@ function createTab(url = cfg.home) {
     getAccountToken: () => accountToken, // 没填 API Key 时，Claude 请求经门户中转，用账号 token 认证
     checkAccount, // 开会话 / 调模型前确认账号（见 checkAccount）
     getToolsDir: TOOLS_DIR,
+    getProtectedPaths: PROTECTED_PATHS,
     getReconDir: RECON_DIR,
     emit: (ev) => send('agent', { ...ev, tab: id }),
     // 制作工具模式同一时间只允许一个标签（草稿、工具目录是共用的）
@@ -335,7 +420,6 @@ const FORM_FOLLOW = `(() => {
 function createWindow() {
   win = new BrowserWindow({
     width: 1600, height: 1000, minWidth: 1000, minHeight: 640, title: 'BrowserX',
-    getProtectedPaths: PROTECTED_PATHS,
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
   win.loadFile('index.html');
@@ -555,8 +639,57 @@ function uniquePath(dir, name) {
 }
 // 右侧网页的浏览器身份（User-Agent）：去掉 Electron 默认加的「Electron/x.y」「BrowserX/x.y」，跟真 Chrome 一样。
 // 有的网站（Akamai 这类防爬虫）看到这两个标记就当成自动化程序直接拦（实测永明）。内核本来就是同版本的 Chromium，报 Chrome 是实话
+// ---------------------------------------------------------------- 网站白名单：用内置浏览器原始身份
+// 平时伪装成真 Chrome（下面 useChromeIdentity），但 Google 看出「自称 Chrome 又不像 Chrome」就拒绝登录（实测：Chrome 身份 → 「无法登录」，
+// 带 Electron/ 的原始身份 → 正常走登录流程）。名单里的网站改用原始身份：按网页算，主框架打开名单里的网站时整个网页换过去，离开再换回来。
+// 名单在门户后台「系统设置 → 客户端设置」维护，client-config 接口给；启动时和每 30 分钟拉一次，存 <userData>/site-identity.json，连不上用上次的
+const SITE_IDENTITY_FILE = () => path.join(app.getPath('userData'), 'site-identity.json');
+const DEFAULT_EMBED_HOSTS = ['google.*', 'gmail.com', 'youtube.com'];
+let embedHosts = DEFAULT_EMBED_HOSTS;
+let embedRes = [];
+let EMBED_UA = '';
+const embedWcs = new Set(); // 正在用原始身份的网页（webContents id）
+function setEmbedHosts(list) {
+  embedHosts = Array.isArray(list) ? list.map((h) => String(h).toLowerCase().trim()).filter((h) => /^[a-z0-9*.-]+$/.test(h) && h !== '*') : DEFAULT_EMBED_HOSTS;
+  // 一项同时匹配它的子域名；* 匹配任意字符（google.* = google.com、google.com.hk…）
+  embedRes = embedHosts.map((h) => new RegExp(`^(.+\\.)?${h.replace(/[.]/g, '\\.').replace(/\*/g, '[a-z0-9.-]*')}$`));
+}
+setEmbedHosts(DEFAULT_EMBED_HOSTS);
+function embedHost(url) {
+  let host;
+  try { host = new URL(url).hostname.toLowerCase(); } catch { return false; }
+  return embedRes.some((re) => re.test(host));
+}
+function loadSiteIdentity() {
+  try { const j = JSON.parse(fs.readFileSync(SITE_IDENTITY_FILE(), 'utf8')); if (Array.isArray(j.hosts)) setEmbedHosts(j.hosts); } catch { /* 没有就用默认名单 */ }
+}
+async function refreshSiteIdentity() {
+  try {
+    const res = await fetch(`${ACCOUNT_PORTAL}/api/desktop/client-config`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return;
+    const j = await res.json();
+    if (!Array.isArray(j.embedded_identity_hosts)) return; // 旧版门户没有这一项：保持现状
+    setEmbedHosts(j.embedded_identity_hosts);
+    const out = JSON.stringify({ hosts: embedHosts, fetchedAt: new Date().toISOString() }, null, 1);
+    let old = '';
+    try { old = fs.readFileSync(SITE_IDENTITY_FILE(), 'utf8'); } catch {}
+    if (old.replace(/"fetchedAt"[^\n]*/, '') !== out.replace(/"fetchedAt"[^\n]*/, '')) fs.writeFileSync(SITE_IDENTITY_FILE(), out);
+  } catch { /* 连不上门户：用上次的 */ }
+}
+// 网页换身份：网络请求的 UA 在 onBeforeSendHeaders 里改写，页面里的 navigator.userAgent / userAgentData 由 Agent 换 CDP 的 UA 覆盖
+// （Chrome 身份带 sec-ch-ua 品牌信息，原始身份不带）。不能用 wc.setUserAgent：导航进行中调它会把这次导航取消掉（实测）
+function setEmbedded(wcId, on) {
+  if (embedWcs.has(wcId) === on) return;
+  if (on) embedWcs.add(wcId); else embedWcs.delete(wcId);
+  const wc = webContents.fromId(wcId);
+  if (!wc || wc.isDestroyed()) return;
+  const t = [...tabs.values()].find((x) => x.pages.some((p) => p.view.webContents === wc));
+  try { t?.agent.applyIdentity(wc); } catch {}
+}
+
 function useChromeIdentity() {
   const ses = session.fromPartition('persist:browser');
+  EMBED_UA = ses.getUserAgent().replace(/\s+(BrowserX|browserx|claude-browser)\/\S+/gi, ''); // 原始身份：只去掉本软件的名字，留着 Electron/版本号
   const ua = ses.getUserAgent().replace(/\s+(Electron|BrowserX|browserx|claude-browser)\/\S+/gi, '');
   ses.setUserAgent(ua);
   // 改了 User-Agent 以后，打开网页（主文档、iframe）的请求不再带 sec-ch-ua 这组请求头（页面里的 fetch 由 agent.applyIdentity 补上了）。
@@ -567,9 +700,18 @@ function useChromeIdentity() {
     'sec-ch-ua-mobile': '?0',
     'sec-ch-ua-platform': `"${process.platform === 'darwin' ? 'macOS' : process.platform === 'win32' ? 'Windows' : 'Linux'}"`,
   };
-  ses.webRequest.onBeforeSendHeaders({ urls: ['https://*/*'] }, (d, cb) => {
+  ses.webRequest.onBeforeSendHeaders({ urls: ['http://*/*', 'https://*/*'] }, (d, cb) => {
     const h = d.requestHeaders;
-    if (d.resourceType === 'mainFrame' || d.resourceType === 'subFrame') {
+    // 主框架每次请求（包括每一跳重定向）都看一下：进了白名单网站就整个网页换原始身份，离开就换回 Chrome 身份
+    if (d.resourceType === 'mainFrame' && d.webContentsId) setEmbedded(d.webContentsId, embedHost(d.url));
+    if (d.webContentsId && embedWcs.has(d.webContentsId)) {
+      // 原始身份：UA 换掉（这次导航可能在换身份之前就开始了），不带 Chrome 的 sec-ch-ua 请求头
+      for (const k of Object.keys(h)) if (/^(user-agent|sec-ch-ua.*)$/i.test(k)) delete h[k];
+      h['User-Agent'] = EMBED_UA;
+      cb({ requestHeaders: h });
+      return;
+    }
+    if (/^https:/i.test(d.url) && (d.resourceType === 'mainFrame' || d.resourceType === 'subFrame')) {
       const has = new Set(Object.keys(h).map((k) => k.toLowerCase()));
       for (const [k, v] of Object.entries(ch)) if (!has.has(k)) h[k] = v;
     }
@@ -681,7 +823,10 @@ app.whenReady().then(async () => {
   // 打包后的自检（CB_SMOKE=1，GitHub Actions 打完 Windows 包时用）：找得到 Claude 运行时、能执行、Git Bash 能用、系统加密可用，写结果到 CB_SMOKE_OUT 后退出
   if (process.env.CB_SMOKE) { runSmokeTest(); return; }
   if (process.platform === 'win32') app.setAppUserModelId('com.browserx.app'); // Windows 系统通知要有这个才会弹出
+  loadSiteIdentity(); // 网站白名单（用原始身份），先用上次存的，下面再从门户拉新的
   useChromeIdentity(); // 要在建第一个网页标签之前
+  refreshSiteIdentity();
+  setInterval(refreshSiteIdentity, 30 * 60 * 1000);
   watchDownloads();
   buildMenu();
   updater.start();
@@ -772,7 +917,7 @@ handle('cfg:set', (c) => {
   for (const { agent } of tabs.values()) {
     if ('permissionMode' in c) agent.setPermissionMode(cfg.permissionMode);
     if (modelChanged && !restart) agent.setModel(cfg.model);
-    if (restart && (agent.q || agent.starting)) agent.reset();
+    if (restart && (agent.q || agent.starting || agent.sleeping)) agent.reset();
   }
   if (restart) setTimeout(() => cur?.agent.warm(), 500); // 设置改了要重开：当前标签用新设置马上开起来
   return cfg;
@@ -783,7 +928,7 @@ handle('cwd:pick', async () => {
   if (r.filePaths[0] !== cfg.cwd) {
     cfg.cwd = r.filePaths[0];
     saveCfg();
-    for (const { agent } of tabs.values()) if (agent.q) agent.reset();
+    for (const { agent } of tabs.values()) if (agent.q || agent.sleeping) agent.reset();
   }
   return cfg.cwd;
 });
@@ -803,7 +948,10 @@ handle('win:focus', () => win.webContents.focus());
 handle('history:list', () => cur.agent.listHistory());
 handle('history:resume', (id, tab) => tabOf(tab).agent.resume(id));
 handle('history:rename', (id, title) => cur.agent.renameHistory(id, title));
-handle('history:delete', (id) => cur.agent.deleteHistory(id));
+handle('history:delete', (id) => {
+  for (const t of tabs.values()) if (t.agent.sleeping && t.agent.sessionId === id) t.agent.reset(); // 空闲关掉的会话被删了：别再接上它
+  return cur.agent.deleteHistory(id);
+});
 // 清空历史：全部删掉，包括左边正开着的对话。正开着的先结束会话（背后的 claude 进程还在写记录，不先关掉删了会被写回来），
 // 聊天内容留在界面上，下一条消息开始新对话。有对话正在回复 / 工具正在跑：不清，让用户等它结束
 handle('history:clear', async () => {
@@ -897,7 +1045,7 @@ const account = new Account({
     saveCfg();
     // 登录 / 退出 / token 失效：没填自己 API Key 的对话要换新 token 重开（下一条消息自动重开）
     if (changed && !cfg.apiKey) {
-      for (const { agent } of tabs.values()) if (agent.q || agent.starting) agent.reset();
+      for (const { agent } of tabs.values()) if (agent.q || agent.starting || agent.sleeping) agent.reset();
       if (accountToken) setTimeout(() => cur?.agent.warm(), 500); // 刚登录：当前标签马上把 claude 开起来
     }
   },

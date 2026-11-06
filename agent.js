@@ -506,7 +506,7 @@ class Agent {
         }
       }
     }
-    if (this.q) this.closeSession();
+    if (this.q || this.sleeping) this.closeSession();
     // resume 默认不 fork，恢复后仍是同一个 session_id：提前赋值，不等 loop() 收到新会话的 init 消息才更新，
     // 否则 resume() 一返回，用户马上点"新对话"起名保存时 this.sessionId 还是旧值（甚至是 null），会误判成"没在对话"
     this.sessionId = sessionId;
@@ -600,6 +600,11 @@ class Agent {
   // 浏览器身份的「客户端提示」（sec-ch-ua 这组请求头和 navigator.userAgentData）：跟真 Chrome 一样报 Google Chrome / Chromium。
   // main.js 改了 User-Agent 后 Chromium 就不再发 sec-ch-ua，整组请求头都没有本身就像自动化程序（防爬虫会看），这里补上
   applyIdentity(wc) {
+    // 白名单网站（Google 等）：用内置浏览器原始身份，只覆盖 UA、不报 Chrome 品牌（见 main.js setEmbedded）
+    if (this.ctx.isEmbedded?.(wc)) {
+      try { this.cdp('Emulation.setUserAgentOverride', { userAgent: this.ctx.embedUa() }, wc).catch(() => {}); } catch {}
+      return;
+    }
     const full = process.versions.chrome, major = full.split('.')[0];
     const brands = [{ brand: 'Google Chrome', version: major }, { brand: 'Chromium', version: major }, { brand: 'Not:A-Brand', version: '8' }];
     const mac = process.platform === 'darwin';
@@ -886,7 +891,7 @@ class Agent {
         wrap(async (a) => { const i = await this.ctx.pages.open(a.url ? String(a.url) : 'about:blank'); return ok(`已新开标签页 ${i} 并切换过去\n${pageText()}`); })),
       tool('tab_switch', '切换到另一个标签页，之后的浏览器工具都操作它。',
         { index: z.number().int().describe('标签编号，见 tab_list') },
-        wrap(async (a) => { this.ctx.pages.switch(a.index); return ok(`已切换到标签页 ${a.index}\n${pageText()}`); })),
+        wrap(async (a) => { await this.ctx.pages.switch(a.index); return ok(`已切换到标签页 ${a.index}\n${pageText()}`); })),
       tool('tab_close', '关掉一个标签页（不给编号就关当前标签）。最后一个标签不能关。',
         { index: z.number().int().optional().describe('标签编号，见 tab_list') },
         wrap(async (a) => { this.ctx.pages.close(a.index); return ok(`已关闭\n${pageText()}`); })),
@@ -1312,6 +1317,8 @@ class Agent {
   }
 
   async runStoppable(def, args, meta = null) {
+    this.activeAt = Date.now();
+    await this.ctx.wakePage?.(); // 网页休眠了：先重新加载好再跑
     const ac = new AbortController();
     this.toolAbort = ac;
     const sess = this.profBegin(meta);
@@ -1329,6 +1336,7 @@ class Agent {
       if (!e?.stopped) sess.error = String(e?.message || e).slice(0, 600); // 出错也做一份分析（手动停止不算）
       throw e;
     } finally {
+      this.activeAt = Date.now();
       if (this.toolAbort === ac) this.toolAbort = null;
       // 耗时汇总：≥ 3 秒才显示（界面上工具箱直接运行时等结果显示完再画，见 renderer tool_profile）；定时任务从 lastProfile 拿
       const p = this.profEnd(sess);
@@ -1431,7 +1439,7 @@ class Agent {
       return `${MAKING_PROMPT(this.making)}${resumed ? `\n草稿里有上次没做完的版本，先读一下再接着做。` : ''}`;
     }
     await this.settle();
-    if (this.q) this.reset(); // 每个工具单独一个对话，上下文干净
+    if (this.q || this.sleeping) this.reset(); // 每个工具单独一个对话，上下文干净
     // 新建工具：右侧浏览器也清空成空白页（连前进后退记录一起清掉），从用户给的网址重新开始；修改现有工具不动页面
     if (!source) { this.ctx.pages.reset(); this.wc.loadURL('about:blank').then(() => this.wc.navigationHistory.clear()).catch(() => {}); }
     this.emitMaking();
@@ -1558,6 +1566,8 @@ ${m.editing ? '请问您想改什么、改成什么样？' : '请问您想在哪
       }
     } else if (input.tool_name === 'Bash' || input.tool_name === 'PowerShell') {
       const cmd = String(ti.command || '').replace(/\\ /g, ' ');
+      // 写进某个路径：重定向（> / >>）到它，或者「像写文件的命令 + 出现这个路径」（2>/dev/null 之类的只读命令不算）
+      const writes = (re) => new RegExp(`>{1,2}\\s*(["'][^"'\\n]*|[^\\s"'>|;&]*)${re}`, 'i').test(cmd) || (new RegExp(re, 'i').test(cmd) && BASH_WRITE.test(cmd));
       // 只认工具目录的最后两级（BrowserX/tools）：~/…、$HOME、%APPDATA%、/c/Users/… 各种写法都对得上；/ 和 \ 都算分隔符
       const t = `${esc(path.basename(path.dirname(dir)))}${S}${esc(path.basename(dir))}${S}(?!_drafts[/\\\\])\\S`;
       if (writes(t)) hit = `（${input.tool_name} 命令）`;
@@ -1571,8 +1581,6 @@ ${m.editing ? '请问您想改什么、改成什么样？' : '请问您想在哪
       }
     }
     if (!hit) return {};
-      // 写进某个路径：重定向（> / >>）到它，或者「像写文件的命令 + 出现这个路径」（2>/dev/null 之类的只读命令不算）
-      const writes = (re) => new RegExp(`>{1,2}\\s*(["'][^"'\\n]*|[^\\s"'>|;&]*)${re}`, 'i').test(cmd) || (new RegExp(re, 'i').test(cmd) && BASH_WRITE.test(cmd));
     return {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
@@ -1945,6 +1953,8 @@ ${old || '（无）'}`);
   async settle() { if (this.starting) await this.starting; }
 
   async start(runOpts = {}) {
+    // 空闲时关掉了进程（sleep()）：接着原来的会话开，对话链、可改的消息都照旧
+    if (this.sleeping && !runOpts.resume) runOpts = { resume: this.sessionId, keepChain: true };
     const gen = this.gen || 0;
     const sdk = await import('@anthropic-ai/claude-agent-sdk');
     this.sdk = sdk;
@@ -1961,9 +1971,12 @@ ${old || '（无）'}`);
     if ((this.gen || 0) !== gen || this.q) return; // 等账号确认的时候会话被关掉了（登录变了、关标签…）或者已经开好了：不再开
     this.stderr = '';
     // 对话链：用来「改之前发的消息」。截断恢复时链尾就是截到的那条；全新会话链是空的；普通恢复历史的链尾要等收到第一条消息才知道
-    this.lastChainUuid = runOpts.resumeSessionAt || null;
-    this.chainFresh = !runOpts.resume;
-    if (!runOpts.resumeSessionAt) this.turns = [];
+    if (!runOpts.keepChain) {
+      this.lastChainUuid = runOpts.resumeSessionAt || null;
+      this.chainFresh = !runOpts.resume;
+      if (!runOpts.resumeSessionAt) this.turns = [];
+    }
+    this.sleeping = false;
     this.inbox = new Inbox();
     this.q = sdk.query({
       prompt: this.inbox,
@@ -1999,6 +2012,7 @@ ${old || '（无）'}`);
     try {
       for await (const m of q) {
         if (q !== this.q) return;
+        this.activeAt = Date.now();
         if (m.parent_tool_use_id) continue; // 子代理的过程不展示
         if (m.type === 'conversation_reset') {
           // /clear 生效：原生 claude 换了一个新会话文件，之后的打标签、历史都跟着新 id 走
@@ -2080,8 +2094,11 @@ ${old || '（无）'}`);
   async send(text, shown = text) {
     if (!text?.trim()) return;
     if (this.making?.hint) this.setHint(null); // 用户回话了：之前的提示（要用户做什么）就过时了，助手需要的话再设新的
+    this.activeAt = Date.now();
+    const woke = this.ctx.wakePage?.(); // 网页休眠了：趁 claude 进程启动 / 模型思考的时候重新加载
     if (!this.q) await this.settle();
     if (!this.q) await this.start();
+    await woke;
     this.pageNotes = [];
     this.running = true;
     // 记下这条消息之前的链尾：改这条消息时截回到那里重新发（程序代发、界面显示的跟实际发的不一样的消息不让改）
@@ -2105,6 +2122,7 @@ ${old || '（无）'}`);
   async clear() {
     this.denyAll();
     this.pageNotes = [];
+    if (this.sleeping) { this.closeSession(); return; } // 空闲关掉了进程：不用再接上，下一条消息开新会话
     // 进程还在启动（提前启动的）或没开：还没聊过，没东西可清，不用等它启动完（不然刚开软件时点工具要卡几秒，清空还会晚到）
     if (!this.q || !this.inbox) return;
     if (this.chainFresh && !this.turns?.length) return; // 进程开着但还没聊过（提前启动的）：没东西可清
@@ -2212,7 +2230,22 @@ ${old || '（无）'}`);
     this.running = false;
     this.clearing = false;
     this.turns = []; this.lastChainUuid = null;
+    this.sleeping = false;
     try { q?.close(); } catch {}
+  }
+
+  // 空闲省内存：这个对话 idleMs 没动静就关掉 claude 进程（一个几百 MB），会话 id、对话链、可改的消息留着，
+  // 下一条消息 start() 用 resume 接上（界面上的对话不变，只是这一条多等一下进程启动）。
+  // 正在回复、跑工具、制作工具、录制、等用户批准 / 回答、清空中都不关。返回是否关了
+  maybeSleep(idleMs) {
+    if (!this.q || this.starting || this.running || this.clearing || this._toolRunning || this.toolAbort) return false;
+    if (this.making || this.rec?.active || this.pending.size || this.questions.size) return false;
+    if (Date.now() - (this.activeAt || 0) < idleMs) return false;
+    const talked = !(this.chainFresh && !this.turns?.length) && this.sessionId; // 提前启动 / 刚清空、还没聊过：没东西要接
+    const keep = { sessionId: this.sessionId, turns: this.turns, lastChainUuid: this.lastChainUuid, chainFresh: this.chainFresh, tagged: this.tagged };
+    this.closeSession();
+    if (talked) { Object.assign(this, keep); this.sleeping = true; }
+    return true;
   }
 }
 
