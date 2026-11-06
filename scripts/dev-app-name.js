@@ -16,9 +16,13 @@ if (!fs.existsSync(plist)) process.exit(0);
 
 const get = (key) => { try { return execFileSync('plutil', ['-extract', key, 'raw', '-o', '-', plist], { encoding: 'utf8' }).trim(); } catch { return ''; } };
 let changed = false;
-for (const key of ['CFBundleName', 'CFBundleDisplayName']) {
-  if (get(key) === NAME) continue;
-  execFileSync('plutil', ['-replace', key, '-string', NAME, plist]);
+// CFBundleIdentifier 也换掉：Electron 默认的 com.github.Electron 跟别的 Electron 程序（比如微信开发者工具）重复，
+// macOS 按这个 ID 找 browserx:// 链接的处理程序时会打开那个程序（2026-11-06 点网站「在 BrowserX 中安装」打开了微信开发者工具）。
+// 用开发专用的 ID，跟正式版的 com.browserx.app 也分开
+const ID = 'com.browserx.app.dev';
+for (const [key, value] of [['CFBundleName', NAME], ['CFBundleDisplayName', NAME], ['CFBundleIdentifier', ID]]) {
+  if (get(key) === value) continue;
+  execFileSync('plutil', ['-replace', key, '-string', value, plist]);
   changed = true;
 }
 // 改 Info.plist 会弄坏 Electron.app 原来的签名。签名坏了，macOS 记不住钥匙串里「BrowserX Safe Storage」（safeStorage 加密账号 token 用）的
@@ -32,5 +36,5 @@ if (changed) {
   // 让 Launch Services 重新读这个 .app 的信息，否则菜单栏可能还显示旧名字
   try { execFileSync('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister', ['-f', app]); } catch {}
   try { const now = new Date(); fs.utimesSync(app, now, now); } catch {}
-  console.log(`[dev-app-name] 开发用 Electron.app 的显示名已改成 ${NAME}`);
+  console.log(`[dev-app-name] 开发用 Electron.app 的显示名已改成 ${NAME}，ID 改成 ${ID}`);
 }
