@@ -835,10 +835,9 @@ body.ui-latin #msgs .note.quota span+span::before{content:' '} /* 英文等：�
 #tb_list .tbitem .tbacts .tbupdbtn:hover:not(:disabled){filter:brightness(1.08)}
 /* 插件市场：官方插件的蓝 V 标记 */
 .mkoff{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 7px 1px 3px;border-radius:999px;background:rgba(29,155,240,.12);color:#1d9bf0;font-size:11.5px;font-weight:700;line-height:17px;vertical-align:1px;white-space:nowrap}
-.mkoff svg{width:13px;height:13px}
-.mkoff svg .seal{fill:#1d9bf0;stroke:#1d9bf0;stroke-width:1;stroke-linejoin:round} /* 锯齿边徽章 */
-.mkoff svg .tick{fill:none;stroke:#fff;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
-.mkoff svg{width:14px;height:14px}
+.mkoff svg .vbadge{fill:#1d9bf0;stroke:none} /* 蓝 V 认证徽章，对勾镂空。去掉全局 svg 的描边（第 33 行 stroke:currentColor 1.5），不然蓝边会把镂空的对勾糊掉 */
+.mkoff svg .vbg{fill:#fff;stroke:none} /* 垫在镂空对勾下面，让对勾是白色 */
+.mkoff svg{width:15px;height:15px}
 /* 插件市场：精品插件的金色星星标记 */
 .mkfeat{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 7px 1px 3px;border-radius:999px;background:rgba(245,158,11,.14);color:#d97706;font-size:11.5px;font-weight:700;line-height:17px;vertical-align:1px;white-space:nowrap}
 .mkfeat svg{width:14px;height:14px}
