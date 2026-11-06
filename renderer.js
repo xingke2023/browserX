@@ -1674,12 +1674,17 @@ const officialBadge = (t) => (t.official ? '<span class="mkoff" title="官方插
 const featuredBadge = (t) => (t.featured ? '<span class="mkfeat" title="精品插件：管理员精选推荐"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.00 2.10 L14.70 8.88 L21.99 9.36 L16.37 14.02 L18.17 21.09 L12.00 17.20 L5.83 21.09 L7.63 14.02 L2.01 9.36 L9.30 8.88Z"/></svg>精品</span>' : '');
 async function renderMarket() {
   const list = $('tb_list');
-  list.innerHTML = `<div class="sc_top"><button class="ghost tbback">← 工具箱</button><h2 class="sc_title">插件市场</h2><span></span></div>
+  list.innerHTML = `<div class="sc_top"><button class="ghost tbback">← 工具箱</button><h2 class="sc_title">插件市场</h2><button class="ghost icon mk_refresh" title="刷新插件市场（重新读取列表）" aria-label="刷新插件市场"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5v3h-3"/></svg></button></div>
     <div class="tbtop mktop"><input class="tbsearch mk_q" type="search" placeholder="搜索插件市场" spellcheck="false"><select class="mk_cat"><option value="">全部行业</option></select></div>
     <div class="mkbody"><div class="hempty">加载中…</div></div>`;
   list.querySelector('.tbback').addEventListener('click', renderToolboxList);
   const body = list.querySelector('.mkbody');
-  if (!account.loggedIn) { loginPrompt(body, '浏览和安装插件市场里的工具'); return; }
+  // 右上角刷新：保留搜索词、行业和页码，重新读一次列表（行业分类也重新读）；转一圈表示在读
+  list.querySelector('.mk_refresh').addEventListener('click', async (e) => {
+    const b = e.currentTarget;
+    b.classList.add('spin');
+    try { mkMeta = await call('market:meta').catch(() => mkMeta); await loadMarket(body); } finally { b.classList.remove('spin'); }
+  });
   try { mkMeta = mkMeta || await call('market:meta'); } catch (e) { if (e.needLogin) loginPrompt(body, '浏览插件市场'); else body.innerHTML = `<div class="tberr">${errWithLink(e)}</div>`; return; }
   const q = list.querySelector('.mk_q'), cat = list.querySelector('.mk_cat');
   cat.innerHTML += Object.entries(mkMeta.categories).map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join('');
@@ -1702,20 +1707,32 @@ async function loadMarket(body) {
     const newer = Number.isInteger(t.local.build) && Number.isInteger(t.build) ? t.local.build < t.build : t.local.version !== t.version;
     const local = t.local.version ? (!newer ? `已安装 ${esc(t.version)}` : `已安装 ${esc(t.local.version)}，有新版本 ${esc(t.version)}`) : t.local.exists ? '工具箱里有同名工具' : '';
     const action = t.is_demo ? '<span class="muted">示例，不能安装</span>'
+      : !account.loggedIn ? '<button class="primary mk_login" title="安装、购买插件要先登录 BrowserX 账号">登录后安装</button>'
       : t.can_download ? `<button class="primary mk_inst">${t.local.version === t.version ? '重新安装' : t.local.version ? `更新到 ${esc(t.version)}` : '安装'}</button>`
       : account.user?.member ? (buying?.id === t.id ? '<span class="mkwait">等待付款…</span>' : `<button class="primary mk_buy">购买 ${esc(t.price_label)}</button>`)
       : `<button class="ghost ac_link" data-url="${esc(account.user?.urls?.packages || t.url)}">开通会员后购买</button>`;
     // 官方插件（网站后台蓝 V 认证）：标题旁蓝色对勾「官方」
     const official = officialBadge(t), featured = featuredBadge(t);
-    d.innerHTML = `<div class="tbhead"><span class="tbname">${esc(t.title)}${official}${featured}<small class="tbid">${esc(t.name)}</small></span><span class="mkprice${t.price ? ' paid' : ''}">${esc(t.price_label)}</span></div>
+    d.innerHTML = `<div class="tbhead"><span class="tbname">${esc(t.title)}${official}${featured}</span><span class="mkprice${t.price ? ' paid' : ''}">${esc(t.price_label)}</span></div>
       <div class="tbdesc">${esc(t.summary)}</div>
       <div class="mkmeta"><span>${esc(t.category_label)}</span><span>${esc(t.author || '')}${t.mine ? '（我）' : ''}</span>${t.version ? `<span class="mkver">版本 ${esc(t.version)}</span>` : ''}${t.listed_at ? `<span>发布 ${ymd(t.listed_at)}</span>` : ''}${t.version_at && ymd(t.version_at) !== ymd(t.listed_at) ? `<span>更新 ${ymd(t.version_at)}</span>` : ''}<span>${t.downloads} 次安装</span>${local ? `<span class="mklocal">${local}</span>` : ''}</div>
-      <div class="row mkact">${action}<button class="ghost ac_link" data-url="${esc(t.url)}">详情</button></div><div class="tberr" hidden></div>`;
+      <div class="row mkact">${action}<button class="ghost mk_detail" title="在右侧浏览器里打开这个插件在网站上的详情页（介绍、版本历史、问答、评价）">详情</button></div><div class="tberr" hidden></div>`;
+    // 点卡片（按钮以外的地方）或「详情」：右侧浏览器打开网站上的公开详情页 /market/<id>，当前卡片标出来
+    d.title = '点击在右侧浏览器查看详情';
+    const openDetail = () => {
+      if (document.body.classList.contains('browser-collapsed')) setBrowserCollapsed(false); // 左侧铺满时先把右侧浏览器放出来
+      call('nav:go', `${account.portal || 'https://browserx.xingke888.com'}/market/${t.id}`).catch(() => {});
+      for (const x of body.querySelectorAll('.mkitem.on')) x.classList.remove('on');
+      d.classList.add('on');
+    };
+    d.addEventListener('click', (e) => { if (!e.target.closest('button, a, input, select, label')) openDetail(); });
+    d.querySelector('.mk_detail').addEventListener('click', openDetail);
     d.querySelector('.mk_buy')?.addEventListener('click', async (ev) => {
       ev.target.disabled = true;
       try { await startBuying(t); loadMarket(body); }
       catch (e) { const err = d.querySelector('.tberr'); err.hidden = false; err.innerHTML = errWithLink(e); ev.target.disabled = false; }
     });
+    d.querySelector('.mk_login')?.addEventListener('click', () => openAccount(true)); // 打开账号面板登录，登录后市场列表自动刷新
     d.querySelector('.mk_inst')?.addEventListener('click', async (ev) => {
       ev.target.disabled = true;
       try { showImportPreview(await call('market:install', t.id)); }
@@ -2008,18 +2025,36 @@ $('mk_ask').addEventListener('click', () => waitingCard(cur)?.scrollIntoView({ b
 // 状态栏「等你回答」：点一下滚到那张卡片
 $('status').addEventListener('click', () => waitingCard(cur)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
 api.on('account', (st) => {
+  const was = account.loggedIn;
   account = st;
   renderAccount();
+  // 登录 / 退出后，开着的插件市场列表重新读一次（按钮从「登录后安装」变成「安装 / 购买」）
+  const mk = !$('toolbox').hidden && $('tb_list').querySelector('.mkbody');
+  if (mk && was !== st.loggedIn) loadMarket(mk);
+  // 网站「在 BrowserX 中安装」时还没登录：登录成功后接着装那个插件
+  if (!was && st.loggedIn && pendingLinkInstall) { const id = pendingLinkInstall; pendingLinkInstall = null; installFromLink(id).catch(() => {}); }
 });
 call('account:state').then((st) => { account = st; renderAccount(); }).catch(() => {});
 
 // 网站插件详情页点「在 BrowserX 中安装」（browserx://install/<id>，main.js handleLink）：打开工具箱，走插件市场「安装」的同一个流程（安装确认页，确认后才装）。
 // 没登录 / 不是会员 / 没买：停在插件市场，上面显示原因和按钮
+// 没登录：插件市场上面提示「要先登录」+ 登录按钮，记下这个插件（pendingLinkInstall），登录成功后自动接着打开它的安装确认页
+let pendingLinkInstall = null;
 async function installFromLink(id) {
   $('history').hidden = true; $('settings').hidden = true; $('account').hidden = true;
   $('toolbox').hidden = false;
   showToolList();
-  if (!account.loggedIn) { await renderMarket(); return; }
+  if (!account.loggedIn) {
+    pendingLinkInstall = id;
+    await renderMarket();
+    const box = document.createElement('div');
+    box.className = 'mk_needlogin';
+    box.innerHTML = '<span>安装插件要先登录 BrowserX 账号，登录后会自动打开这个插件的安装确认</span><button class="primary">登录</button>';
+    box.querySelector('button').addEventListener('click', () => openAccount(true));
+    $('tb_list').querySelector('.mktop')?.after(box);
+    return;
+  }
+  pendingLinkInstall = null;
   try { showImportPreview(await call('market:install', id)); }
   catch (e) {
     await renderMarket();
@@ -2208,7 +2243,9 @@ $('mk_cancel').addEventListener('click', async () => {
 // 在对话（或别的面板）里点 → 工具列表，再点 → 回到对话；在某个工具的填表页面上点 → 工具列表，再点 → 回到那个页面（没重新加载，内容都在）
 $('btnToolbox').addEventListener('click', () => {
   const tab = cur;
-  const listShown = !$('toolbox').hidden && !tab.pageOpen;
+  // 真的在看工具卡片列表才算「已经打开」（再点就回去）。工具箱里显示的是插件市场、定时任务、安装确认这些页面时，
+  // 点一下应该去工具列表，原来只看面板开没开，结果第一下把面板关了、第二下才出列表
+  const listShown = !$('toolbox').hidden && !tab.pageOpen && !!$('tb_list').querySelector('.tbcards');
   if (listShown) {
     const prev = tab.prevView;
     tab.prevView = null;
@@ -2216,7 +2253,7 @@ $('btnToolbox').addEventListener('click', () => {
     else $('toolbox').hidden = true;
     return;
   }
-  tab.prevView = $('toolbox').hidden ? 'chat' : tab.pageOpen; // 记下从哪来，再点一次回去
+  tab.prevView = $('toolbox').hidden ? 'chat' : (tab.pageOpen || 'chat'); // 记下从哪来，再点一次回去（从插件市场等页面来的，再点回到对话）
   $('history').hidden = true;
   $('settings').hidden = true;
   $('account').hidden = true;

@@ -162,8 +162,13 @@ function addPage(t, { view, url, activate = true } = {}) {
       send('tabkey', { key: i.key, code: i.code, shift: i.shift });
     }
   });
+  // 右侧网页里点 browserx:// 链接（网站插件详情页的「在 BrowserX 中安装」）：自己处理，不交给系统
+  // （交给系统会弹「要打开 BrowserX 吗」，绕一圈又回到这个程序）
+  wc.on('will-navigate', (e, url) => { if (/^browserx:/i.test(url)) { e.preventDefault(); handleLink(url); } });
+  wc.on('will-frame-navigate', (e) => { if (/^browserx:/i.test(e.url)) { e.preventDefault(); handleLink(e.url); } });
   // 网站要开新窗口 / 新标签：在这个对话里新开一个网页标签并切过去（不另开系统窗口）。标签太多时退回在当前页打开
   wc.setWindowOpenHandler(({ url }) => {
+    if (/^browserx:/i.test(url)) { handleLink(url); return { action: 'deny' }; }
     if (t.pages.length >= MAX_PAGES) { wc.loadURL(url).catch(() => {}); return { action: 'deny' }; }
     return {
       action: 'allow',
@@ -945,10 +950,11 @@ function encryptMarketTools() {
 // 从市场装的、别人的工具：不让导出 / 编辑 / 发布（界面隐藏按钮，agent.js 的 exportInfo / startMaking 也会拦）
 const isMarketTool = (name) => { const x = readInstalled()[name]; return !!x && !x.mine; }; // 正在确认安装的市场工具（确认导入成功后才记进 market-installed.json）
 
-handle('market:meta', () => account.api('/meta'));
+// 插件市场列表和分类：没登录也能看（auth: 'optional'），安装 / 购买 / 发布还是要登录
+handle('market:meta', () => account.api('/meta', { auth: 'optional' }));
 handle('market:list', async (params = {}) => {
   const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v));
-  const r = await account.api(`/market?${q}`);
+  const r = await account.api(`/market?${q}`, { auth: 'optional' });
   const installed = readInstalled();
   const local = new Set(cur.agent.readCustomToolDefs().map((e) => e.def.name));
   for (const t of r.items) t.local = { exists: local.has(t.name), version: installed[t.name]?.version || null, build: installed[t.name]?.build ?? null };

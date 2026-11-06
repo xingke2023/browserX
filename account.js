@@ -91,10 +91,11 @@ class Account {
   async request(path, { method = 'GET', body, auth = true } = {}) {
     const headers = { Accept: 'application/json' };
     if (body) headers['Content-Type'] = 'application/json';
+    // auth: true = 必须登录；'optional' = 登录了就带 token（网站按这个用户算），没登录也照样请求（插件市场列表）
     if (auth) {
       const token = this.ctx.getToken();
-      if (!token) throw Object.assign(new Error('请先登录 BrowserX 账号'), { needLogin: true });
-      headers.Authorization = `Bearer ${token}`;
+      if (!token && auth !== 'optional') throw Object.assign(new Error('请先登录 BrowserX 账号'), { needLogin: true });
+      if (token) headers.Authorization = `Bearer ${token}`;
     }
     let res;
     // 连接被重置 / 超时这类网络问题：GET 请求自动重试一次（实测过偶发的 ECONNRESET 让整次模型调用失败）
