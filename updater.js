@@ -1,9 +1,16 @@
-// 自动更新：Electron 自带的 autoUpdater（Mac 上是 Squirrel.Mac），见 https://www.electronjs.org/docs/latest/api/auto-updater
-// 门户 GET /api/desktop/update/<平台>-<架构>?v=当前版本：有新版回 200 {url: zip 地址, name, notes}，没有回 204。
+// 自动更新：electron-updater（electron-builder 配套的更新库），见 https://www.electron.build/auto-update
+// 门户 <portal>/updates/ 下放 electron-builder 生成的 latest-mac.yml（版本号、zip 地址和 sha512）、zip 和 zip.blockmap（分块清单）。
+// 差量更新：用上一次更新下载的 update.zip（缓存在 ~/Library/Caches/browserx-updater/）跟新版的分块清单对比，只下载变了的块，
+// 平时发版只改了自己的代码（app.asar 二三十 MB），不用每次再下完整的 255 MB。第一次用这个机制更新（从 dmg 装的、或从 0.1.8
+// 用老机制更新上来的）本地还没有 update.zip，会整包下载一次，之后都是差量。安装最后还是交给 Squirrel.Mac（要签名一致）。
 // 只有签名 + 公证过的正式版能自动更新：启动后检查一次、之后每 4 小时一次，有新版就在后台下载，下载好提示重启；
 // 用户不重启的话，下次退出时自动装上。开发时（npm start）没有签名，菜单里的「检查更新…」只比较版本号、提示去下载页。
-// CB_UPDATE_FEED 可以把更新地址指到别处；CB_UPDATE_TEST=install / quit：下载好后不弹窗，直接「立即重启更新」/ 正常退出（都是本机测试用）
-const { app, autoUpdater, dialog, shell } = require('electron');
+// 0.1.8 及以前的客户端用 Electron 自带的 autoUpdater + /api/desktop/update/darwin-arm64，那个接口门户继续保留。
+// CB_UPDATE_FEED 可以把更新地址（放 latest-mac.yml 的目录）指到别处；CB_UPDATE_TEST=install / quit：下载好后不弹窗，
+// 直接「立即重启更新」/ 正常退出（都是本机测试用）。每次检查、下载的过程（含差量下载了多少）记在 <userData>/logs/updater.log
+const { app, dialog, shell } = require('electron');
+const fs = require('fs');
+const path = require('path');
 
 const EVERY = 4 * 60 * 60 * 1000;
 
@@ -26,10 +33,23 @@ class Updater {
 
   get enabled() { return app.isPackaged && process.platform === 'darwin'; }
 
+  // electron-updater 的日志写到 <userData>/logs/updater.log（超过 1MB 从头写），排查更新问题、看差量下载了多少
+  logger() {
+    const file = path.join(app.getPath('userData'), 'logs', 'updater.log');
+    try { fs.mkdirSync(path.dirname(file), { recursive: true }); if (fs.statSync(file, { throwIfNoEntry: false })?.size > 1 << 20) fs.rmSync(file); } catch {}
+    const write = (level) => (...a) => { try { fs.appendFileSync(file, `${new Date().toISOString()} ${level} ${a.map((x) => (x instanceof Error ? x.stack || x.message : typeof x === 'string' ? x : JSON.stringify(x))).join(' ')}\n`); } catch {} };
+    return { info: write('info'), warn: write('warn'), error: write('error'), debug: write('debug') };
+  }
+
   start() {
     if (!this.enabled) return;
-    const feed = process.env.CB_UPDATE_FEED || `${this.portal}/api/desktop/update/${process.platform}-${process.arch}?v=${app.getVersion()}`;
-    try { autoUpdater.setFeedURL({ url: feed }); } catch (e) { console.warn(`自动更新不可用：${e.message}`); return; }
+    const { autoUpdater } = require('electron-updater'); // 只在正式版的 Mac 上用到，开发时不加载
+    this.au = autoUpdater;
+    autoUpdater.logger = this.logger();
+    autoUpdater.autoDownload = true; // 有新版就在后台下载
+    autoUpdater.autoInstallOnAppQuit = true; // 用户不点「立即重启更新」，下次退出时装上
+    const feed = process.env.CB_UPDATE_FEED || `${this.portal}/updates/`;
+    try { autoUpdater.setFeedURL({ provider: 'generic', url: feed }); } catch (e) { console.warn(`自动更新不可用：${e.message}`); return; }
     autoUpdater.on('checking-for-update', () => { this.state = 'checking'; });
     autoUpdater.on('update-available', () => {
       this.state = 'downloading';
@@ -40,9 +60,9 @@ class Updater {
       if (this.manual) this.box({ message: this.t('已是最新版本'), detail: this.t('当前版本 {0}。', [app.getVersion()]) });
       this.manual = false;
     });
-    autoUpdater.on('update-downloaded', (_e, _notes, name) => {
+    autoUpdater.on('update-downloaded', (info) => {
       this.state = 'ready';
-      this.ready = name || '新版本';
+      this.ready = info?.version ? `BrowserX ${info.version}` : this.t('新版本');
       this.manual = false;
       if (process.env.CB_UPDATE_TEST === 'install') return autoUpdater.quitAndInstall();
       if (process.env.CB_UPDATE_TEST === 'quit') return app.quit();
@@ -66,7 +86,8 @@ class Updater {
       if (manual) this.box({ message: this.t(this.state === 'downloading' ? '新版本正在后台下载' : '正在检查更新'), detail: this.t('好了会提示你。') });
       return;
     }
-    try { autoUpdater.checkForUpdates(); } catch (e) { this.manual = false; if (manual) this.failed(e); }
+    // 失败也会发 error 事件（上面统一处理），这里只是别让 Promise 的拒绝没人接
+    this.au.checkForUpdates().catch(() => {});
   }
 
   // 菜单「检查更新…」
@@ -81,7 +102,7 @@ class Updater {
       detail: this.t('重启 BrowserX 就会更新。登录状态和工具箱都会保留。\n不想现在重启的话，下次退出 BrowserX 时会自动装上。'),
       buttons: [this.t('立即重启更新'), this.t('稍后')],
     });
-    if (r.response === 0) autoUpdater.quitAndInstall();
+    if (r.response === 0) this.au.quitAndInstall();
   }
 
   // 自动更新失败（最常见：BrowserX 没放进「应用程序」，直接在安装包里或下载文件夹里打开）：给一个去下载页手动更新的按钮

@@ -58,6 +58,7 @@ ${(REPLY_LANGS[lang] || REPLY_LANGS['zh-CN']).rule}`;
 const BROWSER_PROMPT = `
 # 内置浏览器
 你运行在一个桌面应用里：左侧是和用户的对话，右侧是一个浏览器。除了 Claude Code 的常规工具，你还可以用 mcp__browser__* 工具控制这个浏览器（用户能实时看到）。
+- 这个应用叫 BrowserX。不要修改 BrowserX 软件本身：安装目录（BrowserX.app / 安装文件夹、app.asar）、它的程序代码、数据目录里的设置和记录文件（config.json、market-installed.json、tool-keys.json、tool-creds.json、schedules.json），也不要解包、改写、重新打包它。用户想给软件加功能或改软件的行为时，说明软件本身改不了，能做的是做成插件（mcp__toolbox__toolbox_new / toolbox_edit）；软件本身的问题请用户反馈给 BrowserX 开发者。
 - 先用 page_info 或 screenshot 了解页面，再操作；操作后确认结果。
 - 所有坐标都使用「截图坐标系」：screenshot 返回的图片坐标与 page_info 给出的坐标一致，click/scroll 直接使用它们。
 - 点击优先用 text 或 CSS selector，拿不准时再用坐标。cdp 是原始 CDP 调用，坐标不做换算，尽量少用。
@@ -1541,30 +1542,44 @@ ${m.editing ? '请问您想改什么、改成什么样？' : '请问您想在哪
     // Windows 的路径不分大小写，Mac 默认的磁盘格式（APFS）也不分：按小写比，免得换个大小写就绕过去
     const low = (p) => (process.platform === 'linux' ? p : p.toLowerCase());
     const ti = input.tool_input || {};
-    let hit = null;
+    // 软件本身：数据目录里的内部文件 + 正式版的安装目录（main.js PROTECTED_PATHS）。只拦写，读不拦
+    const prot = this.ctx.getProtectedPaths?.() || { files: [], dirs: [] };
+    const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const S = '[/\\\\]+';
+    let hit = null, app = false;
     if (['Edit', 'Write', 'MultiEdit', 'NotebookEdit'].includes(input.tool_name)) {
       const f = ti.file_path || ti.notebook_path;
       if (f) {
         let s = String(f).replace(/^~(?=[/\\])/, os.homedir());
         if (win) s = s.replace(/^\/([a-z])(?=\/)/i, '$1:'); // Git Bash 的写法 /c/Users/… = C:/Users/…
-        const abs = path.resolve(this.ctx.getCfg().cwd || os.homedir(), s);
-        if (low(abs).startsWith(low(dir + path.sep)) && !low(abs).startsWith(low(drafts))) hit = abs;
+        const abs = low(path.resolve(this.ctx.getCfg().cwd || os.homedir(), s));
+        if (abs.startsWith(low(dir + path.sep)) && !abs.startsWith(low(drafts))) hit = abs;
+        else if (prot.files.some((x) => abs === low(x)) || prot.dirs.some((d) => abs === low(d) || abs.startsWith(low(d + path.sep))) || /[/\\]app\.asar([/\\]|$)/i.test(abs)) { hit = abs; app = true; }
       }
     } else if (input.tool_name === 'Bash' || input.tool_name === 'PowerShell') {
       const cmd = String(ti.command || '').replace(/\\ /g, ' ');
       // 只认工具目录的最后两级（BrowserX/tools）：~/…、$HOME、%APPDATA%、/c/Users/… 各种写法都对得上；/ 和 \ 都算分隔符
-      const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const S = '[/\\\\]+';
       const t = `${esc(path.basename(path.dirname(dir)))}${S}${esc(path.basename(dir))}${S}(?!_drafts[/\\\\])\\S`;
-      // 重定向写进正式工具文件（引号里的路径可以带空格），或者「像写文件的命令 + 出现正式工具路径」（2>/dev/null 之类的只读命令不算）
-      if (new RegExp(`>{1,2}\\s*(["'][^"'\\n]*|[^\\s"'>|;&]*)${t}`, 'i').test(cmd) || (new RegExp(t, 'i').test(cmd) && BASH_WRITE.test(cmd))) hit = `（${input.tool_name} 命令）`;
+      if (writes(t)) hit = `（${input.tool_name} 命令）`;
+      else {
+        // 软件本身：数据目录里的内部文件（BrowserX/config.json 这样认最后两级）、app.asar、macOS 的 BrowserX.app；
+        // 用 asar 工具解包 / 打包 app.asar 也算（改软件代码的第一步）
+        const files = prot.files.map((f) => `${esc(path.basename(path.dirname(f)))}${S}${esc(path.basename(f))}`);
+        const dirs = prot.dirs.filter((d) => d.endsWith('.app')).map((d) => esc(path.basename(d)));
+        const asar = /\bapp\.asar\b/i.test(cmd) && /\basar\s+(e|x|p|extract|extract-file|pack)\b|@electron\/asar/i.test(cmd);
+        if (asar || [...files, ...dirs, 'app\\.asar'].some((re) => writes(re))) { hit = `（${input.tool_name} 命令）`; app = true; }
+      }
     }
     if (!hit) return {};
+      // 写进某个路径：重定向（> / >>）到它，或者「像写文件的命令 + 出现这个路径」（2>/dev/null 之类的只读命令不算）
+      const writes = (re) => new RegExp(`>{1,2}\\s*(["'][^"'\\n]*|[^\\s"'>|;&]*)${re}`, 'i').test(cmd) || (new RegExp(re, 'i').test(cmd) && BASH_WRITE.test(cmd));
     return {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',
         permissionDecision: 'deny',
-        permissionDecisionReason: `工具箱里的正式工具文件受保护，不能直接修改 ${hit}。改现有工具请先调 mcp__toolbox__toolbox_edit（新建调 mcp__toolbox__toolbox_new）进入制作模式，只改它返回的草稿（${drafts}<name>.js），然后请用户试运行、点「完成」。`,
+        permissionDecisionReason: app
+          ? `这是 BrowserX 软件本身的文件，不能修改 ${hit}。用户想要的新功能请做成插件（新建调 mcp__toolbox__toolbox_new，改现有插件调 mcp__toolbox__toolbox_edit）；软件本身的问题请告诉用户反馈给 BrowserX 开发者。`
+          : `工具箱里的正式工具文件受保护，不能直接修改 ${hit}。改现有工具请先调 mcp__toolbox__toolbox_edit（新建调 mcp__toolbox__toolbox_new）进入制作模式，只改它返回的草稿（${drafts}<name>.js），然后请用户试运行、点「完成」。`,
       },
     };
   }

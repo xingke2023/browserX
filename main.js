@@ -27,6 +27,13 @@ const TOOLS_DIR = () => {
 // 插件市场里别人的工具加密保存，密钥存这里（见 toolcrypt.js）
 const vault = new ToolVault(() => path.join(app.getPath('userData'), 'tool-keys.json'));
 const RECON_DIR = () => path.join(app.getPath('userData'), 'recon');
+// 软件本身的东西，助手（Claude）不能写，只能读（agent.js protectToolFiles）：数据目录里的内部文件，正式版再加上安装目录
+// （macOS 是 BrowserX.app，Windows 是安装目录，里面有 app.asar）。用户只能通过插件扩展功能，改不了软件本身
+const APP_INTERNAL_FILES = ['config.json', 'market-installed.json', 'tool-keys.json', 'tool-creds.json', 'schedules.json'];
+const PROTECTED_PATHS = () => ({
+  files: APP_INTERNAL_FILES.map((f) => path.join(app.getPath('userData'), f)),
+  dirs: app.isPackaged ? [process.platform === 'darwin' ? path.resolve(process.resourcesPath, '..', '..') : path.dirname(process.execPath)] : [],
+});
 // 默认工作目录用单独的 ~/BrowserX：主目录下往往配了跟浏览器任务无关的 MCP 服务、插件（每个新对话都要加载，拖慢启动）
 const WORK_DIR = path.join(os.homedir(), 'BrowserX');
 const DEFAULTS = {
@@ -328,6 +335,7 @@ const FORM_FOLLOW = `(() => {
 function createWindow() {
   win = new BrowserWindow({
     width: 1600, height: 1000, minWidth: 1000, minHeight: 640, title: 'BrowserX',
+    getProtectedPaths: PROTECTED_PATHS,
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
   win.loadFile('index.html');
@@ -478,7 +486,9 @@ function buildMenu() {
     {
       label: L('显示'),
       submenu: [
-        { role: 'reload', label: L('刷新界面') }, { role: 'forceReload', label: L('强制刷新界面') }, { role: 'toggleDevTools', label: L('界面开发者工具') },
+        { role: 'reload', label: L('刷新界面') }, { role: 'forceReload', label: L('强制刷新界面') },
+        // 界面（左侧）的开发者工具：能直接在界面里跑代码、调内部接口，正式版不给（右侧网页的开发者工具保留，做插件用得上）
+        ...(app.isPackaged ? [] : [{ role: 'toggleDevTools', label: L('界面开发者工具') }]),
         // 右侧网页的开发者工具（原来在浏览器工具栏上，那个位置换成了收藏夹按钮）
         { label: L('网页开发者工具'), accelerator: 'Alt+CmdOrCtrl+I', click: () => cur?.view.webContents.toggleDevTools() },
         { type: 'separator' },
