@@ -24,6 +24,8 @@ const { z } = require('zod');
 const { WeChat } = require('./wechat');
 const { THEMES, textToArticle, renderBlocks } = require('./article');
 const { Recorder } = require('./recorder');
+const { CHROME_PATCH } = require('./chrome-patch');
+const patchIds = new WeakMap(); // webContents → 注册的补丁脚本 id（跟着那次调试连接，断开就失效）
 const { PORTAL } = require('./account');
 const Module = require('module');
 
@@ -59,6 +61,7 @@ const BROWSER_PROMPT = `
 # 内置浏览器
 你运行在一个桌面应用里：左侧是和用户的对话，右侧是一个浏览器。除了 Claude Code 的常规工具，你还可以用 mcp__browser__* 工具控制这个浏览器（用户能实时看到）。
 - 这个应用叫 BrowserX。不要修改 BrowserX 软件本身：安装目录（BrowserX.app / 安装文件夹、app.asar）、它的程序代码、数据目录里的设置和记录文件（config.json、market-installed.json、tool-keys.json、tool-creds.json、schedules.json），也不要解包、改写、重新打包它。用户想给软件加功能或改软件的行为时，说明软件本身改不了，能做的是做成插件（mcp__toolbox__toolbox_new / toolbox_edit）；软件本身的问题请用户反馈给 BrowserX 开发者。
+- Google 账号（Gmail、YouTube、Google 账号页等）的登录让用户自己在右边网页里完成，不要替用户填账号密码。如果 Google 拒绝（「无法登录」「浏览器不支持 JavaScript」），请用户点对话里的「用 Chrome 登录 Google」按钮（没装 Chrome 时按钮上是 Edge 等别的浏览器；也可以用菜单 显示 → 用 … 登录 Google）：会打开一个临时的浏览器窗口让用户自己登录，登录状态自动带回内置浏览器，之后再继续。
 - 先用 page_info 或 screenshot 了解页面，再操作；操作后确认结果。
 - 所有坐标都使用「截图坐标系」：screenshot 返回的图片坐标与 page_info 给出的坐标一致，click/scroll 直接使用它们。
 - 点击优先用 text 或 CSS selector，拿不准时再用坐标。cdp 是原始 CDP 调用，坐标不做换算，尽量少用。
@@ -593,6 +596,7 @@ class Agent {
     this.rec.addPage(wc); // 录制中新开的标签一起录
     // 网页弹框（alert / confirm / prompt / 离开页面确认）：助手或工具在干活时自动处理，不然页面会卡住、执行脚本一直等到超时
     wc.debugger.on('message', (_e, method, p) => { if (method === 'Page.javascriptDialogOpening') this.onDialog(wc, p).catch(() => {}); });
+    wc.debugger.on('detach', () => patchIds.delete(wc)); // 调试连接断了（比如开了网页开发者工具）：补丁跟着失效，下次 cdp() 连上时 applyIdentity 重新注册
     try { this.cdp('Page.enable', {}, wc).catch(() => {}); } catch { /* 开发者工具开着时连不上，下次 cdp() 连上时会补 */ }
     this.applyIdentity(wc);
   }
@@ -600,17 +604,20 @@ class Agent {
   // 浏览器身份的「客户端提示」（sec-ch-ua 这组请求头和 navigator.userAgentData）：跟真 Chrome 一样报 Google Chrome / Chromium。
   // main.js 改了 User-Agent 后 Chromium 就不再发 sec-ch-ua，整组请求头都没有本身就像自动化程序（防爬虫会看），这里补上
   applyIdentity(wc) {
-    // 白名单网站（Google 等）：用内置浏览器原始身份，只覆盖 UA、不报 Chrome 品牌（见 main.js setEmbedded）
+    // 白名单网站：用内置浏览器原始身份，只覆盖 UA、不报 Chrome 品牌，也不补差异（见 main.js setEmbedded）
     if (this.ctx.isEmbedded?.(wc)) {
       try { this.cdp('Emulation.setUserAgentOverride', { userAgent: this.ctx.embedUa() }, wc).catch(() => {}); } catch {}
+      this.setChromePatch(wc, false);
       return;
     }
+    this.setChromePatch(wc, true);
     const full = process.versions.chrome, major = full.split('.')[0];
     const brands = [{ brand: 'Google Chrome', version: major }, { brand: 'Chromium', version: major }, { brand: 'Not:A-Brand', version: '8' }];
     const mac = process.platform === 'darwin';
     try {
       this.cdp('Emulation.setUserAgentOverride', {
         userAgent: wc.getUserAgent(),
+        acceptLanguage: this.ctx.acceptLanguage?.() || undefined, // navigator.languages 跟真 Chrome 一样（zh-CN,zh），不是 Electron 的系统语言全列表
         platform: mac ? 'MacIntel' : process.platform === 'win32' ? 'Win32' : 'Linux x86_64',
         userAgentMetadata: {
           brands, fullVersionList: brands.map((b) => ({ ...b, version: b.brand === 'Not:A-Brand' ? '8.0.0.0' : full })), fullVersion: full,
@@ -619,6 +626,23 @@ class Agent {
         },
       }, wc).catch(() => {});
     } catch { /* 开发者工具开着时连不上，下次 cdp() 连上时会补 */ }
+  }
+
+  // 补差异（chrome-patch.js）：在每个新文档的脚本之前跑，让页面里看到的跟真 Chrome 一样。on=false 时撤掉（白名单网站）
+  setChromePatch(wc, on) {
+    const id = patchIds.get(wc);
+    if (on === !!id) return;
+    try {
+      if (on) {
+        patchIds.set(wc, 'pending'); // 先占上，免得连着两次 applyIdentity 注册两遍
+        this.cdp('Page.addScriptToEvaluateOnNewDocument', { source: CHROME_PATCH }, wc)
+          .then((r) => { if (patchIds.get(wc) === 'pending') patchIds.set(wc, r.identifier); })
+          .catch(() => patchIds.delete(wc));
+      } else {
+        patchIds.delete(wc);
+        if (id !== 'pending') this.cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier: id }, wc).catch(() => {});
+      }
+    } catch { patchIds.delete(wc); /* 开发者工具开着时连不上，下次 cdp() 连上时会补 */ }
   }
 
   // 用户自己在操作时不管（照常弹系统对话框让用户点）；助手 / 工具在干活时：

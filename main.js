@@ -3,6 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { Agent, CB_TAG, scanRisks, BLOCKING_SECRETS, nativeClaude, gitBash, shellEnv } = require('./agent');
+const chromeLogin = require('./chrome-login');
 const { Account, PORTAL: ACCOUNT_PORTAL } = require('./account');
 const { Updater } = require('./updater');
 const { Scheduler } = require('./scheduler');
@@ -231,9 +232,15 @@ function addPage(t, { view, url, activate = true } = {}) {
     p.navError = { code, desc, url };
     syncViewVisible();
   });
-  wc.on('did-navigate', () => {
+  wc.on('did-navigate', (_e, url) => {
     p.navError = null;
     syncViewVisible();
+    // 打开了 Google 登录页：补了差异后一般能直接登录，万一被拒就改用 Chrome 登录，提示一次（每个对话只提示一次）
+    if (chromeLogin.isGoogleLoginUrl(url) && !t.googleHinted) {
+      t.googleHinted = true;
+      const name = chromeLogin.findBrowser()?.name || 'Chrome';
+      send('agent', { type: 'note', action: 'googleLogin', browser: name, tab: t.id, text: `可以直接在右边登录 Google。如果被拒（提示「无法登录」或「浏览器不支持 JavaScript」），点下面的按钮改在 ${name} 里登录，登录好会自动带回这里` });
+    }
   });
   for (const ev of ['did-navigate', 'did-navigate-in-page', 'page-title-updated', 'did-start-loading', 'did-stop-loading', 'did-fail-load']) {
     wc.on(ev, () => { if (t === cur && p === t.page) send('nav', navState()); sendPages(t); });
@@ -325,6 +332,7 @@ function createTab(url = cfg.home) {
   t.agent = new Agent({
     isEmbedded: (wc) => embedWcs.has(wc.id), // 网页在白名单网站上：用内置浏览器原始身份（见 setEmbedded）
     embedUa: () => EMBED_UA,
+    acceptLanguage: () => ACCEPT_LANG, // 补差异：navigator.languages 跟真 Chrome 一样
     getWc: () => { if (t.page.sleeping) wakePage(t, t.page); return t.page.view.webContents; }, // 休眠的网页：用到就唤醒（开始重新加载）
     wakePage: () => wakePage(t, t.page), // 发消息、跑工具前调：唤醒并等加载完
     pages: pagesApi(t),
@@ -575,6 +583,7 @@ function buildMenu() {
         ...(app.isPackaged ? [] : [{ role: 'toggleDevTools', label: L('界面开发者工具') }]),
         // 右侧网页的开发者工具（原来在浏览器工具栏上，那个位置换成了收藏夹按钮）
         { label: L('网页开发者工具'), accelerator: 'Alt+CmdOrCtrl+I', click: () => cur?.view.webContents.toggleDevTools() },
+        { label: L('用 {0} 登录 Google…', [chromeLogin.findBrowser()?.name || 'Chrome']), click: () => googleChromeLogin().catch(() => {}) },
         { type: 'separator' },
         { role: 'resetZoom', label: L('实际大小') }, { role: 'zoomIn', label: L('放大') }, { role: 'zoomOut', label: L('缩小') },
         { type: 'separator' },
@@ -644,10 +653,13 @@ function uniquePath(dir, name) {
 // 带 Electron/ 的原始身份 → 正常走登录流程）。名单里的网站改用原始身份：按网页算，主框架打开名单里的网站时整个网页换过去，离开再换回来。
 // 名单在门户后台「系统设置 → 客户端设置」维护，client-config 接口给；启动时和每 30 分钟拉一次，存 <userData>/site-identity.json，连不上用上次的
 const SITE_IDENTITY_FILE = () => path.join(app.getPath('userData'), 'site-identity.json');
-const DEFAULT_EMBED_HOSTS = ['google.*', 'gmail.com', 'youtube.com'];
+const DEFAULT_EMBED_HOSTS = []; // 默认没有：Google 原以为要用原始身份，实测走不通（见 chrome-login.js），改成用 Chrome 登录后搬 Cookie
 let embedHosts = DEFAULT_EMBED_HOSTS;
 let embedRes = [];
 let EMBED_UA = '';
+// 语言列表跟真 Chrome 一样：界面语言 + 它的基础语言（zh-CN → zh-CN,zh）。Electron 默认把系统偏好语言全列出来（zh-CN,zh-Hans-CN,en-CN,…），一看就不是 Chrome
+let ACCEPT_LANG = '';
+const chromeAcceptLang = () => { const loc = app.getLocale() || 'en-US'; const base = loc.split('-')[0]; return base !== loc ? `${loc},${base}` : loc; };
 const embedWcs = new Set(); // 正在用原始身份的网页（webContents id）
 function setEmbedHosts(list) {
   embedHosts = Array.isArray(list) ? list.map((h) => String(h).toLowerCase().trim()).filter((h) => /^[a-z0-9*.-]+$/.test(h) && h !== '*') : DEFAULT_EMBED_HOSTS;
@@ -687,11 +699,45 @@ function setEmbedded(wcId, on) {
   try { t?.agent.applyIdentity(wc); } catch {}
 }
 
+// ---------------------------------------------------------------- 用 Chrome 登录 Google（chrome-login.js）
+// 打开一个临时的独立 Chrome 窗口让用户登录 Google，登录好把 Google 的 Cookie 写进内置浏览器，关掉那个 Chrome。进度和结果写进发起的那个对话
+let googleLogin = null; // 正在进行的那次：{ abort, tab }
+async function googleChromeLogin(t = cur) {
+  const note = (text, extra = {}) => send('agent', { type: 'note', tab: t.id, text, ...extra });
+  if (googleLogin) { note('已经打开了一个 Chrome 在等你登录 Google，请在那个窗口里登录（不用了就关掉它）', { tone: 'warn' }); return { ok: false }; }
+  const ac = new AbortController();
+  googleLogin = { abort: () => ac.abort(), tab: t.id };
+  try {
+    const cookies = await chromeLogin.loginWithChrome({
+      url: 'https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fmyaccount.google.com%2F', signal: ac.signal,
+      onStart: (name) => note(`已打开 ${name}：请在弹出的 ${name} 窗口里登录 Google。登录好后它会自动关掉，登录状态带回这里。（这是一个临时的独立窗口，不影响你平时用的 ${name}）`),
+    });
+    const n = await chromeLogin.importCookies(session.fromPartition('persist:browser'), cookies);
+    if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+    // 正停在 Google 登录页：去登录后本来要去的地方（continue），没有就去 Google 账号页；在别的 Google 页面上就刷新一下
+    if (tabs.has(t.id)) {
+      const wc = t.view.webContents;
+      const u = wc.getURL();
+      if (chromeLogin.isGoogleLoginUrl(u)) {
+        let next = 'https://myaccount.google.com/';
+        try { const c = new URL(u).searchParams.get('continue'); if (c && /^https:\/\//i.test(c)) next = c; } catch {}
+        wc.loadURL(next).catch(() => {});
+      } else if (/^https:\/\//i.test(u) && chromeLogin.GOOGLE_DOMAIN.test(new URL(u).hostname)) wc.reload();
+    }
+    note(`已登录 Google（带回 ${n} 个登录 Cookie），内置浏览器里的 Google 服务现在都是登录状态`);
+    return { ok: true, cookies: n };
+  } catch (e) {
+    note(e.cancelled ? `— ${e.message} —` : `用浏览器登录 Google 没成功：${e.message}`, e.cancelled ? {} : { tone: 'warn' }); // 结果都写进对话，不再往外抛
+    return { ok: false, error: e.message };
+  } finally { googleLogin = null; }
+}
+
 function useChromeIdentity() {
   const ses = session.fromPartition('persist:browser');
   EMBED_UA = ses.getUserAgent().replace(/\s+(BrowserX|browserx|claude-browser)\/\S+/gi, ''); // 原始身份：只去掉本软件的名字，留着 Electron/版本号
   const ua = ses.getUserAgent().replace(/\s+(Electron|BrowserX|browserx|claude-browser)\/\S+/gi, '');
-  ses.setUserAgent(ua);
+  ACCEPT_LANG = chromeAcceptLang();
+  ses.setUserAgent(ua, ACCEPT_LANG);
   // 改了 User-Agent 以后，打开网页（主文档、iframe）的请求不再带 sec-ch-ua 这组请求头（页面里的 fetch 由 agent.applyIdentity 补上了）。
   // 真 Chrome 访问 https 时默认都会带这三个，没有反而像自动化程序：缺了就补上，有了不动
   const major = process.versions.chrome.split('.')[0];
@@ -947,6 +993,7 @@ handle('win:focus', () => win.webContents.focus());
 
 handle('history:list', () => cur.agent.listHistory());
 handle('history:resume', (id, tab) => tabOf(tab).agent.resume(id));
+handle('google:chromeLogin', (tab) => googleChromeLogin(tabOf(tab))); // 对话里「用 Chrome 登录 Google」按钮
 handle('history:rename', (id, title) => cur.agent.renameHistory(id, title));
 handle('history:delete', (id) => {
   for (const t of tabs.values()) if (t.agent.sleeping && t.agent.sessionId === id) t.agent.reset(); // 空闲关掉的会话被删了：别再接上它

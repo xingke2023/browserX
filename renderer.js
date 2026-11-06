@@ -403,6 +403,12 @@ function onAgentEvent(ev) {
         const lines = rest.join('\n').replace(/\n+$/, '').split('\n').map((l) => `<div class="nl">${esc(l) || '&nbsp;'}</div>`).join('');
         add('note intro', `<div class="nhd">${esc(hd)}</div>${lines}${q ? `<div class="nq">${esc(q)}</div>` : ''}`, true);
       }
+      else if (ev.action === 'googleLogin') { // 打开了 Google 登录页：这里登录会被拦，带一个「用 Chrome 登录 Google」
+        const d = add('note', `${esc(ev.text)}<div style="margin-top:6px"><button class="ghost glogin">用 ${esc(ev.browser || 'Chrome')} 登录 Google</button></div>`, true);
+        const tabId = T.id;
+        // 进度、结果、出错都由主进程写进对话（main.js googleChromeLogin）
+        d.querySelector('.glogin').addEventListener('click', () => call('google:chromeLogin', tabId).catch(() => {}));
+      }
       else if (ev.file) { // 下载完成：带一个「在访达中显示」
         const d = add('note', `${esc(ev.text)} <button class="ghost dl_show">在${FINDER}中显示</button>`, true);
         d.querySelector('.dl_show').addEventListener('click', () => call('downloads:show', ev.file).catch(() => {}));
