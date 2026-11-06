@@ -630,6 +630,38 @@ const scheduler = new Scheduler({
   onChange: (list) => send('schedules', list),
 });
 
+// ---------------------------------------------------------------- browserx:// 链接（网站插件详情页的「在 BrowserX 中安装」）
+// 网页上点 browserx://install/<插件 id>，浏览器问「要打开 BrowserX 吗」，确认后这里收到：打开工具箱，走跟插件市场里点「安装」完全一样的流程
+// （下载 → 静态检查 → 安装确认页，用户确认后才装）。没登录就停在插件市场的登录提示。只认这一种格式，别的链接忽略。
+// macOS 用 open-url 事件（App 没开时也会先启动再发过来）；Windows 是再启动一个进程带着链接参数，所以要单实例锁，由 second-instance 转交
+const LINK_RE = /^browserx:\/\/install\/(\d{1,9})(?:[/?#]|$)/i;
+let pendingLink = null; // 窗口还没准备好时先记着，界面加载完来取（link:pending）
+function handleLink(url) {
+  const m = String(url || '').match(LINK_RE);
+  if (!m) return;
+  const id = Number(m[1]);
+  if (!win || win.isDestroyed() || win.webContents.isLoading()) { pendingLink = id; return; }
+  if (win.isMinimized()) win.restore();
+  win.show();
+  app.focus({ steal: true });
+  send('marketLink', id);
+}
+app.on('open-url', (e, url) => { e.preventDefault(); handleLink(url); });
+if (process.platform === 'win32') {
+  if (!app.requestSingleInstanceLock()) app.quit();
+  app.on('second-instance', (_e, argv) => {
+    const url = argv.find((a) => /^browserx:\/\//i.test(a));
+    if (url) handleLink(url);
+    else if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+  });
+  const url = process.argv.find((a) => /^browserx:\/\//i.test(a)); // 没开着时由链接启动
+  if (url) handleLink(url);
+}
+// 注册成 browserx:// 的处理程序。npm start 时登记的是开发用的 Electron（Windows 要带上 main.js 路径；macOS 登记的是 node_modules 里那个 Electron.app，
+// 所以开发版只有开着时点链接才有用）。正式版每次启动都会重新登记自己（打包时 package.json 的 protocols 也写进了 Info.plist）
+if (app.isPackaged) app.setAsDefaultProtocolClient('browserx');
+else app.setAsDefaultProtocolClient('browserx', process.execPath, [path.resolve(process.argv[1] || '.')]);
+
 app.whenReady().then(async () => {
   // 打包后的自检（CB_SMOKE=1，GitHub Actions 打完 Windows 包时用）：找得到 Claude 运行时、能执行、Git Bash 能用、系统加密可用，写结果到 CB_SMOKE_OUT 后退出
   if (process.env.CB_SMOKE) { runSmokeTest(); return; }
@@ -663,6 +695,8 @@ const handle = (ch, fn) => ipcMain.handle(ch, async (_e, ...a) => {
   // url / needLogin：账号接口的错误带上网站地址（去购买、开通会员）或「要先登录」，界面据此给按钮
   try { return { ok: true, data: await fn(...a) }; } catch (e) { return { ok: false, error: e.message, url: e.url, label: e.label, quota: e.quota, needLogin: e.needLogin }; }
 });
+// browserx:// 链接：界面加载完来取启动前收到的那个（见 handleLink）
+handle('link:pending', () => { const id = pendingLink; pendingLink = null; return id; });
 
 // 渲染进程告知浏览器区域位置。拖动分隔条时传 0 大小只是把前台视图藏起来，后台标签保持原大小（助手可能正在截图）
 handle('bounds', (r) => {
@@ -768,7 +802,15 @@ handle('history:clear', async () => {
 handle('history:prune', () => cur.agent.pruneHistory()); // 打开历史时顺手把超过 30 条的旧记录删掉
 
 // fromMarket：从插件市场下载安装的（包括自己发布后又装回来的），工具箱里不显示「发布」
-handle('tools:list', () => { const inst = readInstalled(); return cur.agent.listCustomTools().map((t) => ({ ...t, market: isMarketTool(t.name), fromMarket: !!inst[t.name] })); });
+// 从市场装的工具：名字用网站上的标题（跟插件市场里一致，代码里的 title 可能不一样），official / featured 是市场的「官方」「精品」标记。
+// 都是装的时候记下，之后每次检查更新时按网站上的最新状态改（syncToolBadges）
+handle('tools:list', () => {
+  const inst = readInstalled();
+  return cur.agent.listCustomTools().map((t) => {
+    const x = inst[t.name];
+    return { ...t, title: x?.title || t.title, market: isMarketTool(t.name), fromMarket: !!x, official: !!x?.official, featured: !!x?.featured };
+  });
+});
 handle('tools:run', (name, args, tab) => tabOf(tab).agent.runCustomTool(name, args));
 handle('tools:repairInfo', (name) => cur.agent.toolRepairInfo(name)); // 插件修复：最近一次运行的分析 + 说明 / 代码位置
 handle('tools:form', (name) => cur.agent.toolFormUrl(name));
@@ -816,7 +858,7 @@ async function confirmImport(opts = {}) {
   // 从插件市场装的：记下版本，市场列表上显示「已安装」
   if (marketPending && marketPending.name === r.name) {
     const all = readInstalled();
-    all[r.name] = { id: marketPending.id, version: marketPending.version, build: marketPending.build, sha256: marketPending.sha256, mine: marketPending.mine, at: Date.now() };
+    all[r.name] = { id: marketPending.id, version: marketPending.version, build: marketPending.build, sha256: marketPending.sha256, mine: marketPending.mine, title: marketPending.title, official: marketPending.official, featured: marketPending.featured, at: Date.now() };
     fs.writeFileSync(INSTALLED_FILE(), JSON.stringify(all, null, 1));
   }
   else if (!marketPending) {
@@ -854,6 +896,12 @@ handle('account:cancel', () => account.cancel());
 // 退出 BrowserX 账号：这个账号在本机记住的插件账号密码一起清掉
 handle('account:logout', async () => { const key = credAccount(); await account.logout(); clearAccountCreds(key); });
 handle('account:refresh', () => account.refresh());
+// 门户后台的客户端界面开关（不用登录）：目前只有「工具箱」右边要不要显示「插件市场」按钮（后台 系统设置 → 插件市场分成）
+handle('portal:clientConfig', async () => {
+  const res = await fetch(`${ACCOUNT_PORTAL}/api/desktop/client-config`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+});
 // 邀约有礼：邀约链接 / 二维码 / 积分，积分兑换会员天数（兑换后刷新账号状态，会员到期日跟着变）
 handle('invite:get', () => account.api('/invite'));
 handle('invite:redeem', async (days) => {
@@ -914,7 +962,7 @@ handle('market:install', async (id) => {
   const file = path.join(dir, `${r.name}.js`);
   fs.writeFileSync(file, r.code);
   importer = cur.agent;
-  marketPending = { name: r.name, id: Number(id), version: r.version, build: r.build, sha256: r.sha256, mine: !!r.mine };
+  marketPending = { name: r.name, id: Number(id), version: r.version, build: r.build, sha256: r.sha256, mine: !!r.mine, title: r.title || '', official: !!r.official, featured: !!r.featured };
   // 市场工具是别人的作品：不把源代码发给界面（确认页不显示「查看源代码」）；代码已读进 pendingImport，临时文件马上删掉
   const { code, ...preview } = importer.importPreview(file);
   fs.rmSync(file, { force: true });
@@ -973,6 +1021,22 @@ function installedCode(name) {
   if (fs.existsSync(js)) return fs.readFileSync(js, 'utf8');
   return null;
 }
+// 网站回来的标题和「官方」「精品」状态写进 market-installed.json；网站上下架或删了的工具（不在 badges 里）标记去掉、标题不动。有变化才写文件、通知界面重画
+function syncToolBadges(badges) {
+  const byId = new Map(badges.map((b) => [b.id, b]));
+  const all = readInstalled();
+  let changed = false;
+  for (const x of Object.values(all)) {
+    if (!x.id) continue;
+    const b = byId.get(x.id);
+    const official = !!b?.official, featured = !!b?.featured;
+    if (!!x.official !== official || !!x.featured !== featured) { x.official = official; x.featured = featured; changed = true; }
+    if (b?.title && b.title !== x.title) { x.title = b.title; changed = true; }
+  }
+  if (!changed) return;
+  fs.writeFileSync(INSTALLED_FILE(), JSON.stringify(all, null, 1));
+  send('toolBadges');
+}
 async function checkToolUpdates({ auto = false } = {}) {
   if (!accountToken) return toolUpdates;
   const installed = readInstalled();
@@ -980,6 +1044,7 @@ async function checkToolUpdates({ auto = false } = {}) {
   const tools = Object.values(installed).filter((x) => x.id).map((x) => (Number.isInteger(x.build) ? { id: x.id, build: x.build } : { id: x.id, version: x.version || '' }));
   if (!tools.length) { toolUpdates = {}; send('toolUpdates', toolUpdates); return toolUpdates; }
   const r = await account.api('/market/updates', { method: 'POST', body: { tools } });
+  if (Array.isArray(r.badges)) syncToolBadges(r.badges); // 旧版网站不回 badges，就保留装的时候记的
   const next = {};
   for (const u of r.updates || []) if (installed[u.name]?.id === u.id) next[u.name] = { ...u, needsConfirm: toolUpdates[u.name]?.needsConfirm };
   toolUpdates = next;
@@ -1014,7 +1079,7 @@ async function updateMarketTool(name, { auto = false } = {}) {
   fs.writeFileSync(file, r.code);
   const agent = cur.agent;
   importer = agent;
-  marketPending = { name: r.name, id: Number(u.id), version: r.version, build: r.build, sha256: r.sha256, mine: !!r.mine };
+  marketPending = { name: r.name, id: Number(u.id), version: r.version, build: r.build, sha256: r.sha256, mine: !!r.mine, title: r.title || '', official: !!r.official, featured: !!r.featured };
   try { agent.importPreview(file); } finally { fs.rmSync(file, { force: true }); }
   await confirmImport({ overwrite: true, quiet: true });
   const title = u.title ? `${u.title}（${name}）` : name;

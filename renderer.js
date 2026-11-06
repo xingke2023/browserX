@@ -710,6 +710,13 @@ let toolUpdates = {};
 let autoUpdateTools = true;
 call('tools:updates').then((u) => { toolUpdates = u || {}; }).catch(() => {});
 call('cfg:get').then((c) => { autoUpdateTools = c.autoUpdateTools !== false; }).catch(() => {});
+// 检查更新时网站上的标题或「官方」「精品」状态变了（main.js syncToolBadges）：重新读一次工具列表再重画卡片
+// （只读 tools:list，不走 renderToolboxList，那个会再触发一次检查更新）
+api.on('toolBadges', async () => {
+  try { tbItems = await call('tools:list'); } catch { return; }
+  refreshToolTitles(tbItems);
+  if (!$('toolbox').hidden && $('tb_list').querySelector('.tbcards')) drawToolCards();
+});
 api.on('toolUpdates', (u) => {
   toolUpdates = u || {};
   if (!$('toolbox').hidden && $('tb_list').querySelector('.tbcards')) drawToolCards();
@@ -812,7 +819,7 @@ function drawToolCards() {
     // 标题旁：「有新版本 x」（不能更新时附原因）；「更新」按钮放在操作按钮最后（删除的右边）
     const updHtml = upd ? `<span class="tbupd" title="${esc(upd.changelog ? `更新内容：${upd.changelog}` : '作者发布了新版本')}">有新版本 ${esc(upd.version)}</span>${upd.can_install ? '' : `<span class="tbupdno" title="${esc(upd.reason || '')}">${esc(upd.reason || '暂时不能更新')}</span>`}` : '';
     const updBtn = upd?.can_install ? '<button class="primary tbedit tbupdbtn" title="更新到新版本">更新</button>' : '';
-    d.innerHTML = `<div class="tbhead"><span class="tbname">${i + 1}、${mark(t.title || t.name)}${t.title ? `<small class="tbid">${mark(t.name)}</small>` : ''}${updHtml}</span><span class="tbacts"><button class="ghost tbedit tbfav${tbFavs.has(t.name) ? ' on' : ''}" title="${tbFavs.has(t.name) ? '取消收藏' : '收藏'}">${tbFavs.has(t.name) ? '★' : '☆'}</button>${t.market ? '<span class="tbmk" title="从插件市场安装的别人的工具：不能编辑、导出、发布">市场</span>' : `<button class="ghost tbedit tbeditbtn" title="进入制作模式修改这个工具（改的是草稿，完成前不影响现在的版本）">编辑</button><button class="ghost tbedit tbexport" title="导出成一个 .js 文件，发给别人导入">导出</button>${t.fromMarket ? '' : '<button class="ghost tbedit tbpublish" title="发布到 BrowserX 网站的插件市场（进入审核）">发布</button>'}`}<button class="ghost tbedit tbrepair" title="插件修复：让 Claude 根据最近一次运行（报错、警告、各步耗时）和插件说明、代码，分析出错或很慢的原因">修复</button><button class="ghost tbedit tbdel" title="从工具箱删除（文件移到${TRASH}，可以恢复）">删除</button>${updBtn}</span></div>
+    d.innerHTML = `<div class="tbhead"><span class="tbname">${i + 1}、${mark(t.title || t.name)}${officialBadge(t)}${featuredBadge(t)}${t.title ? `<small class="tbid">${mark(t.name)}</small>` : ''}${updHtml}</span><span class="tbacts"><button class="ghost tbedit tbfav${tbFavs.has(t.name) ? ' on' : ''}" title="${tbFavs.has(t.name) ? '取消收藏' : '收藏'}">${tbFavs.has(t.name) ? '★' : '☆'}</button>${t.market ? '<span class="tbmk" title="从插件市场安装的别人的工具：不能编辑、导出、发布">市场</span>' : `<button class="ghost tbedit tbeditbtn" title="进入制作模式修改这个工具（改的是草稿，完成前不影响现在的版本）">编辑</button><button class="ghost tbedit tbexport" title="导出成一个 .js 文件，发给别人导入">导出</button>${t.fromMarket ? '' : '<button class="ghost tbedit tbpublish" title="发布到 BrowserX 网站的插件市场（进入审核）">发布</button>'}`}<button class="ghost tbedit tbrepair" title="插件修复：让 Claude 根据最近一次运行（报错、警告、各步耗时）和插件说明、代码，分析出错或很慢的原因">修复</button><button class="ghost tbedit tbdel" title="从工具箱删除（文件移到${TRASH}，可以恢复）">删除</button>${updBtn}</span></div>
       ${t.description ? `<div class="tbdesc" title="${esc(t.description)}">${mark(t.description)}</div>` : ''}`;
     d.querySelector('.tbeditbtn')?.addEventListener('click', (e) => { e.stopPropagation(); beginMaking({ edit: t.name }); });
     d.querySelector('.tbfav').addEventListener('click', (e) => {
@@ -1151,6 +1158,10 @@ function buildDynamicForm(t) {
   form.innerHTML = '<div class="muted">正在读取表单…</div>';
   let seq = 0, timer = null, submit = '运行';
   const credState = { loaded: false, saved: null, save: null }; // 记住的账号密码（只读一次，重画表单时沿用）；「记住」默认勾上
+  // 用户在这个表单里亲手改过的账号密码栏（按标签记住）：只有这些不被记住的值覆盖。插件自己给的默认值（formSpec 的 value，
+  // 比如作者在新版本里写了个测试账号）不算，照样换成本机记住的——否则从插件市场覆盖安装 / 升级后，记住的账号密码就填不进去了
+  tab.credTyped ||= {};
+  const typed = tab.credTyped[t.name] ||= new Set();
   const fid = (key) => `dyn_${tab.id}_${t.name}_${key}`.replace(/[^\w-]/g, '_');
 
   const readField = (f, el) => {
@@ -1214,6 +1225,7 @@ function buildDynamicForm(t) {
       values[f.key] = f.kind === 'boolean' ? !!f.value : f.value ?? (f.kind === 'number' ? null : ''); // 工具给的值（含它算出来的默认值）为准
       el.addEventListener(f.kind === 'boolean' || f.kind === 'enum' ? 'change' : 'input', () => {
         values[f.key] = readField(f, el);
+        if (credKind(f)) typed.add(f.key);
         // 输入框跟着内容变宽：始终放得下现在的内容再多一个字（金额多打几位也看得全）
         if (el.tagName === 'INPUT' && el.type !== 'checkbox') el.style.setProperty('--w', Math.max(Number(el.style.getPropertyValue('--w')) || 0, String(el.value).length + 1));
         if (f.refresh === 'input') later(250);
@@ -1225,7 +1237,7 @@ function buildDynamicForm(t) {
     if (credFields.length) {
       const fill = (saved) => {
         for (const f of credFields) {
-          if (!saved?.[f.key] || values[f.key]) continue; // 用户已经填了的不覆盖
+          if (!saved?.[f.key] || typed.has(f.key)) continue; // 用户自己改过的不覆盖；插件给的默认值让位给记住的
           values[f.key] = saved[f.key];
           const el = form.querySelector('#' + fid(f.key));
           if (el) el.value = saved[f.key];
@@ -1260,7 +1272,7 @@ function buildDynamicForm(t) {
         await call('creds:clear', t.name).catch(() => {});
         credState.saved = null;
         clr.hidden = true; // 「记住」还勾着：下次运行时按新填的重新记
-        for (const f of credFields) { values[f.key] = ''; const el = form.querySelector('#' + fid(f.key)); if (el) el.value = ''; }
+        for (const f of credFields) { values[f.key] = ''; typed.delete(f.key); const el = form.querySelector('#' + fid(f.key)); if (el) el.value = ''; }
       });
     }
     // 把表单上现在的内容变成工具参数（运行、定时运行共用）；不合法时在表单上显示原因，返回 null
@@ -1655,6 +1667,11 @@ async function showSchedHistory(x) {
   await shown;
 }
 
+// 「官方」「精品」标记：插件市场列表和工具箱（从市场装的工具）共用
+// 官方插件（网站后台蓝 V 认证）：标题旁蓝 V 认证徽章「官方」（徽章里的对勾是镂空的，底下垫一个白色圆点让对勾显示成白色）
+const officialBadge = (t) => (t.official ? '<span class="mkoff" title="官方插件：BrowserX 官方发布并认证"><svg viewBox="0 0 22 22" aria-hidden="true"><circle class="vbg" cx="11" cy="11" r="6"/><path class="vbadge" d="M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.239 1.266.296 1.903.164.636-.132 1.22-.447 1.68-.907.46-.46.776-1.044.908-1.681s.075-1.299-.165-1.903c.586-.274 1.084-.705 1.439-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z"/></svg>官方</span>' : '');
+// 精品插件（网站后台管理员设置）：金色星星「精品」
+const featuredBadge = (t) => (t.featured ? '<span class="mkfeat" title="精品插件：管理员精选推荐"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.00 2.10 L14.70 8.88 L21.99 9.36 L16.37 14.02 L18.17 21.09 L12.00 17.20 L5.83 21.09 L7.63 14.02 L2.01 9.36 L9.30 8.88Z"/></svg>精品</span>' : '');
 async function renderMarket() {
   const list = $('tb_list');
   list.innerHTML = `<div class="sc_top"><button class="ghost tbback">← 工具箱</button><h2 class="sc_title">插件市场</h2><span></span></div>
@@ -1689,9 +1706,7 @@ async function loadMarket(body) {
       : account.user?.member ? (buying?.id === t.id ? '<span class="mkwait">等待付款…</span>' : `<button class="primary mk_buy">购买 ${esc(t.price_label)}</button>`)
       : `<button class="ghost ac_link" data-url="${esc(account.user?.urls?.packages || t.url)}">开通会员后购买</button>`;
     // 官方插件（网站后台蓝 V 认证）：标题旁蓝色对勾「官方」
-    const official = t.official ? '<span class="mkoff" title="官方插件：BrowserX 官方发布并认证"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="seal" d="M12.00 0.60 L13.89 2.49 L16.36 1.47 L17.39 3.93 L20.06 3.94 L20.07 6.61 L22.53 7.64 L21.51 10.11 L23.40 12.00 L21.51 13.89 L22.53 16.36 L20.07 17.39 L20.06 20.06 L17.39 20.07 L16.36 22.53 L13.89 21.51 L12.00 23.40 L10.11 21.51 L7.64 22.53 L6.61 20.07 L3.94 20.06 L3.93 17.39 L1.47 16.36 L2.49 13.89 L0.60 12.00 L2.49 10.11 L1.47 7.64 L3.93 6.61 L3.94 3.94 L6.61 3.93 L7.64 1.47 L10.11 2.49Z"/><path class="tick" d="M7 12.5l3.2 3.2L17 9"/></svg>官方</span>' : '';
-    // 精品插件（网站后台管理员设置）：金色星星「精品」
-    const featured = t.featured ? '<span class="mkfeat" title="精品插件：管理员精选推荐"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.00 2.10 L14.70 8.88 L21.99 9.36 L16.37 14.02 L18.17 21.09 L12.00 17.20 L5.83 21.09 L7.63 14.02 L2.01 9.36 L9.30 8.88Z"/></svg>精品</span>' : '';
+    const official = officialBadge(t), featured = featuredBadge(t);
     d.innerHTML = `<div class="tbhead"><span class="tbname">${esc(t.title)}${official}${featured}<small class="tbid">${esc(t.name)}</small></span><span class="mkprice${t.price ? ' paid' : ''}">${esc(t.price_label)}</span></div>
       <div class="tbdesc">${esc(t.summary)}</div>
       <div class="mkmeta"><span>${esc(t.category_label)}</span><span>${esc(t.author || '')}${t.mine ? '（我）' : ''}</span>${t.version ? `<span class="mkver">版本 ${esc(t.version)}</span>` : ''}${t.listed_at ? `<span>发布 ${ymd(t.listed_at)}</span>` : ''}${t.version_at && ymd(t.version_at) !== ymd(t.listed_at) ? `<span>更新 ${ymd(t.version_at)}</span>` : ''}<span>${t.downloads} 次安装</span>${local ? `<span class="mklocal">${local}</span>` : ''}</div>
@@ -1997,6 +2012,51 @@ api.on('account', (st) => {
   renderAccount();
 });
 call('account:state').then((st) => { account = st; renderAccount(); }).catch(() => {});
+
+// 网站插件详情页点「在 BrowserX 中安装」（browserx://install/<id>，main.js handleLink）：打开工具箱，走插件市场「安装」的同一个流程（安装确认页，确认后才装）。
+// 没登录 / 不是会员 / 没买：停在插件市场，上面显示原因和按钮
+async function installFromLink(id) {
+  $('history').hidden = true; $('settings').hidden = true; $('account').hidden = true;
+  $('toolbox').hidden = false;
+  showToolList();
+  if (!account.loggedIn) { await renderMarket(); return; }
+  try { showImportPreview(await call('market:install', id)); }
+  catch (e) {
+    await renderMarket();
+    const box = document.createElement('div');
+    box.className = 'tberr';
+    box.innerHTML = errWithLink(e);
+    $('tb_list').querySelector('.mkbody')?.before(box);
+  }
+}
+api.on('marketLink', (id) => { installFromLink(id).catch(() => {}); });
+call('link:pending').then((id) => { if (id) installFromLink(id).catch(() => {}); }).catch(() => {});
+
+// 「工具箱」右边的「插件市场」按钮：门户后台打开开关才显示（portal:clientConfig）。启动时读一次，之后每 30 分钟读一次；
+// 读不到（断网、网站出错）就沿用上次的结果（存在 localStorage），从没读到过就不显示
+const MK_BTN_KEY = 'cb.showMarketButton';
+function setMarketBtn(show) { $('btnMarket').hidden = !show; }
+try { setMarketBtn(localStorage.getItem(MK_BTN_KEY) === '1'); } catch {}
+async function loadClientConfig() {
+  try {
+    const c = await call('portal:clientConfig');
+    const show = !!c?.show_market_button;
+    setMarketBtn(show);
+    try { localStorage.setItem(MK_BTN_KEY, show ? '1' : '0'); } catch {}
+  } catch {}
+}
+loadClientConfig();
+setInterval(loadClientConfig, 30 * 60 * 1000);
+// 点了直接打开工具箱里的插件市场列表（跟账号面板的「插件市场」一样）；已经在市场列表上再点 → 回到对话
+$('btnMarket').addEventListener('click', () => {
+  if (!$('toolbox').hidden && !cur.pageOpen && $('tb_list').querySelector('.mk_q')) { $('toolbox').hidden = true; return; }
+  $('history').hidden = true;
+  $('settings').hidden = true;
+  $('account').hidden = true;
+  $('toolbox').hidden = false;
+  showToolList();
+  renderMarket();
+});
 
 // ---------------------------------------------------------------- 制作工具模式（见 agent.js startMaking/finishMaking）
 
