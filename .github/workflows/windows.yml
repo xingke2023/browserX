@@ -12,9 +12,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -57,13 +57,13 @@ jobs:
           if (Test-Path smoke.json) { Get-Content smoke.json } else { throw "smoke.json not written (exit $($p.ExitCode))" }
           if ($p.ExitCode -ne 0) { throw "smoke test failed (exit $($p.ExitCode))" }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: BrowserX-windows-x64
           path: dist/*.exe
           retention-days: 14
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: smoke-result
