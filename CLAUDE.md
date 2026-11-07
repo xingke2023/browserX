@@ -17,6 +17,14 @@ npx electron-builder --win --x64 --publish never                    # → dist/B
 
 **Windows notes:**
 - The installer bundles a Git for Windows tree from `build/win-git` as `resources/git` (gitignored). Claude Code on Windows runs its Bash tool through Git Bash, so `gitBash()` looks there first, then `build/win-git`, `CLAUDE_CODE_GIT_BASH_PATH` and the usual Git install folders, and `claudeEnv()` passes the result as `CLAUDE_CODE_GIT_BASH_PATH`. CI (`.github/workflows/windows.yml`, manual or a `win-v*` tag) downloads the official PortableGit. For a local build, copying an installed `C:\Program Files\Git` into `build/win-git` works too.
+- **Building the Windows installer on macOS** (done 2026-11-07, when every GitHub Actions run had ended in `startup_failure` since 2026-11-05, most likely billing on the private repo):
+  1. `npm install --os=win32` won't place the Windows Claude runtime on a Mac, so `npm pack @anthropic-ai/claude-agent-sdk-win32-x64@<pinned sdk version>` and untar it into `node_modules/@anthropic-ai/claude-agent-sdk-win32-x64`.
+  2. Extract the latest PortableGit (`PortableGit-*-64-bit.7z.exe` from git-for-windows releases) with `7zz x … -obuild/win-git`.
+  3. Build with a temporary config that is `package.json`'s `build` plus `!**/node_modules/@anthropic-ai/claude-agent-sdk-darwin-*/**` in `files`. Without it, the Mac runtime ends up in the Windows package. Don't move the darwin package out of the way instead, because a running `npm start` needs it.
+  4. electron-builder downloads its own wine and NSIS. A DNS hiccup fetching NSIS fails only the last step; rerun with `--win nsis --prepackaged dist/win-unpacked`.
+  5. The runtime lands nested at `app.asar.unpacked/node_modules/@anthropic-ai/claude-agent-sdk/node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/claude.exe`, which `nativeClaude()` checks.
+  6. Remove the win32 package from `node_modules` afterwards.
+  7. The smoke test can't run on a Mac, so open the installer once on a Windows machine before releasing.
 - `CB_SMOKE=1` (optionally `CB_SMOKE_OUT=<file>`) makes the app check that it can run `claude.exe --version`, Git Bash and `safeStorage`, write the result as JSON and exit. CI runs it on `dist/win-unpacked`.
 - User data is `%APPDATA%\BrowserX`. `safeStorage` uses DPAPI there instead of the keychain. `shell.trashItem` goes to the Recycle Bin.
 - No auto-update on Windows: `updater.enabled` is Mac-only, so 检查更新… only compares versions. It asks `/api/desktop/version?platform=<platform>-<arch>` and opens the returned `url` (only if it is on the portal, else `<portal>/download`).
